@@ -1,4 +1,4 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
 
 pub fn calculate_age_days(modified: Option<SystemTime>) -> Option<u64> {
     let modified = modified?;

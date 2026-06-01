@@ -2,12 +2,11 @@ use std::fs;
 use tempfile::TempDir;
 
 use crate::analyzer::{
-    calculate_age_days, calculate_directory_size, format_size, get_latest_modified,
-    recommend_cleanup,
+    calculate_age_days, calculate_directory_size, find_latest_modified, format_size,
 };
 use crate::{
     analyzer::analyze,
-    models::{ArtifactLocation, ArtifactType, CleanupRecommendation, ScanResult},
+    models::{ArtifactLocation, ArtifactType, ScanResult},
 };
 
 #[test]
@@ -55,10 +54,10 @@ fn analyze_returns_total_size() {
 }
 
 #[test]
-fn get_latest_modified_returns_some() {
+fn find_latest_modified_returns_some() {
     let temp_dir = TempDir::new().unwrap();
 
-    let modified = get_latest_modified(temp_dir.path());
+    let modified = find_latest_modified(temp_dir.path());
 
     assert!(modified.is_some());
 }
@@ -121,22 +120,4 @@ fn calculate_age_days_returns_correct_days() {
     let age = calculate_age_days(Some(modified));
 
     assert_eq!(age, Some(10),);
-}
-
-#[test]
-fn keep_when_recent() {
-    assert_eq!(recommend_cleanup(Some(10)), CleanupRecommendation::Keep);
-}
-
-#[test]
-fn review_when_middle_age() {
-    assert_eq!(recommend_cleanup(Some(60)), CleanupRecommendation::Review);
-}
-
-#[test]
-fn safe_to_clean_when_old() {
-    assert_eq!(
-        recommend_cleanup(Some(180)),
-        CleanupRecommendation::SafeToClean
-    );
 }

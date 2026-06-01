@@ -1,6 +1,6 @@
 use crate::{
     analyzer::{
-        calculate_age_days, calculate_directory_size, get_latest_modified, recommend_cleanup,
+        calculate_age_days, calculate_directory_size, find_latest_modified, recommend_cleanup,
     },
     models::{AnalysisResult, ArtifactAnalysis, ScanResult},
 };
@@ -10,7 +10,7 @@ pub fn analyze(scan_result: ScanResult) -> AnalysisResult {
 
     for artifact in scan_result.artifacts {
         let size_bytes = calculate_directory_size(&artifact.path);
-        let last_modified = get_latest_modified(&artifact.path);
+        let last_modified = find_latest_modified(&artifact.path);
         let age_days = calculate_age_days(last_modified);
         let recommendation = recommend_cleanup(age_days);
 
@@ -27,7 +27,7 @@ pub fn analyze(scan_result: ScanResult) -> AnalysisResult {
 
     result
         .artifacts
-        .sort_by(|a, b| b.size_bytes.cmp(&a.size_bytes));
+        .sort_by_key(|b| std::cmp::Reverse(b.size_bytes));
 
     result
 }

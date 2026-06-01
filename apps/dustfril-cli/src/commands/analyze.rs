@@ -79,13 +79,12 @@ pub fn execute() {
             analyzer::format_modified(artifact.last_modified)
         );
 
-        println!(
-            "  Age: {} days",
-            artifact
-                .age_days
-                .map(|d| d.to_string())
-                .unwrap_or_else(|| "Unknown".into())
-        );
+        let age_display = artifact
+            .age_days
+            .map(|d| format!("{d} days"))
+            .unwrap_or_else(|| "Unknown".to_string());
+
+        println!("  Age: {}", age_display);
 
         println!("  Recommendation: {}\n", artifact.recommendation);
     }

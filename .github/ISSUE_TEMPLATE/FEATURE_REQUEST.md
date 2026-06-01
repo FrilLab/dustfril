@@ -9,7 +9,9 @@ labels: enhancement
 
 ## Description
 
-Describe the feature.
+Analyze artifact size and disk usage.
+
+아티팩트 크기와 디스크 사용량을 분석.
 
 ## Expected Behavior
 
@@ -17,7 +19,7 @@ Describe how it should work.
 
 ## Additional Notes
 
-Optional.
+Optional. (Closes #)
 
 ## Checklist
 
