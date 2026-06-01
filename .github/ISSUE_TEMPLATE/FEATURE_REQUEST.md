@@ -7,22 +7,14 @@ labels: enhancement
 
 ---
 
-## Summary
+## Description
 
-Briefly describe the feature you want.
+Describe the feature.
 
-## Problem to solve
+## Expected Behavior
 
-What problem does this feature solve?
+Describe how it should work.
 
-## Proposed solution
+## Additional Notes
 
-Describe your preferred solution in detail.
-
-## Alternatives considered
-
-List any alternative approaches you considered.
-
-## Additional context
-
-Add examples, screenshots, links, or related issues if applicable.
+Optional.
