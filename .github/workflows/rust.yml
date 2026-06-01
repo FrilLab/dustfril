@@ -2,24 +2,54 @@ name: Rust CI
 
 on:
   pull_request:
+    branches:
+      - main
+
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/*.md'
+
   push:
     branches:
       - main
 
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/*.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  check:
+  ci:
+    name: 🚀 Rust CI
+    if: github.repository == 'FrilLab/dustfril'
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: 📥 Checkout sources
+        uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: 🦀 Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Format
+      - name: 📦 Cache cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: ✅ Cargo Check
+        run: cargo check --all
+
+      - name: 🚨 Cargo Fmt
         run: cargo fmt --all -- --check
 
-      - name: Clippy
+      - name: 🚨 Cargo Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: Tests
+      - name: 🧪 Cargo Test
         run: cargo test --workspace

@@ -28,25 +28,25 @@ DustFril은 이러한 생성 파일들을 쉽고 안전하게 관리할 수 있�
 프로젝트 스캔:
 
 ```bash
-dustfril scan
+dfr scan
 ```
 
 용량 분석:
 
 ```bash
-dustfril analyze
+dfr analyze
 ```
 
 삭제 예정 파일 확인:
 
 ```bash
-dustfril clean --dry-run
+dfr clean --dry-run
 ```
 
 실제 정리:
 
 ```bash
-dustfril clean
+dfr clean
 ```
 
 ## 로드맵

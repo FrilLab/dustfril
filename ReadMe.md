@@ -28,25 +28,25 @@ Over time, Rust projects accumulate build artifacts and caches that consume sign
 Scan Rust artifacts:
 
 ```bash
-dustfril scan
+dfr scan
 ```
 
 Analyze disk usage:
 
 ```bash
-dustfril analyze
+dfr analyze
 ```
 
 Preview cleanup:
 
 ```bash
-dustfril clean --dry-run
+dfr clean --dry-run
 ```
 
 Clean artifacts:
 
 ```bash
-dustfril clean
+dfr clean
 ```
 
 ## Project Goals
