@@ -3,5 +3,11 @@ name = "dustfril-cli"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "dfr"
+path = "src/main.rs"
+
 [dependencies]
 dustfril-core = { path = "../../crates/dustfril-core" }
+
+clap = { version = "4", features = ["derive"] }

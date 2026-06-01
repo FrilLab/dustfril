@@ -1,5 +1,24 @@
-use dustfril_core::scan;
+mod cli;
+mod commands;
+
+use clap::Parser;
+
+use cli::{Cli, Commands};
 
 fn main() {
-    scan();
+    let cli = Cli::parse();
+
+    match cli.command {
+        Commands::Scan => {
+            commands::scan::execute();
+        }
+
+        Commands::Analyze => {
+            commands::analyze::execute();
+        }
+
+        Commands::Clean => {
+            commands::clean::execute();
+        }
+    }
 }
