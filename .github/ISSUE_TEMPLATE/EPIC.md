@@ -5,8 +5,6 @@ title: '[EPIC] '
 labels: epic
 ---
 
----
-
 ## Goal
 
 ## Includes
