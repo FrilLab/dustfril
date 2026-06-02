@@ -58,7 +58,10 @@ fn print_cleanup_plan(plan: &CleanupPlan) {
 
     println!("Total Reclaimable Space\n");
 
-    println!("  {}\n", analyzer::format_size(plan.reclaimable_size_bytes));
+    println!(
+        "  {}\n",
+        analyzer::format_size(plan.reclaimable_size_bytes())
+    );
 }
 
 fn print_cleanup_result(result: &CleanupResult) {

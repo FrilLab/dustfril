@@ -13,7 +13,7 @@ fn create_empty_cleanup_plan() {
 
     assert!(plan.candidates.is_empty());
 
-    assert_eq!(plan.reclaimable_size_bytes, 0);
+    assert_eq!(plan.reclaimable_size_bytes(), 0);
 }
 
 #[test]
@@ -44,7 +44,7 @@ fn safe_to_clean_becomes_candidate() {
 
     assert_eq!(plan.candidates.len(), 1,);
 
-    assert_eq!(plan.reclaimable_size_bytes, 100,);
+    assert_eq!(plan.reclaimable_size_bytes(), 100,);
 }
 
 #[test]
@@ -102,16 +102,16 @@ fn execute_cleanup_removes_target_directory() {
 
     let plan = CleanupPlan {
         candidates: vec![candidate],
-
-        reclaimable_size_bytes: 5,
     };
 
     let result = execute_cleanup(&plan);
 
+    let size_bytes = CleanupPlan::reclaimable_size_bytes(&plan);
+
     assert!(!target_dir.exists());
     assert_eq!(result.deleted_paths.len(), 1);
     assert_eq!(result.failed_paths.len(), 0);
-    assert_eq!(result.freed_size_bytes, 5);
+    assert_eq!(size_bytes, 5);
 }
 
 #[test]
@@ -129,12 +129,15 @@ fn cleanup_reports_failed_path() {
 
     let plan = CleanupPlan {
         candidates: vec![candidate],
-        reclaimable_size_bytes: 100,
     };
 
     let result = execute_cleanup(&plan);
 
     assert_eq!(result.deleted_paths.len(), 0);
+
     assert_eq!(result.failed_paths.len(), 1);
+
     assert_eq!(result.freed_size_bytes, 0);
+
+    assert_eq!(plan.reclaimable_size_bytes(), 100);
 }

@@ -23,6 +23,7 @@ pub enum Commands {
 
 #[derive(Args)]
 pub struct CleanArgs {
+    // Preview cleanup operations without deleting files.
     #[arg(long)]
     pub dry_run: bool,
 }

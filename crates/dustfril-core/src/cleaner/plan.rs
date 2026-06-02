@@ -5,8 +5,6 @@ pub fn create_cleanup_plan(analysis: AnalysisResult) -> CleanupPlan {
 
     for artifact in analysis.artifacts {
         if artifact.recommendation == CleanupRecommendation::SafeToClean {
-            plan.reclaimable_size_bytes += artifact.size_bytes;
-
             // Flatten the analysis into a cleanup candidate
             plan.candidates.push(CleanupCandidate {
                 path: artifact.artifact.path.clone(),
