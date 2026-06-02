@@ -1,7 +1,7 @@
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 
 /// DustFril CLI
-#[derive(Parser, Debug)]
+#[derive(Parser)]
 #[command(name = "dfr", version, about = "Rust artifact analyzer and cleaner")]
 pub struct Cli {
     #[command(subcommand)]
@@ -9,7 +9,7 @@ pub struct Cli {
 }
 
 /// Available commands
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand)]
 pub enum Commands {
     /// Scan Rust artifacts
     Scan,
@@ -18,5 +18,11 @@ pub enum Commands {
     Analyze,
 
     /// Clean artifacts
-    Clean,
+    Clean(CleanArgs),
+}
+
+#[derive(Args)]
+pub struct CleanArgs {
+    #[arg(long)]
+    pub dry_run: bool,
 }
