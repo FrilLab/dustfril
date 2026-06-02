@@ -1,9 +1,22 @@
-use std::path::Path;
-
 use dustfril_core::detector;
 
-pub fn execute() {
-    let result = detector::scan(Path::new("."));
+use crate::{
+    cli::PathArgs,
+    shared::path::{resolve_path, validate_path},
+};
+
+pub fn execute(args: PathArgs) {
+    let path = resolve_path(&args.path);
+
+    if !validate_path(&path) {
+        return;
+    }
+
+    let result = if args.global {
+        detector::scan_global()
+    } else {
+        detector::scan_workspace(&path)
+    };
 
     if result.artifacts.is_empty() {
         println!("No Rust artifacts found.");

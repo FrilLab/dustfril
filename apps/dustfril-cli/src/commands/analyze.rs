@@ -1,8 +1,8 @@
-use std::path::Path;
-
+use dustfril_core::models::{AnalysisResult, CleanupRecommendation};
 use dustfril_core::{analyzer, detector};
 
-use dustfril_core::models::{AnalysisResult, CleanupRecommendation};
+use crate::cli::PathArgs;
+use crate::shared::path::{resolve_path, validate_path};
 
 fn print_summary(analysis: &AnalysisResult) {
     let mut keep = 0;
@@ -55,8 +55,18 @@ fn print_summary(analysis: &AnalysisResult) {
     println!("\n----------------------------------------\n");
 }
 
-pub fn execute() {
-    let scan_result = detector::scan(Path::new("."));
+pub fn execute(args: PathArgs) {
+    let path = resolve_path(&args.path);
+
+    if !validate_path(&path) {
+        return;
+    }
+
+    let scan_result = if args.global {
+        detector::scan_global()
+    } else {
+        detector::scan_workspace(&path)
+    };
 
     let analysis_result = analyzer::analyze(scan_result);
 

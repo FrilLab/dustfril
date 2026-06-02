@@ -1,13 +1,13 @@
-use std::path::Path;
-
 use dustfril_core::{
     analyzer, cleaner, detector,
     models::{CleanupPlan, CleanupResult},
 };
 
+use crate::{cli::CleanArgs, shared::path::resolve_path};
+
 // dry-run
-pub fn dry_run() {
-    let plan = build_cleanup_plan();
+pub fn dry_run(args: &CleanArgs) {
+    let plan = build_cleanup_plan(args);
 
     if plan.candidates.is_empty() {
         println!("No cleanup candidates found.");
@@ -22,8 +22,14 @@ pub fn dry_run() {
 
 use std::io::{self, Write};
 
-fn build_cleanup_plan() -> CleanupPlan {
-    let scan_result = detector::scan(Path::new("."));
+fn build_cleanup_plan(args: &CleanArgs) -> CleanupPlan {
+    let path = resolve_path(&args.path_args.path);
+
+    let scan_result = if args.path_args.global {
+        detector::scan_global()
+    } else {
+        detector::scan_workspace(&path)
+    };
 
     let analysis = analyzer::analyze(scan_result);
 
@@ -71,7 +77,7 @@ fn print_cleanup_result(result: &CleanupResult) {
 
     println!("Failed: {}", result.failed_paths.len());
 
-    println!("Freed: {}", analyzer::format_size(result.freed_size_bytes,));
+    println!("Freed: {}", analyzer::format_size(result.freed_size_bytes));
 
     if !result.deleted_paths.is_empty() {
         println!("Deleted\n");
@@ -84,8 +90,8 @@ fn print_cleanup_result(result: &CleanupResult) {
     }
 }
 
-pub fn execute() {
-    let plan = build_cleanup_plan();
+pub fn execute(args: &CleanArgs) {
+    let plan = build_cleanup_plan(args);
 
     if plan.candidates.is_empty() {
         println!("No cleanup candidates found.");

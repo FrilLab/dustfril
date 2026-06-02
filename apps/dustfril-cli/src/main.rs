@@ -1,5 +1,6 @@
 mod cli;
 mod commands;
+mod shared;
 
 use clap::Parser;
 
@@ -9,19 +10,19 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Scan => {
-            commands::scan::execute();
+        Commands::Scan(args) => {
+            commands::scan::execute(args);
         }
 
-        Commands::Analyze => {
-            commands::analyze::execute();
+        Commands::Analyze(args) => {
+            commands::analyze::execute(args);
         }
 
         Commands::Clean(args) => {
             if args.dry_run {
-                commands::clean::dry_run();
+                commands::clean::dry_run(&args);
             } else {
-                commands::clean::execute();
+                commands::clean::execute(&args);
             }
         }
     }
