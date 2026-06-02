@@ -17,8 +17,12 @@ fn main() {
             commands::analyze::execute();
         }
 
-        Commands::Clean => {
-            commands::clean::execute();
+        Commands::Clean(args) => {
+            if args.dry_run {
+                commands::clean::dry_run();
+            } else {
+                commands::clean::execute();
+            }
         }
     }
 }
