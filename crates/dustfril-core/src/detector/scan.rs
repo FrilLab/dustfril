@@ -2,12 +2,16 @@ use std::path::Path;
 
 use crate::models::ScanResult;
 
-use super::{cargo_project, git, registry, target};
+use super::{
+    project,
+    rust::{git, registry, target},
+};
 
+// Scan a single Rust project for artifacts.
 pub fn scan_project(root: &Path) -> ScanResult {
     let mut result = ScanResult::default();
 
-    if !cargo_project::is_cargo_project(root) {
+    if !project::is_cargo_project(root) {
         return result;
     }
 
@@ -18,6 +22,22 @@ pub fn scan_project(root: &Path) -> ScanResult {
     result
 }
 
+// Recursively scan for Rust projects and their artifacts.
+pub fn scan_workspace(root: &Path) -> ScanResult {
+    let mut result = ScanResult::default();
+
+    let projects = project::find_projects(root);
+
+    for project in projects {
+        let project_result = scan_project(&project.root);
+
+        result.artifacts.extend(project_result.artifacts);
+    }
+
+    result
+}
+
+// Global artifacts that are not tied to a specific project, like Cargo registry and Git repositories.
 pub fn scan_global() -> ScanResult {
     let mut result = ScanResult::default();
 
@@ -33,7 +53,7 @@ pub fn scan_global() -> ScanResult {
 }
 
 pub fn scan(root: &Path) -> ScanResult {
-    let mut result = scan_project(root);
+    let mut result = scan_workspace(root);
 
     result.artifacts.extend(scan_global().artifacts);
 
