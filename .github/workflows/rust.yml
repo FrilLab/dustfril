@@ -5,19 +5,9 @@ on:
     branches:
       - main
 
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - '.github/*.md'
-
   push:
     branches:
       - main
-
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - '.github/*.md'
 
 permissions:
   contents: read
