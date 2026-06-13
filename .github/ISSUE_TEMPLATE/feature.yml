@@ -1,0 +1,24 @@
+name: Feature
+description: Implement a feature
+title: '[FEATURE] '
+labels:
+  - enhancement
+
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the feature.
+    validations:
+      required: true
+
+  - type: textarea
+    id: tasks
+    attributes:
+      label: Tasks
+      description: List implementation tasks.
+      placeholder: |
+        - [ ] TASK
+        - [ ] TASK
+        - [ ] TASK

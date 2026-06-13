@@ -1,0 +1,23 @@
+name: Task
+description: Small implementation task
+title: '[TASK] '
+labels:
+  - task
+
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the task.
+    validations:
+      required: true
+
+  - type: textarea
+    id: done_when
+    attributes:
+      label: Done When
+      description: Define the completion criteria.
+      placeholder: |
+        - [ ] target directory can be found
+        - [ ] unit test added

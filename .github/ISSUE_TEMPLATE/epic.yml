@@ -1,0 +1,24 @@
+name: Epic
+description: Major milestone or roadmap item
+title: '[EPIC] '
+labels:
+  - epic
+
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What is the overall objective of this epic?
+    validations:
+      required: true
+
+  - type: textarea
+    id: includes
+    attributes:
+      label: Includes
+      description: List the features included in this epic.
+      placeholder: |
+        - FEATURE
+        - FEATURE
+        - FEATURE
