@@ -1,13 +1,10 @@
 name: Rust CI
 
 on:
-  pull_request:
-    branches:
-      - main
-
   push:
-    branches:
-      - main
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
@@ -25,15 +22,25 @@ jobs:
     steps:
       - name: 📥 Checkout sources
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+          pkg-config \
+          libglib2.0-dev \
+          libgtk-3-dev \
+          libwebkit2gtk-4.1-dev \
+          libappindicator3-dev \
+          librsvg2-dev
 
       - name: 🦀 Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
 
       - name: 📦 Cache cargo dependencies
         uses: Swatinem/rust-cache@v2
-
-      - name: ✅ Cargo Check
-        run: cargo check --all
 
       - name: 🚨 Cargo Fmt
         run: cargo fmt --all -- --check
