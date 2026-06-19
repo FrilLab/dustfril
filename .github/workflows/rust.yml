@@ -1,13 +1,10 @@
 name: Rust CI
 
 on:
-  pull_request:
-    branches:
-      - main
-
   push:
-    branches:
-      - main
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
@@ -31,9 +28,6 @@ jobs:
 
       - name: 📦 Cache cargo dependencies
         uses: Swatinem/rust-cache@v2
-
-      - name: ✅ Cargo Check
-        run: cargo check --all
 
       - name: 🚨 Cargo Fmt
         run: cargo fmt --all -- --check
