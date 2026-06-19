@@ -12,6 +12,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -31,9 +33,9 @@ jobs:
             librsvg2-dev \
             pkg-config
 
-      - name: Install frontend deps
+      - name: Install frontend deps ci
         working-directory: apps/dustfril-tauri
-        run: npm install
+        run: npm ci
 
       - name: Check Tauri build (no bundle)
         working-directory: apps/dustfril-tauri/src-tauri
