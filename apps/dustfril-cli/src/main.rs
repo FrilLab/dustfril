@@ -1,5 +1,6 @@
 mod cli;
 mod commands;
+mod format;
 mod shared;
 
 use clap::Parser;

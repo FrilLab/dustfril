@@ -2,15 +2,14 @@ use std::fs;
 use tempfile::TempDir;
 
 use crate::analyzer::{calculate_age_days, calculate_directory_size, find_latest_modified};
-use crate::format::size;
 use crate::{
     analyzer::analyze,
-    models::{ArtifactLocation, ArtifactType, ScanResult},
+    models::{Artifact, ArtifactType, ScanResult},
 };
 
 #[test]
 fn analyze_empty_scan_result() {
-    let result = analyze(ScanResult::default());
+    let result = analyze(ScanResult::default()).unwrap();
 
     assert_eq!(result.total_size_bytes, 0);
 
@@ -36,7 +35,7 @@ fn analyze_returns_total_size() {
 
     fs::write(temp_dir.path().join("a.txt"), vec![0_u8; 100]).unwrap();
 
-    let artifact = ArtifactLocation {
+    let artifact = Artifact {
         path: temp_dir.path().to_path_buf(),
         artifact_type: ArtifactType::Target,
     };
@@ -45,7 +44,7 @@ fn analyze_returns_total_size() {
         artifacts: vec![artifact],
     };
 
-    let result = analyze(scan_result);
+    let result = analyze(scan_result).unwrap();
 
     assert_eq!(result.total_size_bytes, 100);
 
@@ -62,26 +61,6 @@ fn find_latest_modified_returns_some() {
 }
 
 #[test]
-fn format_size_bytes() {
-    assert_eq!(size::format_size(512), "512 B");
-}
-
-#[test]
-fn format_size_kilobytes() {
-    assert_eq!(size::format_size(2048), "2.00 KB");
-}
-
-#[test]
-fn format_size_megabytes() {
-    assert_eq!(size::format_size(1024 * 1024), "1.00 MB");
-}
-
-#[test]
-fn format_size_gigabytes() {
-    assert_eq!(size::format_size(1024 * 1024 * 1024), "1.00 GB");
-}
-
-#[test]
 fn analyze_sorts_by_size_descending() {
     let small = TempDir::new().unwrap();
     let large = TempDir::new().unwrap();
@@ -92,18 +71,18 @@ fn analyze_sorts_by_size_descending() {
 
     let scan_result = ScanResult {
         artifacts: vec![
-            ArtifactLocation {
+            Artifact {
                 path: small.path().to_path_buf(),
                 artifact_type: ArtifactType::Target,
             },
-            ArtifactLocation {
+            Artifact {
                 path: large.path().to_path_buf(),
                 artifact_type: ArtifactType::CargoRegistry,
             },
         ],
     };
 
-    let result = analyze(scan_result);
+    let result = analyze(scan_result).unwrap();
 
     assert_eq!(result.artifacts[0].size_bytes, 200);
 

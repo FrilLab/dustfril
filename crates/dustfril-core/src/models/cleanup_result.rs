@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-#[derive(Debug)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CleanupResult {
     pub deleted_paths: Vec<PathBuf>,
 

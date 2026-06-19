@@ -3,17 +3,15 @@ use std::{
     path::{Path, PathBuf},
 };
 
-// #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-// pub enum Ecosystem {
-// Rust,
-// Node,
-// Java,
-// }
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone)]
+use crate::models::Ecosystem;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
     pub root: PathBuf,
-    // pub ecosystem: Ecosystem,
+
+    pub ecosystem: Ecosystem,
 }
 
 pub fn find_projects(root: &Path) -> Vec<Project> {
@@ -33,7 +31,7 @@ fn visit(dir: &Path, projects: &mut Vec<Project>) {
     if is_cargo_project(dir) {
         projects.push(Project {
             root: dir.to_path_buf(),
-            // ecosystem: Ecosystem::Rust,
+            ecosystem: Ecosystem::Rust,
         });
 
         return;

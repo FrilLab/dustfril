@@ -1,8 +1,11 @@
 use std::fs;
 
-use crate::models::{ArtifactType, CleanupPlan, CleanupResult};
+use crate::{
+    error::DustResult,
+    models::{ArtifactType, CleanupPlan, CleanupResult},
+};
 
-pub fn execute_cleanup(plan: &CleanupPlan) -> CleanupResult {
+pub fn execute_cleanup(plan: &CleanupPlan) -> DustResult<CleanupResult> {
     let mut result = CleanupResult {
         deleted_paths: vec![],
         failed_paths: vec![],
@@ -23,5 +26,5 @@ pub fn execute_cleanup(plan: &CleanupPlan) -> CleanupResult {
         }
     }
 
-    result
+    Ok(result)
 }

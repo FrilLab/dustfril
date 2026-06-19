@@ -1,7 +1,8 @@
 //! Shared models.
 // scan
-mod artifact_location;
+mod artifact;
 mod artifact_type;
+mod ecosystem;
 mod scan_result;
 
 // analysis
@@ -16,8 +17,9 @@ mod cleanup_plan;
 mod cleanup_result;
 
 // scan
-pub use artifact_location::*;
+pub use artifact::*;
 pub use artifact_type::*;
+pub use ecosystem::*;
 pub use scan_result::*;
 
 // analysis

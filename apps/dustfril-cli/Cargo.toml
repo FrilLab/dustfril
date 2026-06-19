@@ -9,5 +9,6 @@ path = "src/main.rs"
 
 [dependencies]
 dustfril-core = { path = "../../crates/dustfril-core" }
-
+chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
+

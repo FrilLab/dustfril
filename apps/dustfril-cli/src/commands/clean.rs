@@ -1,35 +1,39 @@
 use dustfril_core::{
-    api, format,
+    api,
+    error::DustError,
     models::{CleanupPlan, CleanupResult},
 };
 
-use crate::{cli::CleanArgs, shared::path::resolve_path};
+use crate::{cli::CleanArgs, format, shared::path::resolve_path};
 
-// dry-run
 pub fn dry_run(args: &CleanArgs) {
-    let plan = build_cleanup_plan(args);
+    let plan = match build_cleanup_plan(args) {
+        Ok(plan) => plan,
+        Err(e) => {
+            eprintln!("Scan failed: {}", e);
+            return;
+        }
+    };
 
     if plan.candidates.is_empty() {
         println!("No cleanup candidates found.");
-
         return;
     }
 
     print_cleanup_plan(&plan);
-
     println!("No files were deleted.");
 }
 
 use std::io::{self, Write};
 
-fn build_cleanup_plan(args: &CleanArgs) -> CleanupPlan {
+fn build_cleanup_plan(args: &CleanArgs) -> Result<CleanupPlan, DustError> {
     let path = resolve_path(&args.path_args.path);
 
-    let scan_result = api::scan(&path, args.path_args.global);
+    let scan = api::scan(&path, args.path_args.global)?;
+    let plan = api::clean::build_plan(scan)?;
 
-    api::clean::build_plan(scan_result)
+    Ok(plan)
 }
-
 fn confirm_cleanup() -> bool {
     print!("Continue? (y/N): ");
 
@@ -80,9 +84,14 @@ fn print_cleanup_result(result: &CleanupResult) {
         println!();
     }
 }
-
 pub fn execute(args: &CleanArgs) {
-    let plan = build_cleanup_plan(args);
+    let plan = match build_cleanup_plan(args) {
+        Ok(plan) => plan,
+        Err(e) => {
+            eprintln!("Scan failed: {}", e);
+            return;
+        }
+    };
 
     if plan.candidates.is_empty() {
         println!("No cleanup candidates found.");
@@ -96,7 +105,13 @@ pub fn execute(args: &CleanArgs) {
         return;
     }
 
-    let result = api::clean::execute(&plan);
+    let result = match api::clean::execute(&plan) {
+        Ok(res) => res,
+        Err(e) => {
+            eprintln!("Cleanup failed: {}", e);
+            return;
+        }
+    };
 
     print_cleanup_result(&result);
 }

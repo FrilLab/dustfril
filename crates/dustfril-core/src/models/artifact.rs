@@ -1,14 +1,15 @@
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 use super::ArtifactType;
 
-#[derive(Debug, Clone)]
-pub struct ArtifactLocation {
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Artifact {
     pub path: PathBuf,
     pub artifact_type: ArtifactType,
 }
 
-impl ArtifactLocation {
+impl Artifact {
     pub fn new(path: PathBuf, artifact_type: ArtifactType) -> Self {
         Self {
             path,

@@ -1,8 +1,8 @@
 use std::{env, path::Path};
 
-use crate::models::{ArtifactLocation, ArtifactType};
+use crate::models::{Artifact, ArtifactType};
 
-pub fn detect() -> Option<ArtifactLocation> {
+pub fn detect() -> Option<Artifact> {
     // TODO:
     // Replace HOME lookup with dirs::home_dir()
     // for cross-platform support.
@@ -16,7 +16,7 @@ pub fn detect() -> Option<ArtifactLocation> {
         return None;
     }
 
-    Some(ArtifactLocation {
+    Some(Artifact {
         path: git_path,
         artifact_type: ArtifactType::CargoGit,
     })

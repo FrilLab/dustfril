@@ -18,3 +18,24 @@ pub fn format_size(bytes: u64) -> String {
         format!("{:.0} B", bytes)
     }
 }
+
+#[test]
+fn format_size_bytes() {
+    assert_eq!(format_size(512), "512 B");
+}
+
+#[test]
+fn format_size_kilobytes() {
+    assert_eq!(format_size(1024), "1.00 KB");
+    assert_eq!(format_size(2048), "2.00 KB");
+}
+
+#[test]
+fn format_size_megabytes() {
+    assert_eq!(format_size(1024 * 1024), "1.00 MB");
+}
+
+#[test]
+fn format_size_gigabytes() {
+    assert_eq!(format_size(1024 * 1024 * 1024), "1.00 GB");
+}

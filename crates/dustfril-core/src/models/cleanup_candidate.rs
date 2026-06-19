@@ -1,8 +1,10 @@
 use std::path::PathBuf;
 
+use serde::{Deserialize, Serialize};
+
 use crate::models::{ArtifactType, CleanupRecommendation};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CleanupCandidate {
     pub path: PathBuf,
 

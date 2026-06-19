@@ -1,6 +1,8 @@
-use super::ArtifactLocation;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Default)]
+use crate::models::Artifact;
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ScanResult {
-    pub artifacts: Vec<ArtifactLocation>,
+    pub artifacts: Vec<Artifact>,
 }

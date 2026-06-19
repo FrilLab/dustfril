@@ -9,7 +9,7 @@ use crate::{
 fn scan_returns_empty_when_not_cargo_project() {
     let temp_dir = TempDir::new().unwrap();
 
-    let result = scan_project(temp_dir.path());
+    let result = scan_project(temp_dir.path()).unwrap();
 
     assert!(result.artifacts.is_empty());
 }
@@ -20,7 +20,7 @@ fn cargo_project_without_target_returns_empty() {
 
     std::fs::write(temp_dir.path().join("Cargo.toml"), "[package]").unwrap();
 
-    let result = scan_project(temp_dir.path());
+    let result = scan_project(temp_dir.path()).unwrap();
 
     assert!(result.artifacts.is_empty());
 }
@@ -33,7 +33,7 @@ fn detects_target_directory() {
 
     std::fs::create_dir(temp_dir.path().join("target")).unwrap();
 
-    let result = scan_project(temp_dir.path());
+    let result = scan_project(temp_dir.path()).unwrap();
 
     assert_eq!(result.artifacts.len(), 1);
 
@@ -78,7 +78,7 @@ fn scan_workspace_finds_targets_from_multiple_projects() {
     std::fs::create_dir(project_a.join("target")).unwrap();
     std::fs::create_dir(project_b.join("target")).unwrap();
 
-    let result = scan_workspace(temp_dir.path());
+    let result = scan_workspace(temp_dir.path()).unwrap();
 
     assert_eq!(result.artifacts.len(), 2);
 
