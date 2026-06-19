@@ -1,5 +1,5 @@
 use dustfril_core::{
-    analyzer, cleaner, detector,
+    api, format,
     models::{CleanupPlan, CleanupResult},
 };
 
@@ -25,15 +25,9 @@ use std::io::{self, Write};
 fn build_cleanup_plan(args: &CleanArgs) -> CleanupPlan {
     let path = resolve_path(&args.path_args.path);
 
-    let scan_result = if args.path_args.global {
-        detector::scan_global()
-    } else {
-        detector::scan_workspace(&path)
-    };
+    let scan_result = api::scan(&path, args.path_args.global);
 
-    let analysis = analyzer::analyze(scan_result);
-
-    cleaner::create_cleanup_plan(analysis)
+    api::clean::build_plan(scan_result)
 }
 
 fn confirm_cleanup() -> bool {
@@ -59,15 +53,12 @@ fn print_cleanup_plan(plan: &CleanupPlan) {
 
         println!("  Path: {}", candidate.path.display());
 
-        println!("  Size: {}\n", analyzer::format_size(candidate.size_bytes));
+        println!("  Size: {}\n", format::format_size(candidate.size_bytes));
     }
 
     println!("Total Reclaimable Space\n");
 
-    println!(
-        "  {}\n",
-        analyzer::format_size(plan.reclaimable_size_bytes())
-    );
+    println!("  {}\n", format::format_size(plan.reclaimable_size_bytes()));
 }
 
 fn print_cleanup_result(result: &CleanupResult) {
@@ -77,7 +68,7 @@ fn print_cleanup_result(result: &CleanupResult) {
 
     println!("Failed: {}", result.failed_paths.len());
 
-    println!("Freed: {}", analyzer::format_size(result.freed_size_bytes));
+    println!("Freed: {}", format::format_size(result.freed_size_bytes));
 
     if !result.deleted_paths.is_empty() {
         println!("Deleted\n");
@@ -105,7 +96,7 @@ pub fn execute(args: &CleanArgs) {
         return;
     }
 
-    let result = cleaner::execute_cleanup(&plan);
+    let result = api::clean::execute(&plan);
 
     print_cleanup_result(&result);
 }

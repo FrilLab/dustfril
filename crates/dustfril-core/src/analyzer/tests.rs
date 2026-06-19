@@ -1,9 +1,8 @@
 use std::fs;
 use tempfile::TempDir;
 
-use crate::analyzer::{
-    calculate_age_days, calculate_directory_size, find_latest_modified, format_size,
-};
+use crate::analyzer::{calculate_age_days, calculate_directory_size, find_latest_modified};
+use crate::format::size;
 use crate::{
     analyzer::analyze,
     models::{ArtifactLocation, ArtifactType, ScanResult},
@@ -64,22 +63,22 @@ fn find_latest_modified_returns_some() {
 
 #[test]
 fn format_size_bytes() {
-    assert_eq!(format_size(512), "512 B");
+    assert_eq!(size::format_size(512), "512 B");
 }
 
 #[test]
 fn format_size_kilobytes() {
-    assert_eq!(format_size(2048), "2.00 KB");
+    assert_eq!(size::format_size(2048), "2.00 KB");
 }
 
 #[test]
 fn format_size_megabytes() {
-    assert_eq!(format_size(1024 * 1024), "1.00 MB");
+    assert_eq!(size::format_size(1024 * 1024), "1.00 MB");
 }
 
 #[test]
 fn format_size_gigabytes() {
-    assert_eq!(format_size(1024 * 1024 * 1024), "1.00 GB");
+    assert_eq!(size::format_size(1024 * 1024 * 1024), "1.00 GB");
 }
 
 #[test]

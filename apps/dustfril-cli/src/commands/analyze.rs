@@ -1,5 +1,5 @@
 use dustfril_core::models::{AnalysisResult, CleanupRecommendation};
-use dustfril_core::{analyzer, detector};
+use dustfril_core::{api, format};
 
 use crate::cli::PathArgs;
 use crate::shared::path::{resolve_path, validate_path};
@@ -37,19 +37,19 @@ fn print_summary(analysis: &AnalysisResult) {
 
     println!(
         "Total Size: {}\n",
-        analyzer::format_size(analysis.total_size_bytes)
+        format::format_size(analysis.total_size_bytes)
     );
 
     println!("Keep: {}", keep);
     println!(
         "Review: {}, Size: {}",
         review,
-        analyzer::format_size(review_size)
+        format::format_size(review_size)
     );
     println!(
         "Safe To Clean: {}, Size: {}",
         safe_to_clean,
-        analyzer::format_size(safe_size)
+        format::format_size(safe_size)
     );
 
     println!("\n----------------------------------------\n");
@@ -62,13 +62,9 @@ pub fn execute(args: PathArgs) {
         return;
     }
 
-    let scan_result = if args.global {
-        detector::scan_global()
-    } else {
-        detector::scan_workspace(&path)
-    };
+    let scan_result = api::scan(&path, args.global);
 
-    let analysis_result = analyzer::analyze(scan_result);
+    let analysis_result = api::analyze(scan_result);
 
     if analysis_result.artifacts.is_empty() {
         println!("No Rust artifacts found.");
@@ -82,11 +78,11 @@ pub fn execute(args: PathArgs) {
 
         println!("  Path: {}", artifact.artifact.path.display());
 
-        println!("  Size: {}", analyzer::format_size(artifact.size_bytes));
+        println!("  Size: {}", format::format_size(artifact.size_bytes));
 
         println!(
             "  Modified: {}",
-            analyzer::format_modified(artifact.last_modified)
+            format::format_modified(artifact.last_modified)
         );
 
         let age_display = artifact

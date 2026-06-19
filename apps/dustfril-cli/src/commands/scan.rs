@@ -1,4 +1,4 @@
-use dustfril_core::detector;
+use dustfril_core::api;
 
 use crate::{
     cli::PathArgs,
@@ -12,11 +12,7 @@ pub fn execute(args: PathArgs) {
         return;
     }
 
-    let result = if args.global {
-        detector::scan_global()
-    } else {
-        detector::scan_workspace(&path)
-    };
+    let result = api::scan(&path, args.global);
 
     if result.artifacts.is_empty() {
         println!("No Rust artifacts found.");

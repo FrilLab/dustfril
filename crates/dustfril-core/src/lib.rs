@@ -1,4 +1,7 @@
-pub mod analyzer;
-pub mod cleaner;
-pub mod detector;
+pub mod api;
+pub mod format;
 pub mod models;
+
+mod analyzer;
+mod cleaner;
+mod detector;
