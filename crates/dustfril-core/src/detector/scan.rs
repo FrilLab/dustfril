@@ -52,10 +52,10 @@ pub fn scan_global() -> ScanResult {
     result
 }
 
-pub fn scan(root: &Path) -> ScanResult {
-    let mut result = scan_workspace(root);
+// pub fn scan(root: &Path) -> ScanResult {
+//     let mut result = scan_workspace(root);
 
-    result.artifacts.extend(scan_global().artifacts);
+//     result.artifacts.extend(scan_global().artifacts);
 
-    result
-}
+//     result
+// }

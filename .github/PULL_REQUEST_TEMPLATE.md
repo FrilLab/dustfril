@@ -12,10 +12,10 @@ Closes #
 
 ### Required
 
-- [ ] cargo check passes
-- [ ] cargo fmt --check passes
-- [ ] cargo clippy --workspace --all-targets -- -D warnings passes
-- [ ] cargo test passes
+- [ ] `cargo check` passes
+- [ ] `cargo fmt --check` passes
+- [ ] `cargo clippy --workspace --all-targets -- -D warnings` passes
+- [ ] `cargo test` passes
 
 ### Functional Validation
 
