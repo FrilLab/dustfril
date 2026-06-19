@@ -2,10 +2,11 @@ use crate::{
     analyzer::{
         calculate_age_days, calculate_directory_size, find_latest_modified, recommend_cleanup,
     },
+    error::DustResult,
     models::{AnalysisResult, ArtifactAnalysis, ScanResult},
 };
 
-pub fn analyze(scan_result: ScanResult) -> AnalysisResult {
+pub fn analyze(scan_result: ScanResult) -> DustResult<AnalysisResult> {
     let mut result = AnalysisResult::default();
 
     for artifact in scan_result.artifacts {
@@ -29,5 +30,5 @@ pub fn analyze(scan_result: ScanResult) -> AnalysisResult {
         .artifacts
         .sort_by_key(|b| std::cmp::Reverse(b.size_bytes));
 
-    result
+    Ok(result)
 }

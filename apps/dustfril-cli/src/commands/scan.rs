@@ -9,10 +9,17 @@ pub fn execute(args: PathArgs) {
     let path = resolve_path(&args.path);
 
     if !validate_path(&path) {
+        eprintln!("Invalid path");
         return;
     }
 
-    let result = api::scan(&path, args.global);
+    let result = match api::scan(&path, args.global) {
+        Ok(res) => res,
+        Err(e) => {
+            eprintln!("Scan failed: {}", e);
+            return;
+        }
+    };
 
     if result.artifacts.is_empty() {
         println!("No Rust artifacts found.");

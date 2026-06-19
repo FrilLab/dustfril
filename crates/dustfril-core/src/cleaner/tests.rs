@@ -9,7 +9,7 @@ use crate::{
 
 #[test]
 fn create_empty_cleanup_plan() {
-    let plan = create_cleanup_plan(AnalysisResult::default());
+    let plan = create_cleanup_plan(AnalysisResult::default()).unwrap();
 
     assert!(plan.candidates.is_empty());
 
@@ -19,7 +19,7 @@ fn create_empty_cleanup_plan() {
 #[test]
 fn safe_to_clean_becomes_candidate() {
     let artifact = ArtifactAnalysis {
-        artifact: ArtifactLocation {
+        artifact: Artifact {
             path: PathBuf::from("target"),
 
             artifact_type: ArtifactType::Target,
@@ -40,7 +40,7 @@ fn safe_to_clean_becomes_candidate() {
         total_size_bytes: 100,
     };
 
-    let plan = create_cleanup_plan(analysis);
+    let plan = create_cleanup_plan(analysis).unwrap();
 
     assert_eq!(plan.candidates.len(), 1,);
 
@@ -50,7 +50,7 @@ fn safe_to_clean_becomes_candidate() {
 #[test]
 fn keep_is_not_candidate() {
     let artifact = ArtifactAnalysis {
-        artifact: ArtifactLocation {
+        artifact: Artifact {
             path: PathBuf::from("target"),
 
             artifact_type: ArtifactType::Target,
@@ -71,7 +71,7 @@ fn keep_is_not_candidate() {
         total_size_bytes: 100,
     };
 
-    let plan = create_cleanup_plan(analysis);
+    let plan = create_cleanup_plan(analysis).unwrap();
 
     assert!(plan.candidates.is_empty());
 }
@@ -104,7 +104,7 @@ fn execute_cleanup_removes_target_directory() {
         candidates: vec![candidate],
     };
 
-    let result = execute_cleanup(&plan);
+    let result = execute_cleanup(&plan).unwrap();
 
     let size_bytes = CleanupPlan::reclaimable_size_bytes(&plan);
 
@@ -131,7 +131,7 @@ fn cleanup_reports_failed_path() {
         candidates: vec![candidate],
     };
 
-    let result = execute_cleanup(&plan);
+    let result = execute_cleanup(&plan).unwrap();
 
     assert_eq!(result.deleted_paths.len(), 0);
 

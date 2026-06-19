@@ -1,8 +1,8 @@
 use std::path::Path;
 
-use crate::detector;
+use crate::{detector, error::DustResult, models::ScanResult};
 
-pub fn scan(root: &Path, global: bool) -> crate::models::ScanResult {
+pub fn scan(root: &Path, global: bool) -> DustResult<ScanResult> {
     if global {
         detector::scan_global()
     } else {

@@ -1,7 +1,8 @@
+use dustfril_core::api;
 use dustfril_core::models::{AnalysisResult, CleanupRecommendation};
-use dustfril_core::{api, format};
 
 use crate::cli::PathArgs;
+use crate::format;
 use crate::shared::path::{resolve_path, validate_path};
 
 fn print_summary(analysis: &AnalysisResult) {
@@ -59,12 +60,25 @@ pub fn execute(args: PathArgs) {
     let path = resolve_path(&args.path);
 
     if !validate_path(&path) {
+        eprintln!("Invalid path");
         return;
     }
 
-    let scan_result = api::scan(&path, args.global);
+    let scan_result = match api::scan(&path, args.global) {
+        Ok(res) => res,
+        Err(e) => {
+            eprintln!("Scan failed: {}", e);
+            return;
+        }
+    };
 
-    let analysis_result = api::analyze(scan_result);
+    let analysis_result = match api::analyze(scan_result) {
+        Ok(res) => res,
+        Err(e) => {
+            eprintln!("Analysis failed: {}", e);
+            return;
+        }
+    };
 
     if analysis_result.artifacts.is_empty() {
         println!("No Rust artifacts found.");
@@ -75,9 +89,7 @@ pub fn execute(args: PathArgs) {
 
     for artifact in &analysis_result.artifacts {
         println!("[{}]", artifact.artifact.artifact_type);
-
         println!("  Path: {}", artifact.artifact.path.display());
-
         println!("  Size: {}", format::format_size(artifact.size_bytes));
 
         println!(

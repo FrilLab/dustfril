@@ -1,6 +1,8 @@
+use serde::{Deserialize, Serialize};
+
 use crate::models::CleanupCandidate;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct CleanupPlan {
     pub candidates: Vec<CleanupCandidate>,
 }
