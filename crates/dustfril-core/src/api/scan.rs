@@ -1,11 +1,11 @@
 use std::path::Path;
 
-use crate::{detector, error::DustResult, models::ScanResult};
+use crate::{
+    error::DustResult,
+    models::{Ecosystem, ScanResult},
+    scanner,
+};
 
-pub fn scan(root: &Path, global: bool) -> DustResult<ScanResult> {
-    if global {
-        detector::scan_global()
-    } else {
-        detector::scan_workspace(root)
-    }
+pub fn scan(root: &Path, ecosystems: &[Ecosystem]) -> DustResult<ScanResult> {
+    scanner::scan(root, ecosystems)
 }

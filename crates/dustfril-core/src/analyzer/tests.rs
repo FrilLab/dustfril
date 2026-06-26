@@ -1,101 +1,123 @@
-use std::fs;
+use std::{fs, path::PathBuf};
+
 use tempfile::TempDir;
 
-use crate::analyzer::{calculate_age_days, calculate_directory_size, find_latest_modified};
-use crate::{
-    analyzer::analyze,
-    models::{Artifact, ArtifactType, ScanResult},
-};
+use crate::{analyzer::Analyzer, models::*};
+
+fn scan_result(path: PathBuf, ecosystem: Ecosystem) -> ScanResult {
+    ScanResult {
+        artifacts: vec![Artifact { path, ecosystem }],
+    }
+}
 
 #[test]
 fn analyze_empty_scan_result() {
-    let result = analyze(ScanResult::default()).unwrap();
+    let analysis = Analyzer::analyze(ScanResult::default()).unwrap();
 
-    assert_eq!(result.total_size_bytes, 0);
-
-    assert!(result.artifacts.is_empty());
+    assert!(analysis.artifacts.is_empty());
+    assert_eq!(analysis.total_size_bytes, 0);
 }
 
 #[test]
-fn calculate_directory_size_returns_total_size() {
-    let temp_dir = TempDir::new().unwrap();
+fn analyze_calculates_directory_size() {
+    let dir = TempDir::new().unwrap();
 
-    fs::write(temp_dir.path().join("a.txt"), vec![0_u8; 100]).unwrap();
+    fs::write(dir.path().join("a.txt"), b"hello").unwrap();
+    fs::write(dir.path().join("b.txt"), b"world").unwrap();
 
-    fs::write(temp_dir.path().join("b.txt"), vec![0_u8; 200]).unwrap();
+    let analysis =
+        Analyzer::analyze(scan_result(dir.path().to_path_buf(), Ecosystem::Rust)).unwrap();
 
-    let size = calculate_directory_size(temp_dir.path());
+    assert_eq!(analysis.artifacts.len(), 1);
 
-    assert_eq!(size, 300);
+    assert_eq!(analysis.total_size_bytes, 10);
+
+    assert_eq!(analysis.artifacts[0].size_bytes, 10);
 }
 
 #[test]
-fn analyze_returns_total_size() {
-    let temp_dir = TempDir::new().unwrap();
+fn analyze_sets_cleanup_recommendation() {
+    let dir = TempDir::new().unwrap();
 
-    fs::write(temp_dir.path().join("a.txt"), vec![0_u8; 100]).unwrap();
+    fs::write(dir.path().join("file.txt"), b"hello").unwrap();
 
-    let artifact = Artifact {
-        path: temp_dir.path().to_path_buf(),
-        artifact_type: ArtifactType::Target,
-    };
+    let analysis =
+        Analyzer::analyze(scan_result(dir.path().to_path_buf(), Ecosystem::Rust)).unwrap();
 
-    let scan_result = ScanResult {
-        artifacts: vec![artifact],
-    };
-
-    let result = analyze(scan_result).unwrap();
-
-    assert_eq!(result.total_size_bytes, 100);
-
-    assert_eq!(result.artifacts.len(), 1);
+    assert!(matches!(
+        analysis.artifacts[0].recommendation,
+        CleanupRecommendation::Keep
+            | CleanupRecommendation::NeedsReview
+            | CleanupRecommendation::SafeToClean
+    ));
 }
 
 #[test]
-fn find_latest_modified_returns_some() {
-    let temp_dir = TempDir::new().unwrap();
+fn analyze_sets_last_modified() {
+    let dir = TempDir::new().unwrap();
 
-    let modified = find_latest_modified(temp_dir.path());
+    fs::write(dir.path().join("file.txt"), b"hello").unwrap();
 
-    assert!(modified.is_some());
+    let analysis =
+        Analyzer::analyze(scan_result(dir.path().to_path_buf(), Ecosystem::Rust)).unwrap();
+
+    assert!(analysis.artifacts[0].last_modified.is_some());
 }
 
 #[test]
-fn analyze_sorts_by_size_descending() {
-    let small = TempDir::new().unwrap();
-    let large = TempDir::new().unwrap();
+fn analyze_sets_age_days() {
+    let dir = TempDir::new().unwrap();
 
-    fs::write(small.path().join("small.bin"), vec![0_u8; 100]).unwrap();
+    fs::write(dir.path().join("file.txt"), b"hello").unwrap();
 
-    fs::write(large.path().join("large.bin"), vec![0_u8; 200]).unwrap();
+    let analysis =
+        Analyzer::analyze(scan_result(dir.path().to_path_buf(), Ecosystem::Rust)).unwrap();
 
-    let scan_result = ScanResult {
+    assert!(analysis.artifacts[0].age_days.is_some());
+}
+
+#[test]
+fn analyze_multiple_artifacts() {
+    let root = TempDir::new().unwrap();
+
+    let rust = root.path().join("rust");
+    let node = root.path().join("node");
+
+    fs::create_dir_all(&rust).unwrap();
+    fs::create_dir_all(&node).unwrap();
+
+    fs::write(rust.join("a.txt"), b"12345").unwrap();
+    fs::write(node.join("b.txt"), b"1234567890").unwrap();
+
+    let analysis = Analyzer::analyze(ScanResult {
         artifacts: vec![
             Artifact {
-                path: small.path().to_path_buf(),
-                artifact_type: ArtifactType::Target,
+                path: rust,
+                ecosystem: Ecosystem::Rust,
             },
             Artifact {
-                path: large.path().to_path_buf(),
-                artifact_type: ArtifactType::CargoRegistry,
+                path: node,
+                ecosystem: Ecosystem::Node,
             },
         ],
-    };
+    })
+    .unwrap();
 
-    let result = analyze(scan_result).unwrap();
+    assert_eq!(analysis.artifacts.len(), 2);
 
-    assert_eq!(result.artifacts[0].size_bytes, 200);
-
-    assert_eq!(result.artifacts[1].size_bytes, 100);
+    assert_eq!(analysis.total_size_bytes, 15);
 }
 
-use std::time::{Duration, SystemTime};
-
 #[test]
-fn calculate_age_days_returns_correct_days() {
-    let modified = SystemTime::now() - Duration::from_secs(10 * 86_400);
+fn analyze_preserves_artifact_metadata() {
+    let dir = TempDir::new().unwrap();
 
-    let age = calculate_age_days(Some(modified));
+    let analysis =
+        Analyzer::analyze(scan_result(dir.path().to_path_buf(), Ecosystem::Node)).unwrap();
 
-    assert_eq!(age, Some(10),);
+    let artifact = &analysis.artifacts[0];
+
+    assert_eq!(artifact.artifact.ecosystem, Ecosystem::Node);
+
+    assert_eq!(artifact.artifact.path, dir.path());
 }

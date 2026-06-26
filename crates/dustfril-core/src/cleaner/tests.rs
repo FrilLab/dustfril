@@ -7,13 +7,46 @@ use crate::{
     models::*,
 };
 
+fn artifact(recommendation: CleanupRecommendation) -> ArtifactAnalysis {
+    ArtifactAnalysis {
+        artifact: Artifact {
+            path: PathBuf::from("target"),
+            ecosystem: Ecosystem::Rust,
+        },
+        size_bytes: 100,
+        last_modified: None,
+        age_days: Some(100),
+        recommendation,
+    }
+}
+
 #[test]
 fn create_empty_cleanup_plan() {
     let plan = create_cleanup_plan(AnalysisResult::default()).unwrap();
 
     assert!(plan.candidates.is_empty());
+}
 
-    assert_eq!(plan.reclaimable_size_bytes(), 0);
+#[test]
+fn reclaimable_size_bytes_returns_sum() {
+    let plan = CleanupPlan {
+        candidates: vec![
+            CleanupCandidate {
+                path: PathBuf::from("a"),
+                ecosystem: Ecosystem::Rust,
+                size_bytes: 10,
+                age_days: None,
+            },
+            CleanupCandidate {
+                path: PathBuf::from("b"),
+                ecosystem: Ecosystem::Node,
+                size_bytes: 20,
+                age_days: None,
+            },
+        ],
+    };
+
+    assert_eq!(plan.reclaimable_size_bytes(), 30);
 }
 
 #[test]
@@ -21,16 +54,11 @@ fn safe_to_clean_becomes_candidate() {
     let artifact = ArtifactAnalysis {
         artifact: Artifact {
             path: PathBuf::from("target"),
-
-            artifact_type: ArtifactType::Target,
+            ecosystem: Ecosystem::Rust,
         },
-
         size_bytes: 100,
-
         last_modified: None,
-
         age_days: Some(200),
-
         recommendation: CleanupRecommendation::SafeToClean,
     };
 
@@ -52,22 +80,16 @@ fn keep_is_not_candidate() {
     let artifact = ArtifactAnalysis {
         artifact: Artifact {
             path: PathBuf::from("target"),
-
-            artifact_type: ArtifactType::Target,
+            ecosystem: Ecosystem::Rust,
         },
-
         size_bytes: 100,
-
         last_modified: None,
-
         age_days: Some(5),
-
         recommendation: CleanupRecommendation::Keep,
     };
 
     let analysis = AnalysisResult {
         artifacts: vec![artifact],
-
         total_size_bytes: 100,
     };
 
@@ -90,14 +112,9 @@ fn execute_cleanup_removes_target_directory() {
 
     let candidate = CleanupCandidate {
         path: target_dir.clone(),
-
-        artifact_type: ArtifactType::Target,
-
+        ecosystem: Ecosystem::Rust,
         size_bytes: 5,
-
         age_days: Some(100),
-
-        recommendation: CleanupRecommendation::SafeToClean,
     };
 
     let plan = CleanupPlan {
@@ -106,12 +123,25 @@ fn execute_cleanup_removes_target_directory() {
 
     let result = execute_cleanup(&plan).unwrap();
 
-    let size_bytes = CleanupPlan::reclaimable_size_bytes(&plan);
-
     assert!(!target_dir.exists());
     assert_eq!(result.deleted_paths.len(), 1);
     assert_eq!(result.failed_paths.len(), 0);
-    assert_eq!(size_bytes, 5);
+}
+
+#[test]
+fn create_cleanup_plan_filters_safe_to_clean() {
+    let analysis = AnalysisResult {
+        artifacts: vec![
+            artifact(CleanupRecommendation::SafeToClean),
+            artifact(CleanupRecommendation::Keep),
+            artifact(CleanupRecommendation::NeedsReview),
+        ],
+        total_size_bytes: 300,
+    };
+
+    let plan = create_cleanup_plan(analysis).unwrap();
+
+    assert_eq!(plan.candidates.len(), 1);
 }
 
 #[test]
@@ -121,23 +151,17 @@ fn cleanup_reports_failed_path() {
 
     let candidate = CleanupCandidate {
         path: missing,
-        artifact_type: ArtifactType::Target,
+        ecosystem: Ecosystem::Rust,
         size_bytes: 100,
         age_days: None,
-        recommendation: CleanupRecommendation::SafeToClean,
     };
 
     let plan = CleanupPlan {
         candidates: vec![candidate],
     };
-
     let result = execute_cleanup(&plan).unwrap();
-
     assert_eq!(result.deleted_paths.len(), 0);
-
     assert_eq!(result.failed_paths.len(), 1);
-
     assert_eq!(result.freed_size_bytes, 0);
-
     assert_eq!(plan.reclaimable_size_bytes(), 100);
 }

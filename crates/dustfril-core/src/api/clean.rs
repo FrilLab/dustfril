@@ -5,7 +5,7 @@ use crate::{
 };
 
 pub fn build_plan(scan: ScanResult) -> DustResult<CleanupPlan> {
-    let analysis = analyzer::analyze(scan)?;
+    let analysis = analyzer::Analyzer::analyze(scan)?;
     cleaner::create_cleanup_plan(analysis)
 }
 

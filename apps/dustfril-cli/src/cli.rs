@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
+use dustfril_core::models::Ecosystem;
 
 /// DustFril CLI
 #[derive(Parser)]
@@ -27,9 +28,34 @@ pub enum Commands {
 pub struct PathArgs {
     pub path: Option<PathBuf>,
 
-    /// Scan the entire system instead of a specific workspace.
     #[arg(long)]
-    pub global: bool,
+    pub rust: bool,
+
+    #[arg(long)]
+    pub node: bool,
+
+    #[arg(long)]
+    pub java: bool,
+}
+
+impl PathArgs {
+    pub fn ecosystems(&self) -> Vec<Ecosystem> {
+        let mut ecosystems = Vec::new();
+
+        if self.rust {
+            ecosystems.push(Ecosystem::Rust);
+        }
+
+        if self.node {
+            ecosystems.push(Ecosystem::Node);
+        }
+
+        if self.java {
+            ecosystems.push(Ecosystem::Java);
+        }
+
+        ecosystems
+    }
 }
 
 #[derive(Args)]
@@ -40,4 +66,10 @@ pub struct CleanArgs {
     // Preview cleanup operations without deleting files.
     #[arg(long)]
     pub dry_run: bool,
+}
+
+impl CleanArgs {
+    pub fn ecosystems(&self) -> Vec<Ecosystem> {
+        self.path_args.ecosystems()
+    }
 }
