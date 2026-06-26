@@ -13,7 +13,9 @@ pub fn execute(args: PathArgs) {
         return;
     }
 
-    let result = match api::scan(&path, args.global) {
+    let ecosystems = args.ecosystems();
+
+    let result = match api::scan(&path, &ecosystems) {
         Ok(res) => res,
         Err(e) => {
             eprintln!("Scan failed: {}", e);
@@ -22,15 +24,13 @@ pub fn execute(args: PathArgs) {
     };
 
     if result.artifacts.is_empty() {
-        println!("No Rust artifacts found.");
+        println!("No artifacts found.");
         return;
     }
 
     println!("Found {} artifact(s)\n", result.artifacts.len());
 
     for artifact in result.artifacts {
-        println!("[{}]", artifact.artifact_type);
-
-        println!("  {}\n", artifact.path.display());
+        println!("  {:?}\n", artifact.path);
     }
 }

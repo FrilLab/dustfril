@@ -1,34 +1,8 @@
 //! Shared models.
-// scan
-mod artifact;
-mod artifact_type;
-mod ecosystem;
-mod scan_result;
+mod analysis;
+mod cleanup;
+mod scan;
 
-// analysis
-mod analysis_result;
-mod artifact_analysis;
-// analysis - recommendation
-mod cleanup_recommendation;
-
-// cleanup
-mod cleanup_candidate;
-mod cleanup_plan;
-mod cleanup_result;
-
-// scan
-pub use artifact::*;
-pub use artifact_type::*;
-pub use ecosystem::*;
-pub use scan_result::*;
-
-// analysis
-pub use analysis_result::*;
-pub use artifact_analysis::*;
-// analysis - recommendation
-pub use cleanup_recommendation::*;
-
-// cleanup
-pub use cleanup_candidate::*;
-pub use cleanup_plan::*;
-pub use cleanup_result::*;
+pub use analysis::*;
+pub use cleanup::*;
+pub use scan::*;

@@ -4,4 +4,5 @@ pub mod models;
 
 mod analyzer;
 mod cleaner;
-mod detector;
+mod fs;
+mod scanner;

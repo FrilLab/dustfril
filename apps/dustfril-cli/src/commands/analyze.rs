@@ -18,7 +18,7 @@ fn print_summary(analysis: &AnalysisResult) {
                 keep += 1;
             }
 
-            CleanupRecommendation::Review => {
+            CleanupRecommendation::NeedsReview => {
                 review += 1;
                 review_size += artifact.size_bytes;
             }
@@ -64,7 +64,9 @@ pub fn execute(args: PathArgs) {
         return;
     }
 
-    let scan_result = match api::scan(&path, args.global) {
+    let ecosystems = args.ecosystems();
+
+    let scan_result = match api::scan(&path, &ecosystems) {
         Ok(res) => res,
         Err(e) => {
             eprintln!("Scan failed: {}", e);
@@ -81,30 +83,30 @@ pub fn execute(args: PathArgs) {
     };
 
     if analysis_result.artifacts.is_empty() {
-        println!("No Rust artifacts found.");
+        println!("No artifacts found.");
         return;
     }
 
     println!("Found {} artifact(s)\n", analysis_result.artifacts.len());
 
     for artifact in &analysis_result.artifacts {
-        println!("[{}]", artifact.artifact.artifact_type);
-        println!("  Path: {}", artifact.artifact.path.display());
-        println!("  Size: {}", format::format_size(artifact.size_bytes));
-
-        println!(
-            "  Modified: {}",
-            format::format_modified(artifact.last_modified)
-        );
-
         let age_display = artifact
             .age_days
             .map(|d| format!("{d} days"))
             .unwrap_or_else(|| "Unknown".to_string());
 
-        println!("  Age: {}", age_display);
-
-        println!("  Recommendation: {}\n", artifact.recommendation);
+        println!("[{}]", artifact.artifact.ecosystem);
+        println!("  Path:           {}", artifact.artifact.path.display());
+        println!(
+            "  Size:           {}",
+            format::format_size(artifact.size_bytes)
+        );
+        println!(
+            "  Modified:       {}",
+            format::format_modified(artifact.last_modified)
+        );
+        println!("  Age:            {}", age_display);
+        println!("  Recommendation: {}", artifact.recommendation);
     }
 
     print_summary(&analysis_result);

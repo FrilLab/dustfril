@@ -3,7 +3,7 @@ use std::fmt;
 #[derive(Debug)]
 pub enum DustError {
     Io(std::io::Error),
-    InvalidPath,
+    InvalidPath(std::path::PathBuf),
     ScanFailed,
     AnalysisFailed,
     CleanupFailed,
@@ -17,8 +17,8 @@ impl fmt::Display for DustError {
             DustError::Io(error) => {
                 write!(f, "I/O error: {error}")
             }
-            DustError::InvalidPath => {
-                write!(f, "Invalid path")
+            DustError::InvalidPath(path) => {
+                write!(f, "Invalid path: {}", path.display())
             }
             DustError::ScanFailed => {
                 write!(f, "Scan failed")

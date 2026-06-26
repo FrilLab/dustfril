@@ -6,21 +6,17 @@ use crate::{
 pub fn create_cleanup_plan(analysis: AnalysisResult) -> DustResult<CleanupPlan> {
     let mut plan = CleanupPlan::default();
 
-    for artifact_analysis in analysis.artifacts {
-        if artifact_analysis.recommendation == CleanupRecommendation::SafeToClean {
-            // Flatten the analysis into a cleanup candidate
-            plan.candidates.push(CleanupCandidate {
-                path: artifact_analysis.artifact.path.clone(),
-
-                artifact_type: artifact_analysis.artifact.artifact_type,
-
-                size_bytes: artifact_analysis.size_bytes,
-
-                age_days: artifact_analysis.age_days,
-
-                recommendation: artifact_analysis.recommendation,
-            });
+    for artifact in analysis.artifacts {
+        if artifact.recommendation != CleanupRecommendation::SafeToClean {
+            continue;
         }
+
+        plan.candidates.push(CleanupCandidate {
+            path: artifact.artifact.path,
+            ecosystem: artifact.artifact.ecosystem,
+            size_bytes: artifact.size_bytes,
+            age_days: artifact.age_days,
+        });
     }
 
     Ok(plan)

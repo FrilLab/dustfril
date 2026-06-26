@@ -5,5 +5,5 @@ use crate::{
 };
 
 pub fn analyze(scan_result: ScanResult) -> DustResult<AnalysisResult> {
-    analyzer::analyze(scan_result)
+    analyzer::Analyzer::analyze(scan_result)
 }
