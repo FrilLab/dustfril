@@ -3,6 +3,7 @@ use crate::{
     models::{AnalysisResult, CleanupCandidate, CleanupPlan, CleanupRecommendation},
 };
 
+/// Converts analyzed artifacts into a cleanup plan by keeping only safe candidates.
 pub fn create_cleanup_plan(analysis: AnalysisResult) -> DustResult<CleanupPlan> {
     let mut plan = CleanupPlan::default();
 
