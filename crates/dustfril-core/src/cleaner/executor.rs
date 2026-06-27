@@ -5,6 +5,7 @@ use crate::{
     models::{CleanupPlan, CleanupResult},
 };
 
+/// Deletes all paths in a cleanup plan and summarizes reclaimed space.
 pub fn execute_cleanup(plan: &CleanupPlan) -> DustResult<CleanupResult> {
     let mut result = CleanupResult {
         deleted_paths: Vec::new(),

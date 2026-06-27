@@ -1,3 +1,4 @@
+/// Formats a byte count using binary size units for human-readable CLI output.
 pub fn format_size(bytes: u64) -> String {
     const KB: f64 = 1024.0;
     const MB: f64 = KB * 1024.0;
@@ -38,4 +39,9 @@ fn format_size_megabytes() {
 #[test]
 fn format_size_gigabytes() {
     assert_eq!(format_size(1024 * 1024 * 1024), "1.00 GB");
+}
+
+#[test]
+fn format_size_terabytes() {
+    assert_eq!(format_size(1024_u64.pow(4)), "1.00 TB");
 }

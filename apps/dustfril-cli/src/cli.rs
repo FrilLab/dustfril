@@ -5,7 +5,11 @@ use dustfril_core::models::Ecosystem;
 
 /// DustFril CLI
 #[derive(Parser)]
-#[command(name = "dfr", version, about = "Development artifact analyzer and cleaner")]
+#[command(
+    name = "dfr",
+    version,
+    about = "Development artifact analyzer and cleaner"
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -39,6 +43,9 @@ pub struct PathArgs {
 }
 
 impl PathArgs {
+    /// Returns the selected ecosystem filters in CLI flag order.
+    ///
+    /// An empty result means all ecosystems should be scanned.
     pub fn ecosystems(&self) -> Vec<Ecosystem> {
         let mut ecosystems = Vec::new();
 
@@ -69,7 +76,55 @@ pub struct CleanArgs {
 }
 
 impl CleanArgs {
+    /// Returns the selected cleanup ecosystem filters.
     pub fn ecosystems(&self) -> Vec<Ecosystem> {
         self.path_args.ecosystems()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn path_args_ecosystems_returns_empty_when_no_flags_are_set() {
+        let args = PathArgs {
+            path: None,
+            rust: false,
+            node: false,
+            java: false,
+        };
+
+        assert!(args.ecosystems().is_empty());
+    }
+
+    #[test]
+    fn path_args_ecosystems_preserves_flag_order() {
+        let args = PathArgs {
+            path: None,
+            rust: true,
+            node: true,
+            java: true,
+        };
+
+        assert_eq!(
+            args.ecosystems(),
+            vec![Ecosystem::Rust, Ecosystem::Node, Ecosystem::Java]
+        );
+    }
+
+    #[test]
+    fn clean_args_ecosystems_delegates_to_path_args() {
+        let args = CleanArgs {
+            path_args: PathArgs {
+                path: None,
+                rust: false,
+                node: true,
+                java: true,
+            },
+            dry_run: true,
+        };
+
+        assert_eq!(args.ecosystems(), vec![Ecosystem::Node, Ecosystem::Java]);
     }
 }

@@ -11,6 +11,7 @@ pub struct CleanupPlan {
 }
 
 impl CleanupPlan {
+    /// Returns the total number of bytes that can be reclaimed by this plan.
     pub fn reclaimable_size_bytes(&self) -> u64 {
         self.candidates
             .iter()

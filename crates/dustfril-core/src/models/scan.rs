@@ -34,6 +34,7 @@ pub struct Artifact {
 }
 
 impl Artifact {
+    /// Creates a scanned artifact entry for the given path and ecosystem.
     pub fn new(path: PathBuf, ecosystem: Ecosystem) -> Self {
         Self { path, ecosystem }
     }
