@@ -3,7 +3,7 @@ use std::path::Path;
 use crate::{
     error::DustResult,
     fs::walk_dirs,
-    models::{Artifact, Ecosystem, ScanResult},
+    models::{Ecosystem, ScanResult},
     scanner::detector::{self},
 };
 
@@ -14,12 +14,11 @@ pub fn scan(root: &Path, ecosystems: &[Ecosystem]) -> DustResult<ScanResult> {
 
     for dir in walk_dirs(root) {
         for detector in &detectors {
-            if detector.detect(&dir) {
-                result
-                    .artifacts
-                    .push(Artifact::new(dir.clone(), detector.ecosystem()));
-                break;
+            if !detector.matches(&dir) {
+                continue;
             }
+
+            result.artifacts.extend(detector.artifacts(&dir));
         }
     }
 

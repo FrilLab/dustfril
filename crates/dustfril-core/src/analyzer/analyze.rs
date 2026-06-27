@@ -1,4 +1,3 @@
-use std::fs;
 use std::path::Path;
 use std::time::SystemTime;
 
@@ -7,16 +6,19 @@ use crate::models::{
     AnalysisResult, Artifact, ArtifactAnalysis, CleanupRecommendation, ScanResult,
 };
 use rayon::prelude::*;
+use walkdir::WalkDir;
 
 pub struct Analyzer;
 
 impl Analyzer {
     pub fn analyze(scan_result: ScanResult) -> DustResult<AnalysisResult> {
-        let artifacts: Vec<ArtifactAnalysis> = scan_result
+        let mut artifacts: Vec<ArtifactAnalysis> = scan_result
             .artifacts
             .into_par_iter()
             .map(Self::analyze_artifact)
             .collect();
+
+        artifacts.sort_by_key(|artifact| std::cmp::Reverse(artifact.size_bytes));
 
         let total_size_bytes = artifacts.iter().map(|a| a.size_bytes).sum();
 
@@ -69,53 +71,23 @@ fn recommend_cleanup(age_days: Option<u64>) -> CleanupRecommendation {
 }
 
 fn calculate_directory_size(path: &Path) -> u64 {
-    let mut total_size = 0;
-
-    let Ok(entries) = fs::read_dir(path) else {
-        return 0;
-    };
-
-    for entry in entries.flatten() {
-        let Ok(metadata) = entry.metadata() else {
-            continue;
-        };
-
-        if metadata.is_file() {
-            total_size += metadata.len();
-        } else if metadata.is_dir() {
-            total_size += calculate_directory_size(&entry.path());
-        }
-    }
-
-    total_size
+    WalkDir::new(path)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            entry
+                .metadata()
+                .ok()
+                .filter(|metadata| metadata.is_file())
+                .map(|metadata| metadata.len())
+        })
+        .sum()
 }
 
 fn find_latest_modified(path: &Path) -> Option<SystemTime> {
-    let mut latest = fs::metadata(path).ok()?.modified().ok();
-
-    let Ok(entries) = fs::read_dir(path) else {
-        return latest;
-    };
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-
-        let Ok(metadata) = entry.metadata() else {
-            continue;
-        };
-
-        let current = if metadata.is_dir() {
-            find_latest_modified(&path)
-        } else {
-            metadata.modified().ok()
-        };
-
-        if let Some(current) = current
-            && latest.is_none_or(|existing| current > existing)
-        {
-            latest = Some(current);
-        }
-    }
-
-    latest
+    WalkDir::new(path)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter_map(|entry| entry.metadata().ok()?.modified().ok())
+        .max()
 }

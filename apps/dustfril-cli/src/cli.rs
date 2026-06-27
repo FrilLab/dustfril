@@ -5,7 +5,7 @@ use dustfril_core::models::Ecosystem;
 
 /// DustFril CLI
 #[derive(Parser)]
-#[command(name = "dfr", version, about = "Rust artifact analyzer and cleaner")]
+#[command(name = "dfr", version, about = "Development artifact analyzer and cleaner")]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -14,13 +14,13 @@ pub struct Cli {
 /// Available commands
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Scan Rust artifacts
+    /// Scan build artifacts
     Scan(PathArgs),
 
-    /// Analyze disk usage
+    /// Analyze artifact disk usage
     Analyze(PathArgs),
 
-    /// Clean artifacts
+    /// Clean detected artifacts
     Clean(CleanArgs),
 }
 

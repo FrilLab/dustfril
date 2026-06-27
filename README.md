@@ -1,37 +1,42 @@
 # DustFril
 
-A Rust development artifact analyzer and cleaner.
+A development artifact analyzer and cleaner.
 
 🚧 Early development stage
 
-DustFril helps Rust developers discover, analyze, and safely manage generated files created by Cargo and Rust tooling.
+DustFril helps developers discover, analyze, and safely manage generated files from Rust, Node, and Java projects.
 
-Over time, Rust projects accumulate build artifacts and caches that consume significant disk space. DustFril aims to provide a simple and transparent way to inspect and clean those artifacts.
+Over time, build outputs and dependency directories consume significant disk space. DustFril aims to provide a simple and transparent way to inspect and clean those artifacts.
 
 ## Features
 
 ### Current Focus
 
-- Detect Rust build artifacts
+- Detect removable build artifacts across supported ecosystems
 - Analyze disk usage
-- Inspect Cargo caches
+- Filter by ecosystem from the CLI
 - Safe cleanup workflow
+
+### Currently Detected Artifacts
+
+- `target/`
+- `node_modules/`
+- `build/`
 
 ### Planned Support
 
-- `target/`
-- `~/.cargo/registry`
-- `~/.cargo/git`
+- Cargo home caches
+- Additional ecosystem-specific caches
 
 ## Example
 
-Scan Rust artifacts:
+Scan artifacts:
 
 ```bash
 dfr scan
 ```
 
-Analyze disk usage:
+Analyze artifact disk usage:
 
 ```bash
 dfr analyze
@@ -51,28 +56,14 @@ dfr clean
 
 ## Project Goals
 
-### Phase 1
-
-- Cargo project scanning
-- Rust artifact detection
-- Basic CLI
-
-### Phase 2
-
+- Multi-ecosystem artifact detection
 - Disk usage analysis
 - Dry-run support
 - Safe cleanup operations
-
-### Phase 3
-
 - Interactive terminal interface
 - Configuration support
 - Advanced filtering
-
-### Phase 4
-
 - Desktop application
-- Multi-language ecosystem support
 
 ## Philosophy
 

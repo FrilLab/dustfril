@@ -31,6 +31,6 @@ pub fn execute(args: PathArgs) {
     println!("Found {} artifact(s)\n", result.artifacts.len());
 
     for artifact in result.artifacts {
-        println!("  {:?}\n", artifact.path);
+        println!("  [{}] {}", artifact.ecosystem, artifact.path.display());
     }
 }
