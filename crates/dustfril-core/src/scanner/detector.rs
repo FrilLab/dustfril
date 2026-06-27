@@ -2,8 +2,10 @@ use std::path::Path;
 
 use crate::models::{Artifact, Ecosystem};
 
+/// Registered detectors for all supported ecosystems.
 pub static DETECTORS: &[&dyn Detector] = &[&RustDetector, &NodeDetector, &JavaDetector];
 
+/// Matches project roots and returns removable artifact directories.
 pub trait Detector: Sync {
     /// Is this directory a project of this ecosystem?
     fn matches(&self, root: &Path) -> bool;
@@ -14,6 +16,7 @@ pub trait Detector: Sync {
     fn ecosystem(&self) -> Ecosystem;
 }
 
+/// Returns the detector set matching the requested ecosystem filters.
 pub fn detectors(ecosystems: &[Ecosystem]) -> Vec<&'static dyn Detector> {
     if ecosystems.is_empty() {
         return DETECTORS.to_vec();
@@ -26,6 +29,7 @@ pub fn detectors(ecosystems: &[Ecosystem]) -> Vec<&'static dyn Detector> {
         .collect()
 }
 
+/// Detects Cargo `target/` directories.
 pub struct RustDetector;
 
 impl Detector for RustDetector {
@@ -49,6 +53,8 @@ impl Detector for RustDetector {
         Ecosystem::Rust
     }
 }
+
+/// Detects `node_modules/` directories for Node projects.
 pub struct NodeDetector;
 
 impl Detector for NodeDetector {
@@ -71,6 +77,8 @@ impl Detector for NodeDetector {
         Ecosystem::Node
     }
 }
+
+/// Detects `build/` directories for Maven and Gradle projects.
 pub struct JavaDetector;
 
 impl Detector for JavaDetector {
@@ -98,5 +106,40 @@ impl Detector for JavaDetector {
 
     fn ecosystem(&self) -> Ecosystem {
         Ecosystem::Java
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detectors_returns_all_when_filter_is_empty() {
+        let detectors = detectors(&[]);
+
+        assert_eq!(detectors.len(), 3);
+        assert!(
+            detectors
+                .iter()
+                .any(|detector| detector.ecosystem() == Ecosystem::Rust)
+        );
+        assert!(
+            detectors
+                .iter()
+                .any(|detector| detector.ecosystem() == Ecosystem::Node)
+        );
+        assert!(
+            detectors
+                .iter()
+                .any(|detector| detector.ecosystem() == Ecosystem::Java)
+        );
+    }
+
+    #[test]
+    fn detectors_filters_to_requested_ecosystem() {
+        let detectors = detectors(&[Ecosystem::Node]);
+
+        assert_eq!(detectors.len(), 1);
+        assert_eq!(detectors[0].ecosystem(), Ecosystem::Node);
     }
 }

@@ -20,7 +20,10 @@ mod tests {
         std::fs::write(temp_dir.path().join("artifact.bin"), b"hello").unwrap();
 
         let scan_result = ScanResult {
-            artifacts: vec![Artifact::new(temp_dir.path().to_path_buf(), Ecosystem::Rust)],
+            artifacts: vec![Artifact::new(
+                temp_dir.path().to_path_buf(),
+                Ecosystem::Rust,
+            )],
         };
 
         let result = analyze(scan_result).unwrap();

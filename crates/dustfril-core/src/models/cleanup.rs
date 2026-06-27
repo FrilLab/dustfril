@@ -5,8 +5,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::models::{ArtifactAnalysis, Ecosystem};
 
+/// Plan containing artifact paths that are safe to remove.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct CleanupPlan {
+    /// Individual removal candidates.
     pub candidates: Vec<CleanupCandidate>,
 }
 
@@ -20,13 +22,18 @@ impl CleanupPlan {
     }
 }
 
+/// Summary of an attempted cleanup operation.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CleanupResult {
+    /// Paths successfully deleted.
     pub deleted_paths: Vec<PathBuf>,
+    /// Paths that could not be deleted.
     pub failed_paths: Vec<PathBuf>,
+    /// Total bytes reclaimed from deleted paths.
     pub freed_size_bytes: u64,
 }
 
+/// Suggested user action for an analyzed artifact.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CleanupRecommendation {
     Keep,
@@ -46,11 +53,16 @@ impl fmt::Display for CleanupRecommendation {
     }
 }
 
+/// A single artifact selected for removal.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CleanupCandidate {
+    /// Filesystem path to remove.
     pub path: PathBuf,
+    /// Ecosystem that owns the artifact.
     pub ecosystem: Ecosystem,
+    /// Estimated reclaimable size for this candidate.
     pub size_bytes: u64,
+    /// Age in days when known.
     pub age_days: Option<u64>,
 }
 
@@ -62,5 +74,44 @@ impl From<ArtifactAnalysis> for CleanupCandidate {
             size_bytes: analysis.size_bytes,
             age_days: analysis.age_days,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::SystemTime;
+
+    use super::*;
+    use crate::models::{Artifact, ArtifactAnalysis};
+
+    #[test]
+    fn cleanup_recommendation_display_is_stable() {
+        assert_eq!(CleanupRecommendation::Keep.to_string(), "Keep");
+        assert_eq!(
+            CleanupRecommendation::NeedsReview.to_string(),
+            "NeedsReview"
+        );
+        assert_eq!(
+            CleanupRecommendation::SafeToClean.to_string(),
+            "SafeToClean"
+        );
+    }
+
+    #[test]
+    fn cleanup_candidate_from_analysis_preserves_expected_fields() {
+        let analysis = ArtifactAnalysis {
+            artifact: Artifact::new(PathBuf::from("target"), Ecosystem::Rust),
+            size_bytes: 42,
+            last_modified: Some(SystemTime::UNIX_EPOCH),
+            age_days: Some(120),
+            recommendation: CleanupRecommendation::SafeToClean,
+        };
+
+        let candidate = CleanupCandidate::from(analysis);
+
+        assert_eq!(candidate.path, PathBuf::from("target"));
+        assert_eq!(candidate.ecosystem, Ecosystem::Rust);
+        assert_eq!(candidate.size_bytes, 42);
+        assert_eq!(candidate.age_days, Some(120));
     }
 }
