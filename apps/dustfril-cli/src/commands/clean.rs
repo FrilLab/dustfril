@@ -127,8 +127,8 @@ fn print_cleanup_result(result: &CleanupResult) {
     if !result.failed_paths.is_empty() {
         println!("\nFailed");
 
-        for path in &result.failed_paths {
-            println!("  {}", path.display());
+        for failure in &result.failed_paths {
+            println!("  {} ({})", failure.path.display(), failure.reason);
         }
     }
 }
