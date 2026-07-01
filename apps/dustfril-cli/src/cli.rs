@@ -26,6 +26,9 @@ pub enum Commands {
 
     /// Clean detected artifacts
     Clean(CleanArgs),
+
+    /// Audit lifecycle scripts
+    Audit(PathArgs),
 }
 
 #[derive(Args)]

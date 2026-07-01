@@ -59,7 +59,7 @@ fn load(path: &Path) -> io::Result<Vec<CleanupHistory>> {
 
     let json = fs::read_to_string(path)?;
 
-    Ok(serde_json::from_str(&json).unwrap_or_default())
+    serde_json::from_str(&json).map_err(io::Error::other)
 }
 
 fn save(path: &Path, histories: &[CleanupHistory]) -> io::Result<()> {

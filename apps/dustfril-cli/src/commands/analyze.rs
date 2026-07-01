@@ -94,7 +94,7 @@ pub fn execute(args: PathArgs) {
             .age_days
             .map(|d| format!("{d} days"))
             .unwrap_or_else(|| "Unknown".to_string());
-
+        println!("----------------------------------------");
         println!("[{}]", artifact.artifact.ecosystem);
         println!("  Path:           {}", artifact.artifact.path.display());
         println!(
