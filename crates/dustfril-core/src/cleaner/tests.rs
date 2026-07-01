@@ -99,6 +99,37 @@ fn keep_is_not_candidate() {
 }
 
 #[test]
+fn execute_cleanup_deletes_directory() {
+    let temp = TempDir::new().unwrap();
+
+    let target = temp.path().join("target");
+    fs::create_dir(&target).unwrap();
+
+    fs::write(target.join("a.txt"), "hello").unwrap();
+    fs::write(target.join("b.txt"), "world").unwrap();
+
+    let size = fs::metadata(target.join("a.txt")).unwrap().len()
+        + fs::metadata(target.join("b.txt")).unwrap().len();
+
+    let plan = CleanupPlan {
+        candidates: vec![CleanupCandidate {
+            path: target.clone(),
+            ecosystem: Ecosystem::Rust,
+            size_bytes: size,
+            age_days: Some(365),
+        }],
+    };
+
+    let result = execute_cleanup(&plan, DeleteMode::Permanent).unwrap();
+
+    assert!(!target.exists());
+
+    assert_eq!(result.deleted_paths.len(), 1);
+    assert!(result.failed_paths.is_empty());
+    assert_eq!(result.freed_size_bytes, size);
+}
+
+#[test]
 fn execute_cleanup_removes_target_directory() {
     let temp_dir = TempDir::new().unwrap();
 
@@ -121,7 +152,7 @@ fn execute_cleanup_removes_target_directory() {
         candidates: vec![candidate],
     };
 
-    let result = execute_cleanup(&plan).unwrap();
+    let result = execute_cleanup(&plan, DeleteMode::default()).unwrap();
 
     assert!(!target_dir.exists());
     assert_eq!(result.deleted_paths.len(), 1);
@@ -159,9 +190,37 @@ fn cleanup_reports_failed_path() {
     let plan = CleanupPlan {
         candidates: vec![candidate],
     };
-    let result = execute_cleanup(&plan).unwrap();
+    let result = execute_cleanup(&plan, DeleteMode::default()).unwrap();
+
     assert_eq!(result.deleted_paths.len(), 0);
     assert_eq!(result.failed_paths.len(), 1);
     assert_eq!(result.freed_size_bytes, 0);
     assert_eq!(plan.reclaimable_size_bytes(), 100);
+}
+
+#[test]
+fn execute_cleanup_reports_missing_path() {
+    let temp = TempDir::new().unwrap();
+
+    let missing = temp.path().join("target");
+
+    let plan = CleanupPlan {
+        candidates: vec![CleanupCandidate {
+            path: missing.clone(),
+            ecosystem: Ecosystem::Rust,
+            size_bytes: 100,
+            age_days: Some(365),
+        }],
+    };
+
+    let result = execute_cleanup(&plan, DeleteMode::Permanent).unwrap();
+
+    assert!(result.deleted_paths.is_empty());
+
+    assert_eq!(result.failed_paths.len(), 1);
+
+    assert_eq!(
+        result.failed_paths[0].reason,
+        CleanupFailureReason::NotFound
+    );
 }

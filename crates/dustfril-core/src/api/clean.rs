@@ -1,7 +1,7 @@
 use crate::{
     analyzer, cleaner,
     error::DustResult,
-    models::{CleanupPlan, CleanupResult, ScanResult},
+    models::{CleanupPlan, CleanupResult, DeleteMode, ScanResult},
 };
 
 /// Builds a cleanup plan from scanned artifacts using analyzer recommendations.
@@ -11,10 +11,9 @@ pub fn build_plan(scan: ScanResult) -> DustResult<CleanupPlan> {
 }
 
 /// Executes a cleanup plan and reports deleted and failed paths.
-pub fn execute(plan: &CleanupPlan) -> DustResult<CleanupResult> {
-    cleaner::execute_cleanup(plan)
+pub fn execute(plan: &CleanupPlan, mode: DeleteMode) -> DustResult<CleanupResult> {
+    cleaner::execute_cleanup(plan, mode)
 }
-
 #[cfg(test)]
 mod tests {
     use tempfile::TempDir;
@@ -55,7 +54,7 @@ mod tests {
             }],
         };
 
-        let result = execute(&plan).unwrap();
+        let result = execute(&plan, DeleteMode::default()).unwrap();
 
         assert!(!target.exists());
         assert_eq!(result.deleted_paths, vec![target]);
