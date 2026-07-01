@@ -2,7 +2,11 @@ use std::{fs, io, path::Path};
 
 use crate::{
     error::DustResult,
-    models::{CleanupFailure, CleanupFailureReason, CleanupPlan, CleanupResult, DeleteMode},
+    models::{
+        CleanupCandidate, CleanupFailure, CleanupFailureReason, CleanupPlan, CleanupResult,
+        DeleteMode,
+    },
+    scanner::detector_for,
 };
 
 /// Deletes all paths in a cleanup plan and summarizes reclaimed space.
@@ -10,6 +14,14 @@ pub fn execute_cleanup(plan: &CleanupPlan, mode: DeleteMode) -> DustResult<Clean
     let mut result = CleanupResult::default();
 
     for candidate in &plan.candidates {
+        if let Err(reason) = validate_candidate(candidate) {
+            result.failed_paths.push(CleanupFailure {
+                path: candidate.path.clone(),
+                reason,
+            });
+            continue;
+        }
+
         match delete_path(&candidate.path, mode) {
             Ok(_) => {
                 result.deleted_paths.push(candidate.path.clone());
@@ -55,4 +67,24 @@ fn failure_reason(error: &io::Error) -> CleanupFailureReason {
         io::ErrorKind::NotFound => CleanupFailureReason::NotFound,
         _ => CleanupFailureReason::Other(error.to_string()),
     }
+}
+
+fn validate_candidate(candidate: &CleanupCandidate) -> Result<(), CleanupFailureReason> {
+    if !is_safe_cleanup_candidate(candidate) {
+        return Err(CleanupFailureReason::UnsafePath);
+    }
+
+    Ok(())
+}
+
+fn is_safe_cleanup_candidate(candidate: &CleanupCandidate) -> bool {
+    let Some(name) = candidate.path.file_name().and_then(|n| n.to_str()) else {
+        return false;
+    };
+
+    let Some(detector) = detector_for(candidate.ecosystem) else {
+        return false;
+    };
+
+    detector.artifact_paths().contains(&name)
 }

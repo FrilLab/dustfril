@@ -65,6 +65,18 @@ Permanently delete artifacts:
 dfr clean --permanent
 ```
 
+## Supported Ecosystems (v0.1)
+
+DustFril currently supports the following development ecosystems and their generated artifacts.
+
+| Ecosystem | Detected Artifacts |
+| --------- | ------------------ |
+| Rust      | `target/`          |
+| Node.js   | `node_modules/`    |
+| Java      | `build/`           |
+
+Support for additional ecosystems and cache directories will be added in future releases.
+
 ## Project Goals
 
 - Multi-ecosystem artifact detection

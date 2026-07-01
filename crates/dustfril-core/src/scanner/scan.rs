@@ -8,7 +8,7 @@ use crate::{
 };
 
 pub fn scan(root: &Path, ecosystems: &[Ecosystem]) -> DustResult<ScanResult> {
-    let detectors = detector::detectors(ecosystems);
+    let detectors = detector::select_detectors(ecosystems);
 
     let mut result = ScanResult::default();
 
