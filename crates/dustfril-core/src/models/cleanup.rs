@@ -23,14 +23,37 @@ impl CleanupPlan {
 }
 
 /// Summary of an attempted cleanup operation.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct CleanupResult {
     /// Paths successfully deleted.
     pub deleted_paths: Vec<PathBuf>,
     /// Paths that could not be deleted.
-    pub failed_paths: Vec<PathBuf>,
+    pub failed_paths: Vec<CleanupFailure>,
     /// Total bytes reclaimed from deleted paths.
     pub freed_size_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CleanupFailure {
+    pub path: PathBuf,
+    pub reason: CleanupFailureReason,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CleanupFailureReason {
+    PermissionDenied,
+    NotFound,
+    Other(String),
+}
+
+impl fmt::Display for CleanupFailureReason {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::PermissionDenied => write!(f, "Permission denied"),
+            Self::NotFound => write!(f, "Not found"),
+            Self::Other(msg) => write!(f, "{msg}"),
+        }
+    }
 }
 
 /// Suggested user action for an analyzed artifact.
