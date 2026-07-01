@@ -70,6 +70,11 @@ fn failure_reason(error: &io::Error) -> CleanupFailureReason {
 }
 
 fn validate_candidate(candidate: &CleanupCandidate) -> Result<(), CleanupFailureReason> {
+    let metadata = fs::symlink_metadata(&candidate.path).map_err(|e| failure_reason(&e))?;
+    if metadata.file_type().is_symlink() {
+        return Err(CleanupFailureReason::SymbolicLink);
+    }
+
     if !is_safe_cleanup_candidate(candidate) {
         return Err(CleanupFailureReason::UnsafePath);
     }
