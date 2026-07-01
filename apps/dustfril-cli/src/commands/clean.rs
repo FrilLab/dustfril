@@ -8,7 +8,7 @@ use dustfril_core::{
 
 use crate::{
     cli::CleanArgs,
-    format,
+    format, history,
     shared::path::{resolve_path, validate_path},
 };
 
@@ -64,6 +64,8 @@ pub fn execute(args: &CleanArgs) {
             return;
         }
     };
+    history::record(mode, &result)
+        .unwrap_or_else(|e| eprintln!("Failed to record cleanup history: {}", e));
 
     print_cleanup_result(&result);
 }

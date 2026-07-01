@@ -44,6 +44,7 @@ pub enum CleanupFailureReason {
     PermissionDenied,
     NotFound,
     UnsafePath,
+    SymbolicLink,
     Other(String),
 }
 
@@ -53,6 +54,7 @@ impl fmt::Display for CleanupFailureReason {
             Self::PermissionDenied => write!(f, "Permission denied"),
             Self::NotFound => write!(f, "Not found"),
             Self::UnsafePath => write!(f, "Unsafe path"),
+            Self::SymbolicLink => write!(f, "Symbolic link"),
             Self::Other(msg) => write!(f, "{msg}"),
         }
     }
