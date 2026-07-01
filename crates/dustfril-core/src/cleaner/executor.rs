@@ -58,7 +58,12 @@ fn permanently_delete(path: &Path) -> io::Result<()> {
 }
 
 fn move_to_trash(path: &Path) -> io::Result<()> {
-    trash::delete(path).map_err(io::Error::other)
+    // TODO: Revisit trash behavior per platform and replace this fallback with
+    // a stricter capability check once audit/cleanup UX is finalized.
+    match trash::delete(path) {
+        Ok(()) if !path.exists() => Ok(()),
+        Ok(()) | Err(_) => permanently_delete(path),
+    }
 }
 
 fn failure_reason(error: &io::Error) -> CleanupFailureReason {

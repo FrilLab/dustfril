@@ -27,5 +27,9 @@ fn main() {
                 commands::clean::execute(&args);
             }
         }
+
+        Commands::Audit(args) => {
+            commands::audit::execute(&args);
+        }
     }
 }
