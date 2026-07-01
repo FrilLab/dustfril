@@ -1,6 +1,12 @@
 use tempfile::TempDir;
 
-use crate::{models::Ecosystem, scanner::scan};
+use crate::{
+    models::Ecosystem,
+    scanner::{
+        detector::{Detector, RustDetector},
+        scan,
+    },
+};
 
 fn create_rust_artifact(root: &std::path::Path) -> std::path::PathBuf {
     std::fs::write(root.join("Cargo.toml"), "[package]").unwrap();
@@ -155,4 +161,11 @@ fn scan_with_unknown_filter_returns_empty() {
     let result = scan(temp_dir.path(), &[Ecosystem::Java]).unwrap();
 
     assert!(result.artifacts.is_empty());
+}
+
+#[test]
+fn rust_detector_reports_target_as_safe_artifact() {
+    let detector = RustDetector;
+
+    assert_eq!(detector.artifact_paths(), &["target"]);
 }
