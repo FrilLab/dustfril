@@ -224,3 +224,33 @@ fn execute_cleanup_reports_missing_path() {
         CleanupFailureReason::NotFound
     );
 }
+
+#[test]
+fn execute_cleanup_rejects_unsafe_path() {
+    let temp = TempDir::new().unwrap();
+
+    let unsafe_dir = temp.path().join("my_folder");
+    std::fs::create_dir(&unsafe_dir).unwrap();
+
+    let plan = CleanupPlan {
+        candidates: vec![CleanupCandidate {
+            path: unsafe_dir.clone(),
+            ecosystem: Ecosystem::Rust,
+            size_bytes: 0,
+            age_days: None,
+        }],
+    };
+
+    let result = execute_cleanup(&plan, DeleteMode::Permanent).unwrap();
+
+    assert!(unsafe_dir.exists());
+
+    assert!(result.deleted_paths.is_empty());
+
+    assert_eq!(result.failed_paths.len(), 1);
+
+    assert_eq!(
+        result.failed_paths[0].reason,
+        CleanupFailureReason::UnsafePath
+    );
+}

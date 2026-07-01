@@ -43,6 +43,7 @@ pub struct CleanupFailure {
 pub enum CleanupFailureReason {
     PermissionDenied,
     NotFound,
+    UnsafePath,
     Other(String),
 }
 
@@ -51,6 +52,7 @@ impl fmt::Display for CleanupFailureReason {
         match self {
             Self::PermissionDenied => write!(f, "Permission denied"),
             Self::NotFound => write!(f, "Not found"),
+            Self::UnsafePath => write!(f, "Unsafe path"),
             Self::Other(msg) => write!(f, "{msg}"),
         }
     }
