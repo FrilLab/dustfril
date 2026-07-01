@@ -67,6 +67,8 @@ impl PathArgs {
 
 #[derive(Args)]
 pub struct CleanArgs {
+    pub permanent: bool,
+
     #[command(flatten)]
     pub path_args: PathArgs,
 
@@ -123,6 +125,7 @@ mod tests {
                 java: true,
             },
             dry_run: true,
+            permanent: false,
         };
 
         assert_eq!(args.ecosystems(), vec![Ecosystem::Node, Ecosystem::Java]);

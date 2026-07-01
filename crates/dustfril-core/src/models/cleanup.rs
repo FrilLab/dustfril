@@ -39,7 +39,7 @@ pub struct CleanupFailure {
     pub reason: CleanupFailureReason,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum CleanupFailureReason {
     PermissionDenied,
     NotFound,
@@ -54,6 +54,13 @@ impl fmt::Display for CleanupFailureReason {
             Self::Other(msg) => write!(f, "{msg}"),
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub enum DeleteMode {
+    #[default]
+    Trash,
+    Permanent,
 }
 
 /// Suggested user action for an analyzed artifact.

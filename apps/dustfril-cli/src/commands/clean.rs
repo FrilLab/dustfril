@@ -3,7 +3,7 @@ use std::io::{self, Write};
 use dustfril_core::{
     api,
     error::DustError,
-    models::{CleanupPlan, CleanupResult},
+    models::{CleanupPlan, CleanupResult, DeleteMode},
 };
 
 use crate::{
@@ -51,7 +51,13 @@ pub fn execute(args: &CleanArgs) {
         return;
     }
 
-    let result = match api::clean::execute(&plan) {
+    let mode = if args.permanent {
+        DeleteMode::Permanent
+    } else {
+        DeleteMode::default()
+    };
+
+    let result = match api::clean::execute(&plan, mode) {
         Ok(res) => res,
         Err(e) => {
             eprintln!("Cleanup failed: {}", e);
