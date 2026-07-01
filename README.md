@@ -6,7 +6,7 @@ A development artifact analyzer and cleaner.
 
 DustFril helps developers discover, analyze, and safely manage generated files from Rust, Node, and Java projects.
 
-Over time, build outputs and dependency directories consume significant disk space. DustFril aims to provide a simple and transparent way to inspect and clean those artifacts.
+Over time, build outputs and dependency directories consume significant disk space. DustFril provides a simple and transparent way to inspect, analyze, and clean development artifacts while prioritizing safety.
 
 ## Features
 
@@ -15,18 +15,23 @@ Over time, build outputs and dependency directories consume significant disk spa
 - Detect removable build artifacts across supported ecosystems
 - Analyze disk usage
 - Filter by ecosystem from the CLI
-- Safe cleanup workflow
+- Preview cleanup before execution
+- Safe cleanup with Trash support
 
 ### Currently Detected Artifacts
 
-- `target/`
-- `node_modules/`
-- `build/`
+- Rust
+  - `target/`
+- Node.js
+  - `node_modules/`
+- Java
+  - `build/`
 
 ### Planned Support
 
 - Cargo home caches
 - Additional ecosystem-specific caches
+- More language and framework support
 
 ## Example
 
@@ -48,10 +53,16 @@ Preview cleanup:
 dfr clean --dry-run
 ```
 
-Clean artifacts:
+Move artifacts to the Trash (default):
 
 ```bash
 dfr clean
+```
+
+Permanently delete artifacts:
+
+```bash
+dfr clean --permanent
 ```
 
 ## Project Goals
@@ -60,6 +71,7 @@ dfr clean
 - Disk usage analysis
 - Dry-run support
 - Safe cleanup operations
+- Trash and permanent deletion modes
 - Interactive terminal interface
 - Configuration support
 - Advanced filtering
@@ -74,7 +86,7 @@ DustFril follows a few simple principles:
 - Transparent operations
 - Developer-friendly experience
 
-DustFril will never remove files without user confirmation.
+By default, DustFril moves artifacts to the operating system Trash whenever possible. Permanent deletion is available only when explicitly requested.
 
 ## License
 
