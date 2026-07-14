@@ -116,8 +116,20 @@ fn resolve_root(root: Option<String>) -> Result<PathBuf, String> {
             }
             Ok(path)
         }
-        _ => env::current_dir().map_err(|error| error.to_string()),
+        _ => default_root_path(),
     }
+}
+
+fn discover_workspace_root(start: &Path) -> Option<PathBuf> {
+    start
+        .ancestors()
+        .find(|path| path.join(".git").exists())
+        .map(Path::to_path_buf)
+}
+
+fn default_root_path() -> Result<PathBuf, String> {
+    let current_dir = env::current_dir().map_err(|error| error.to_string())?;
+    Ok(discover_workspace_root(&current_dir).unwrap_or(current_dir))
 }
 
 fn parse_ecosystems(values: &[String]) -> Result<Vec<Ecosystem>, String> {
@@ -171,9 +183,7 @@ fn artifact_path(path: &Path) -> String {
 
 #[tauri::command]
 fn default_root() -> Result<String, String> {
-    env::current_dir()
-        .map(|path| path.display().to_string())
-        .map_err(|error| error.to_string())
+    default_root_path().map(|path| path.display().to_string())
 }
 
 #[tauri::command]
