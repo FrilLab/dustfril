@@ -70,6 +70,7 @@ impl PathArgs {
 
 #[derive(Args)]
 pub struct CleanArgs {
+    #[arg(long)]
     pub permanent: bool,
 
     #[command(flatten)]

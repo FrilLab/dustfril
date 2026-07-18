@@ -1,73 +1,26 @@
 # DustFril
 
-A development artifact analyzer and cleaner.
+DustFril is a workspace for scanning, analyzing, auditing, and cleaning development artifacts.
 
-🚧 Early development stage
+The repository is split into a reusable Rust core crate, a CLI app, and a Tauri desktop app.
 
-DustFril helps developers discover, analyze, and safely manage generated files from Rust, Node, and Java projects.
+## Workspace Layout
 
-Over time, build outputs and dependency directories consume significant disk space. DustFril provides a simple and transparent way to inspect, analyze, and clean development artifacts while prioritizing safety.
+- `crates/dustfril-core`: shared scanning, analysis, cleanup, and audit logic
+- `apps/dustfril-cli`: `dfr` command-line interface
+- `apps/dustfril-tauri`: React + Tauri desktop app shell
+- `apps/dustfril-tauri/src-tauri`: Tauri Rust backend wired to `dustfril-core`
 
-## Features
+## Current Capabilities
 
-### Current Focus
+- Scan removable artifacts for Rust, Node.js, and Java workspaces
+- Analyze artifact size, age, and cleanup recommendation
+- Build a cleanup plan before deleting anything
+- Clean artifacts with Trash or permanent deletion mode
+- Audit Node lifecycle scripts such as `preinstall` and `postinstall`
+- Persist CLI cleanup history to the OS app data directory
 
-- Detect removable build artifacts across supported ecosystems
-- Analyze disk usage
-- Filter by ecosystem from the CLI
-- Preview cleanup before execution
-- Safe cleanup with Trash support
-
-### Currently Detected Artifacts
-
-- Rust
-  - `target/`
-- Node.js
-  - `node_modules/`
-- Java
-  - `build/`
-
-### Planned Support
-
-- Cargo home caches
-- Additional ecosystem-specific caches
-- More language and framework support
-
-## Example
-
-Scan artifacts:
-
-```bash
-dfr scan
-```
-
-Analyze artifact disk usage:
-
-```bash
-dfr analyze
-```
-
-Preview cleanup:
-
-```bash
-dfr clean --dry-run
-```
-
-Move artifacts to the Trash (default):
-
-```bash
-dfr clean
-```
-
-Permanently delete artifacts:
-
-```bash
-dfr clean --permanent
-```
-
-## Supported Ecosystems (v0.1)
-
-DustFril currently supports the following development ecosystems and their generated artifacts.
+## Detected Artifacts
 
 | Ecosystem | Detected Artifacts |
 | --------- | ------------------ |
@@ -75,30 +28,70 @@ DustFril currently supports the following development ecosystems and their gener
 | Node.js   | `node_modules/`    |
 | Java      | `build/`           |
 
-Support for additional ecosystems and cache directories will be added in future releases.
+## CLI Usage
 
-## Project Goals
+Run the CLI from the workspace root:
 
-- Multi-ecosystem artifact detection
-- Disk usage analysis
-- Dry-run support
-- Safe cleanup operations
-- Trash and permanent deletion modes
-- Interactive terminal interface
-- Configuration support
-- Advanced filtering
-- Desktop application
+```bash
+cargo run -p dustfril-cli -- <command>
+```
 
-## Philosophy
+Examples:
 
-DustFril follows a few simple principles:
+```bash
+cargo run -p dustfril-cli -- scan
+cargo run -p dustfril-cli -- analyze
+cargo run -p dustfril-cli -- clean --dry-run
+cargo run -p dustfril-cli -- clean
+cargo run -p dustfril-cli -- clean --permanent
+cargo run -p dustfril-cli -- audit --node
+```
 
-- Safety first
-- Explicit user actions
-- Transparent operations
-- Developer-friendly experience
+Filter by ecosystem or pass a target path:
 
-By default, DustFril moves artifacts to the operating system Trash whenever possible. Permanent deletion is available only when explicitly requested.
+```bash
+cargo run -p dustfril-cli -- scan . --rust
+cargo run -p dustfril-cli -- analyze /path/to/workspace --node
+```
+
+Available commands:
+
+- `scan [path] [--rust] [--node] [--java]`
+- `analyze [path] [--rust] [--node] [--java]`
+- `clean [path] [--dry-run] [--permanent] [--rust] [--node] [--java]`
+- `audit [path] [--node]`
+
+## Desktop App
+
+The desktop app currently exposes the same core workflows in a workspace browser UI:
+
+- scan
+- analyze
+- cleanup plan
+- cleanup execution
+- lifecycle script audit
+
+Start the frontend app from `apps/dustfril-tauri`:
+
+```bash
+npm install
+npm run tauri dev
+```
+
+## Development
+
+Run Rust tests from the workspace root:
+
+```bash
+cargo test
+```
+
+## Roadmap
+
+- More ecosystem-specific caches and artifact detectors
+- Richer audit output and remediation guidance
+- Additional desktop workflows
+- Configuration and advanced filtering
 
 ## License
 
