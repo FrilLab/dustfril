@@ -1,80 +1,97 @@
 # DustFril
 
-개발 산출물(Artifact) 분석 및 정리 도구입니다.
+DustFril은 개발 산출물을 스캔, 분석, 점검, 정리하기 위한 워크스페이스입니다.
 
-DustFril은 Rust, Node, Java 프로젝트에서 생성되는 산출물을 탐지하고, 용량을 분석하며, 안전하게 정리할 수 있도록 돕는 것을 목표로 합니다.
+이 저장소는 재사용 가능한 Rust 코어 크레이트, CLI 앱, Tauri 데스크톱 앱으로 나뉘어 있습니다.
 
-프로젝트를 오래 관리하다 보면 빌드 결과물과 의존성 디렉터리가 수 GB에서 수십 GB까지 증가할 수 있습니다.
+## 워크스페이스 구성
 
-DustFril은 이러한 생성 파일들을 쉽고 안전하게 관리할 수 있는 CLI 도구를 지향합니다.
+- `crates/dustfril-core`: 스캔, 분석, 정리, 점검 로직을 담은 공용 코어
+- `apps/dustfril-cli`: `dfr` 커맨드라인 인터페이스
+- `apps/dustfril-tauri`: React + Tauri 기반 데스크톱 앱 셸
+- `apps/dustfril-tauri/src-tauri`: `dustfril-core`와 연결된 Tauri Rust 백엔드
 
-## 주요 기능
+## 현재 기능
 
-### 현재 목표
+- Rust, Node.js, Java 워크스페이스의 정리 가능한 산출물 스캔
+- 산출물 크기, 경과 일수, 정리 권장 상태 분석
+- 실제 삭제 전 정리 계획 미리 보기
+- 휴지통 이동 또는 영구 삭제 모드로 정리 실행
+- `preinstall`, `postinstall` 같은 Node 라이프사이클 스크립트 점검
+- CLI 정리 이력을 운영체제 앱 데이터 디렉터리에 저장
 
-- 지원 생태계의 삭제 가능한 산출물 탐지
-- 디스크 사용량 분석
-- CLI 기반 생태계 필터링
-- 안전한 정리 기능
+## 현재 탐지 대상
 
-### 현재 탐지 대상
+| 생태계 | 탐지 대상 |
+| ------ | --------- |
+| Rust   | `target/` |
+| Node.js | `node_modules/` |
+| Java   | `build/` |
 
-- `target/`
-- `node_modules/`
-- `build/`
+## CLI 사용법
 
-### 지원 예정
-
-- Cargo 홈 캐시
-- 추가 생태계별 캐시
-
-## 사용 예시
-
-산출물 스캔:
+워크스페이스 루트에서 다음처럼 실행합니다.
 
 ```bash
-dfr scan
+cargo run -p dustfril-cli -- <command>
 ```
 
-산출물 용량 분석:
+예시:
 
 ```bash
-dfr analyze
+cargo run -p dustfril-cli -- scan
+cargo run -p dustfril-cli -- analyze
+cargo run -p dustfril-cli -- clean --dry-run
+cargo run -p dustfril-cli -- clean
+cargo run -p dustfril-cli -- clean --permanent
+cargo run -p dustfril-cli -- audit --node
 ```
 
-삭제 예정 파일 확인:
+생태계 필터나 대상 경로를 함께 지정할 수 있습니다.
 
 ```bash
-dfr clean --dry-run
+cargo run -p dustfril-cli -- scan . --rust
+cargo run -p dustfril-cli -- analyze /path/to/workspace --node
 ```
 
-실제 정리:
+지원 명령:
+
+- `scan [path] [--rust] [--node] [--java]`
+- `analyze [path] [--rust] [--node] [--java]`
+- `clean [path] [--dry-run] [--permanent] [--rust] [--node] [--java]`
+- `audit [path] [--node]`
+
+## 데스크톱 앱
+
+데스크톱 앱은 현재 아래 워크플로를 UI로 제공합니다.
+
+- scan
+- analyze
+- cleanup plan
+- cleanup execution
+- lifecycle script audit
+
+`apps/dustfril-tauri`에서 실행합니다.
 
 ```bash
-dfr clean
+npm install
+npm run tauri dev
+```
+
+## 개발
+
+워크스페이스 루트에서 Rust 테스트를 실행합니다.
+
+```bash
+cargo test
 ```
 
 ## 로드맵
 
-- 다중 생태계 산출물 탐지
-- 디스크 사용량 분석
-- Dry Run 지원
-- 안전 삭제 기능
-- 인터랙티브 터미널 UI
-- 설정 파일 지원
-- 고급 필터링
-- 데스크톱 애플리케이션
-
-## 철학
-
-DustFril은 다음 원칙을 중요하게 생각합니다.
-
-- 안전성 우선
-- 명시적 사용자 동작
-- 투명한 동작
-- 개발자 친화적 경험
-
-DustFril은 사용자의 확인 없이 파일을 삭제하지 않습니다.
+- 더 많은 생태계별 캐시와 산출물 탐지기 추가
+- 더 자세한 감사 결과와 대응 가이드
+- 데스크톱 워크플로 확장
+- 설정 파일과 고급 필터링 지원
 
 ## 라이선스
 
