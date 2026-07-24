@@ -102,6 +102,7 @@ struct CleanupFailureDto {
 #[serde(rename_all = "camelCase")]
 struct LifecycleScriptDto {
     package: String,
+    package_manager: String,
     script_type: String,
     command: String,
     risk_level: String,
@@ -301,6 +302,7 @@ fn audit(options: RunOptions) -> Result<Vec<LifecycleScriptDto>, String> {
 fn lifecycle_script_to_dto(script: LifecycleScript) -> LifecycleScriptDto {
     LifecycleScriptDto {
         package: script.package,
+        package_manager: script.package_manager.to_string(),
         script_type: script_type_to_string(script.script_type),
         command: script.command,
         risk_level: risk_level_to_string(script.risk_level),

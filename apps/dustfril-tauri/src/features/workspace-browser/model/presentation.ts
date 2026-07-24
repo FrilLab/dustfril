@@ -161,6 +161,7 @@ export function createAuditItems(auditScripts: LifecycleScript[] = []): BrowserI
     kind: script.riskLevel === 'High' ? 'warning' : 'document',
     detailLines: [
       `Package: ${script.package}`,
+      `Manager: ${script.packageManager}`,
       `Script: ${script.scriptType}`,
       `Risk: ${script.riskLevel}`,
       `Command: ${script.command}`,

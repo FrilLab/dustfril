@@ -1,4 +1,5 @@
 mod lifecycle;
+mod package_manager;
 mod risk;
 
 use std::path::Path;
@@ -16,5 +17,7 @@ pub fn classify(command: &str) -> RiskLevel {
     risk::classify(command)
 }
 
+#[cfg(test)]
+mod lifecycle_tests;
 #[cfg(test)]
 mod tests;
