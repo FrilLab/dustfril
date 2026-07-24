@@ -3,7 +3,7 @@ use std::{collections::HashMap, fs, path::Path};
 use serde::Deserialize;
 
 use crate::{
-    audit_tool,
+    audit_tool::{self, package_manager},
     error::DustResult,
     fs::walk_dirs,
     models::{LifecycleScript, ScriptType},
@@ -15,7 +15,7 @@ struct PackageJson {
     scripts: Option<HashMap<String, String>>,
 }
 
-/// Scans package.json files and returns lifecycle scripts.
+/// Scans package.json files under supported Node package managers and returns lifecycle scripts.
 pub fn audit_scan(root: &Path) -> DustResult<Vec<LifecycleScript>> {
     let mut scripts = Vec::new();
 
@@ -26,13 +26,17 @@ pub fn audit_scan(root: &Path) -> DustResult<Vec<LifecycleScript>> {
             continue;
         }
 
-        scripts.extend(audit_scan_package(&package_json)?);
+        let package_manager = package_manager::detect_for_package(&package_json, root);
+        scripts.extend(audit_scan_package(&package_json, package_manager)?);
     }
 
     Ok(scripts)
 }
 
-fn audit_scan_package(path: &Path) -> DustResult<Vec<LifecycleScript>> {
+fn audit_scan_package(
+    path: &Path,
+    package_manager: crate::models::PackageManager,
+) -> DustResult<Vec<LifecycleScript>> {
     let json = fs::read_to_string(path)?;
 
     let package: PackageJson = serde_json::from_str(&json).unwrap_or(PackageJson {
@@ -55,6 +59,7 @@ fn audit_scan_package(path: &Path) -> DustResult<Vec<LifecycleScript>> {
 
         result.push(LifecycleScript {
             package: package_name.clone(),
+            package_manager,
             script_type,
             command: command.clone(),
             risk_level: audit_tool::classify(&command),

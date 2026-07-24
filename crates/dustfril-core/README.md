@@ -17,7 +17,7 @@ This crate contains the filesystem scanners, analyzers, cleanup planner and exec
 - Rust: `target/`
 - Node.js: `node_modules/`
 - Java: `build/`
-- Audit: Node lifecycle scripts only
+- Audit: Node lifecycle scripts for npm, pnpm, yarn, and bun
 
 ## Test
 

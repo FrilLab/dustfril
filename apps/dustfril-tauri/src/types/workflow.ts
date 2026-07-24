@@ -51,6 +51,7 @@ export type CleanupResultResponse = {
 
 export type LifecycleScript = {
   package: string;
+  packageManager: string;
   scriptType: string;
   command: string;
   riskLevel: RiskLevel;

@@ -4,9 +4,33 @@ use std::fmt;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LifecycleScript {
     pub package: String,
+    pub package_manager: PackageManager,
     pub script_type: ScriptType,
     pub command: String,
     pub risk_level: RiskLevel,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum PackageManager {
+    Npm,
+    Pnpm,
+    Yarn,
+    Bun,
+    Unknown,
+}
+
+impl fmt::Display for PackageManager {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let value = match self {
+            Self::Npm => "npm",
+            Self::Pnpm => "pnpm",
+            Self::Yarn => "yarn",
+            Self::Bun => "bun",
+            Self::Unknown => "unknown",
+        };
+
+        write!(f, "{value}")
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
