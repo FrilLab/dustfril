@@ -1,0 +1,329 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { formatBytes } from '../../../lib/format';
+import {
+  analyzeArtifacts,
+  buildCleanupPlan,
+  defaultRoot,
+  executeCleanup,
+  loadCleanupHistory,
+  scanArtifacts,
+} from '../../../lib/tauri';
+import {
+  categoryConfigs,
+  ecosystemForCategory,
+  isFutureCategory,
+  isLanguageCategory,
+  type SidebarCategory,
+} from '../../../model/categories';
+import type { SidebarEntry } from '../../../components/Sidebar/Sidebar';
+import type {
+  AnalysisResponse,
+  CleanupHistoryEntry,
+  CleanupPlanResponse,
+  CleanupResultResponse,
+  DeleteMode,
+  Ecosystem,
+  RunOptions,
+  ScanResponse,
+} from '../../../types/workflow';
+import { deleteModes } from '../../../types/workflow';
+import {
+  createAnalysisItems,
+  createCleanupItems,
+  createScanItems,
+  createWorkspaceSummary,
+  filterItems,
+} from '../../workspace-browser/model/presentation';
+
+export function useAppState() {
+  const [root, setRoot] = useState('');
+  const [search, setSearch] = useState('');
+  const [activeCategory, setActiveCategory] = useState<SidebarCategory>('overview');
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [deleteMode, setDeleteMode] = useState<DeleteMode>('Trash');
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [scanResult, setScanResult] = useState<ScanResponse | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResponse | null>(null);
+  const [cleanupPlan, setCleanupPlan] = useState<CleanupPlanResponse | null>(null);
+  const [cleanupResult, setCleanupResult] = useState<CleanupResultResponse | null>(null);
+  const [historyEntries, setHistoryEntries] = useState<CleanupHistoryEntry[]>([]);
+  const [selectedCleanupPaths, setSelectedCleanupPaths] = useState<string[]>([]);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [lastScanAtMs, setLastScanAtMs] = useState<number | null>(null);
+  const initializedRef = useRef(false);
+
+  useEffect(() => {
+    defaultRoot()
+      .then(setRoot)
+      .catch((invokeError) => setError(String(invokeError)));
+
+    loadCleanupHistory()
+      .then(setHistoryEntries)
+      .catch((invokeError) => setError(String(invokeError)));
+  }, []);
+
+  const runOptions = useMemo<RunOptions>(
+    () => ({
+      root,
+      ecosystems: ['Rust', 'Node', 'Java'],
+    }),
+    [root],
+  );
+
+  useEffect(() => {
+    if (!root || initializedRef.current) {
+      return;
+    }
+
+    initializedRef.current = true;
+
+    void runAction('bootstrap', async () => {
+      const [scan, analysis, plan] = await Promise.all([
+        scanArtifacts(runOptions),
+        analyzeArtifacts(runOptions),
+        buildCleanupPlan(runOptions),
+      ]);
+
+      setScanResult(scan);
+      setAnalysisResult(analysis);
+      setCleanupPlan(plan);
+      setSelectedCleanupPaths(plan.candidates.map((candidate) => candidate.path));
+      setLastScanAtMs(Date.now());
+    });
+  }, [root, runOptions]);
+
+  const summary = useMemo(
+    () => createWorkspaceSummary(analysisResult?.artifacts),
+    [analysisResult?.artifacts],
+  );
+
+  const activeEcosystem = ecosystemForCategory(activeCategory);
+
+  const filteredScanArtifacts = useMemo(() => {
+    const artifacts = scanResult?.artifacts ?? [];
+
+    if (!activeEcosystem) {
+      return artifacts;
+    }
+
+    return artifacts.filter((artifact) => artifact.ecosystem === activeEcosystem);
+  }, [scanResult?.artifacts, activeEcosystem]);
+
+  const filteredAnalysisArtifacts = useMemo(() => {
+    const artifacts = analysisResult?.artifacts ?? [];
+
+    if (!activeEcosystem) {
+      return artifacts;
+    }
+
+    return artifacts.filter((artifact) => artifact.ecosystem === activeEcosystem);
+  }, [analysisResult?.artifacts, activeEcosystem]);
+
+  const filteredCleanupCandidates = useMemo(() => {
+    const candidates = cleanupPlan?.candidates ?? [];
+
+    if (!activeEcosystem) {
+      return candidates;
+    }
+
+    return candidates.filter((candidate) => candidate.ecosystem === activeEcosystem);
+  }, [cleanupPlan?.candidates, activeEcosystem]);
+
+  const scanItems = useMemo(
+    () => filterItems(createScanItems(filteredScanArtifacts), search),
+    [filteredScanArtifacts, search],
+  );
+  const analysisItems = useMemo(
+    () => filterItems(createAnalysisItems(filteredAnalysisArtifacts), search),
+    [filteredAnalysisArtifacts, search],
+  );
+  const cleanupItems = useMemo(
+    () =>
+      filterItems(
+        createCleanupItems(filteredCleanupCandidates, selectedCleanupPaths, deleteMode),
+        search,
+      ),
+    [filteredCleanupCandidates, selectedCleanupPaths, deleteMode, search],
+  );
+
+  const selectedCandidateBytes = useMemo(() => {
+    return filteredCleanupCandidates
+      .filter((candidate) => selectedCleanupPaths.includes(candidate.path))
+      .reduce((total, candidate) => total + candidate.sizeBytes, 0);
+  }, [filteredCleanupCandidates, selectedCleanupPaths]);
+
+  const sidebarEntries = useMemo<SidebarEntry[]>(() => {
+    const scanArtifactsByEcosystem = (ecosystem: Ecosystem) =>
+      (scanResult?.artifacts ?? []).filter((artifact) => artifact.ecosystem === ecosystem).length;
+
+    return categoryConfigs.map((config) => {
+      if (config.key === 'overview') {
+        return {
+          ...config,
+          count: scanResult?.artifacts.length ?? 0,
+        };
+      }
+
+      if (config.key === 'history') {
+        return {
+          ...config,
+          count: historyEntries.length,
+        };
+      }
+
+      if (config.ecosystem) {
+        return {
+          ...config,
+          count: scanArtifactsByEcosystem(config.ecosystem),
+        };
+      }
+
+      return {
+        ...config,
+        count: 0,
+      };
+    });
+  }, [historyEntries.length, scanResult?.artifacts]);
+
+  const activeCategoryConfig =
+    categoryConfigs.find((config) => config.key === activeCategory) ?? categoryConfigs[0];
+
+  const canRunActions = busyAction === null && root.length > 0;
+
+  const statusMessage = error
+    ? error
+    : cleanupResult
+      ? `Last cleanup freed ${formatBytes(cleanupResult.freedSizeBytes)} across ${cleanupResult.deletedPaths.length} paths.`
+      : 'Select a category from the sidebar to scan, review artifacts, and confirm cleanup actions.';
+
+  const confirmSamplePaths = selectedCleanupPaths.slice(0, 5);
+
+  async function runAction(action: string, runner: () => Promise<void>) {
+    setBusyAction(action);
+    setError(null);
+
+    try {
+      await runner();
+    } catch (invokeError) {
+      setError(String(invokeError));
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  function toggleCleanupPath(path: string) {
+    setSelectedCleanupPaths((current) =>
+      current.includes(path) ? current.filter((value) => value !== path) : [...current, path],
+    );
+  }
+
+  async function refreshWorkspaceData() {
+    const [scan, analysis, plan] = await Promise.all([
+      scanArtifacts(runOptions),
+      analyzeArtifacts(runOptions),
+      buildCleanupPlan(runOptions),
+    ]);
+
+    setScanResult(scan);
+    setAnalysisResult(analysis);
+    setCleanupPlan(plan);
+    setSelectedCleanupPaths(plan.candidates.map((candidate) => candidate.path));
+    setLastScanAtMs(Date.now());
+  }
+
+  async function handleScanCategory() {
+    await runAction('scan', async () => {
+      await refreshWorkspaceData();
+    });
+  }
+
+  async function handleBuildCleanupPlan() {
+    await runAction('cleanup-plan', async () => {
+      const plan = await buildCleanupPlan(runOptions);
+      setCleanupPlan(plan);
+      setSelectedCleanupPaths(plan.candidates.map((candidate) => candidate.path));
+    });
+  }
+
+  function handleRequestCleanup() {
+    if (!selectedCleanupPaths.length) {
+      return;
+    }
+
+    setConfirmDialogOpen(true);
+  }
+
+  async function handleConfirmCleanup() {
+    if (!cleanupPlan) {
+      return;
+    }
+
+    const candidates = cleanupPlan.candidates.filter((candidate) =>
+      selectedCleanupPaths.includes(candidate.path),
+    );
+
+    await runAction('cleanup-execute', async () => {
+      const result = await executeCleanup(candidates, deleteMode);
+
+      setCleanupResult(result);
+      setCleanupPlan((current) =>
+        current
+          ? {
+              ...current,
+              candidates: current.candidates.filter(
+                (candidate) => !result.deletedPaths.includes(candidate.path),
+              ),
+              reclaimableSizeBytes: current.candidates
+                .filter((candidate) => !result.deletedPaths.includes(candidate.path))
+                .reduce((total, candidate) => total + candidate.sizeBytes, 0),
+            }
+          : current,
+      );
+      setSelectedCleanupPaths((current) =>
+        current.filter((path) => !result.deletedPaths.includes(path)),
+      );
+      setConfirmDialogOpen(false);
+      setHistoryEntries(await loadCleanupHistory());
+    });
+  }
+
+  return {
+    root,
+    search,
+    activeCategory,
+    activeCategoryConfig,
+    selectedItemId,
+    deleteMode,
+    busyAction,
+    error,
+    selectedCleanupPaths,
+    selectedCandidateBytes,
+    sidebarEntries,
+    scanItems,
+    analysisItems,
+    cleanupItems,
+    historyEntries,
+    confirmDialogOpen,
+    confirmSamplePaths,
+    lastScanAtMs,
+    canRunActions,
+    statusMessage,
+    reclaimableBytes: cleanupPlan?.reclaimableSizeBytes ?? 0,
+    summary,
+    deleteModes,
+    isLanguageCategory,
+    isFutureCategory,
+    setRoot,
+    setSearch,
+    setActiveCategory,
+    setSelectedItemId,
+    setDeleteMode,
+    setConfirmDialogOpen,
+    toggleCleanupPath,
+    handleScanCategory,
+    handleBuildCleanupPlan,
+    handleRequestCleanup,
+    handleConfirmCleanup,
+  };
+}
