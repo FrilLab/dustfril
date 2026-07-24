@@ -1,3 +1,5 @@
+mod history;
+
 use std::{
     env,
     path::{Path, PathBuf},
@@ -271,6 +273,7 @@ fn execute_cleanup(request: ExecuteCleanupRequest) -> Result<CleanupResultRespon
         .collect::<Result<Vec<_>, String>>()?;
     let plan = CleanupPlan { candidates };
     let result = api::clean::execute(&plan, mode).map_err(|error| error.to_string())?;
+    history::record(mode, &result).map_err(|error| error.to_string())?;
 
     Ok(CleanupResultResponse {
         deleted_paths: result
@@ -288,6 +291,11 @@ fn execute_cleanup(request: ExecuteCleanupRequest) -> Result<CleanupResultRespon
             .collect(),
         freed_size_bytes: result.freed_size_bytes,
     })
+}
+
+#[tauri::command]
+fn load_cleanup_history() -> Result<Vec<history::CleanupHistoryEntryDto>, String> {
+    history::load_entries().map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -319,6 +327,7 @@ pub fn run() {
             analyze,
             build_cleanup_plan,
             execute_cleanup,
+            load_cleanup_history,
             audit
         ])
         .run(tauri::generate_context!())

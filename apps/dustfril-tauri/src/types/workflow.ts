@@ -57,6 +57,14 @@ export type LifecycleScript = {
   riskLevel: RiskLevel;
 };
 
+export type CleanupHistoryEntry = {
+  executedAtMs: number;
+  mode: DeleteMode;
+  freedSizeBytes: number;
+  deletedPaths: string[];
+  failedPaths: string[];
+};
+
 export type RunOptions = {
   root: string;
   ecosystems: Ecosystem[];

@@ -1,8 +1,8 @@
-import { WorkspaceBrowser } from './features/workspace-browser/WorkspaceBrowser';
+import { AppShell } from './features/app-shell/AppShell';
 import './styles/style.css';
 
 function App() {
-  return <WorkspaceBrowser />;
+  return <AppShell />;
 }
 
 export default App;
