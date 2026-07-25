@@ -1,13 +1,15 @@
-import { ArtifactList } from '../../../components/ArtifactList/ArtifactList';
+import { ArtifactExplorer } from '../../../components/ArtifactExplorer/ArtifactExplorer';
 import { StorageSummary } from '../../../components/StorageSummary/StorageSummary';
-import { EmptyState } from '../../../components/EmptyState/EmptyState';
-import type { BrowserItem } from '../../workspace-browser/model/types';
 import { formatBytes, formatCount } from '../../../lib/format';
 import type { CategoryConfig } from '../../../model/categories';
+import type { ExplorerWorkflow } from '../../../model/types';
+import type { BrowserItem } from '../../../model/types';
 import type { DeleteMode } from '../../../types/workflow';
 
 type CategoryCleanupViewProps = {
   category: CategoryConfig;
+  explorerWorkflow: ExplorerWorkflow;
+  explorerItems: BrowserItem[];
   scanItems: BrowserItem[];
   analysisItems: BrowserItem[];
   cleanupItems: BrowserItem[];
@@ -17,9 +19,11 @@ type CategoryCleanupViewProps = {
   deleteMode: DeleteMode;
   busyAction: string | null;
   canRunActions: boolean;
+  onWorkflowChange: (workflow: ExplorerWorkflow) => void;
   onSelectItem: (itemId: string) => void;
   onToggleCleanupPath: (path: string) => void;
   onScanCategory: () => void | Promise<void>;
+  onAnalyzeCategory: () => void | Promise<void>;
   onBuildCleanupPlan: () => void | Promise<void>;
   onRequestCleanup: () => void;
   onDeleteModeChange: (mode: DeleteMode) => void;
@@ -27,17 +31,18 @@ type CategoryCleanupViewProps = {
 };
 
 export function CategoryCleanupView(props: CategoryCleanupViewProps) {
-  const selectedItem =
-    [...props.scanItems, ...props.analysisItems, ...props.cleanupItems].find(
-      (item) => item.id === props.selectedItemId,
-    ) ?? null;
+  const emptyMessages: Record<ExplorerWorkflow, string> = {
+    scan: 'No scan results yet. Run Scan to discover artifacts in this category.',
+    analysis: 'No analysis data yet. Analyze the workspace to populate this view.',
+    cleanup: 'No cleanup candidates yet. Build a cleanup plan after scanning.',
+  };
 
   return (
     <div className="space-y-4">
       <section className="rounded-[24px] border border-white/8 bg-[#2b2b2e] px-4 py-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Category Cleanup</p>
+            <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Artifact Explorer</p>
             <h2 className="mt-1 text-2xl font-semibold text-white">{props.category.title}</h2>
             <p className="mt-2 text-sm text-slate-300">{props.category.description}</p>
           </div>
@@ -45,6 +50,11 @@ export function CategoryCleanupView(props: CategoryCleanupViewProps) {
             <ActionButton
               label={props.busyAction === 'scan' ? 'Scanning...' : 'Scan'}
               onClick={props.onScanCategory}
+              disabled={!props.canRunActions}
+            />
+            <ActionButton
+              label={props.busyAction === 'analyze' ? 'Analyzing...' : 'Analyze'}
+              onClick={props.onAnalyzeCategory}
               disabled={!props.canRunActions}
             />
             <ActionButton
@@ -75,33 +85,30 @@ export function CategoryCleanupView(props: CategoryCleanupViewProps) {
         ]}
       />
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        <ArtifactList
-          title="Scan Results"
-          description="Discovered artifact paths"
-          items={props.scanItems}
-          selectedItemId={props.selectedItemId}
-          emptyMessage="No scan results yet. Run Scan to discover artifacts in this category."
-          onSelectItem={props.onSelectItem}
-        />
-        <ArtifactList
-          title="Analysis"
-          description="Size, age, and cleanup recommendation"
-          items={props.analysisItems}
-          selectedItemId={props.selectedItemId}
-          emptyMessage="No analysis data yet. Scan the workspace to populate this view."
-          onSelectItem={props.onSelectItem}
-        />
+      <div className="flex flex-wrap gap-2">
+        {(['scan', 'analysis', 'cleanup'] as ExplorerWorkflow[]).map((workflow) => (
+          <button
+            key={workflow}
+            type="button"
+            onClick={() => props.onWorkflowChange(workflow)}
+            className={`rounded-full px-4 py-2 text-sm transition ${
+              props.explorerWorkflow === workflow
+                ? 'bg-[#3a3a3c] text-white'
+                : 'border border-white/10 bg-white/6 text-slate-300 hover:bg-white/10'
+            }`}
+          >
+            {workflow === 'scan' ? 'Scan' : workflow === 'analysis' ? 'Analyze' : 'Cleanup'}
+          </button>
+        ))}
       </div>
 
-      <ArtifactList
-        title="Cleanup Queue"
-        description="Select items before confirming cleanup"
-        items={props.cleanupItems}
+      <ArtifactExplorer
+        workflow={props.explorerWorkflow}
+        items={props.explorerItems}
         selectedItemId={props.selectedItemId}
-        selectable
+        selectable={props.explorerWorkflow === 'cleanup'}
         selectedPaths={props.selectedCleanupPaths}
-        emptyMessage="No cleanup candidates yet. Build a cleanup plan after scanning."
+        emptyMessage={emptyMessages[props.explorerWorkflow]}
         onSelectItem={props.onSelectItem}
         onTogglePath={props.onToggleCleanupPath}
       />
@@ -124,21 +131,6 @@ export function CategoryCleanupView(props: CategoryCleanupViewProps) {
             </button>
           ))}
         </div>
-      </section>
-
-      <section className="rounded-[24px] border border-white/8 bg-black/12 p-4">
-        <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Selected Item</p>
-        {selectedItem ? (
-          <div className="mt-3 space-y-2 text-sm text-slate-300">
-            <p className="font-medium text-white">{selectedItem.title}</p>
-            <p className="break-all text-slate-400">{selectedItem.subtitle}</p>
-            {selectedItem.detailLines.map((line) => (
-              <p key={line}>{line}</p>
-            ))}
-          </div>
-        ) : (
-          <EmptyState message="Select an artifact to inspect path, size, and recommendation details." compact />
-        )}
       </section>
     </div>
   );

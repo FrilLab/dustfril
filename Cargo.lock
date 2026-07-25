@@ -960,7 +960,6 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "clap",
- "directories",
  "dustfril-core",
  "serde",
  "serde_json",
@@ -971,6 +970,8 @@ dependencies = [
 name = "dustfril-core"
 version = "0.1.0"
 dependencies = [
+ "chrono",
+ "directories",
  "rayon",
  "serde",
  "serde_json",
@@ -983,15 +984,12 @@ dependencies = [
 name = "dustfril-tauri"
 version = "0.1.0"
 dependencies = [
- "chrono",
- "directories",
  "dustfril-core",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-opener",
- "tempfile",
 ]
 
 [[package]]

@@ -1,5 +1,5 @@
-import type { BrowserItem } from '../../features/workspace-browser/model/types';
-import { ItemIcon } from '../../features/workspace-browser/components/icons';
+import type { BrowserItem } from '../../model/types';
+import { ItemIcon } from '../icons';
 
 type ArtifactCardProps = {
   item: BrowserItem;

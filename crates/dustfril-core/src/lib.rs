@@ -6,4 +6,5 @@ mod analyzer;
 mod audit_tool;
 mod cleaner;
 mod fs;
+mod history;
 mod scanner;

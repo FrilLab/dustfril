@@ -1,4 +1,4 @@
-import type { BrowserItem } from '../../features/workspace-browser/model/types';
+import type { BrowserItem } from '../../model/types';
 import { ArtifactCard } from '../ArtifactCard/ArtifactCard';
 import { EmptyState } from '../EmptyState/EmptyState';
 

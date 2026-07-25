@@ -26,19 +26,21 @@ import type {
   RunOptions,
   ScanResponse,
 } from '../../../types/workflow';
-import { deleteModes } from '../../../types/workflow';
+import { deleteModes, ecosystems } from '../../../types/workflow';
 import {
   createAnalysisItems,
   createCleanupItems,
   createScanItems,
   createWorkspaceSummary,
   filterItems,
-} from '../../workspace-browser/model/presentation';
+} from '../../../model/presentation';
+import type { ExplorerWorkflow } from '../../../model/types';
 
 export function useAppState() {
   const [root, setRoot] = useState('');
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<SidebarCategory>('overview');
+  const [explorerWorkflow, setExplorerWorkflow] = useState<ExplorerWorkflow>('scan');
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [deleteMode, setDeleteMode] = useState<DeleteMode>('Trash');
   const [busyAction, setBusyAction] = useState<string | null>(null);
@@ -51,7 +53,7 @@ export function useAppState() {
   const [selectedCleanupPaths, setSelectedCleanupPaths] = useState<string[]>([]);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [lastScanAtMs, setLastScanAtMs] = useState<number | null>(null);
-  const initializedRef = useRef(false);
+  const previousRootRef = useRef<string | null>(null);
 
   useEffect(() => {
     defaultRoot()
@@ -63,42 +65,45 @@ export function useAppState() {
       .catch((invokeError) => setError(String(invokeError)));
   }, []);
 
-  const runOptions = useMemo<RunOptions>(
-    () => ({
+  const activeEcosystem = ecosystemForCategory(activeCategory);
+
+  const runOptions = useMemo<RunOptions>(() => {
+    if (activeEcosystem) {
+      return {
+        root,
+        ecosystems: [activeEcosystem],
+      };
+    }
+
+    return {
       root,
-      ecosystems: ['Rust', 'Node', 'Java'],
-    }),
-    [root],
-  );
+      ecosystems: [...ecosystems],
+    };
+  }, [root, activeEcosystem]);
 
   useEffect(() => {
-    if (!root || initializedRef.current) {
+    if (!root) {
       return;
     }
 
-    initializedRef.current = true;
+    if (previousRootRef.current === root) {
+      return;
+    }
+
+    previousRootRef.current = root;
 
     void runAction('bootstrap', async () => {
-      const [scan, analysis, plan] = await Promise.all([
-        scanArtifacts(runOptions),
-        analyzeArtifacts(runOptions),
-        buildCleanupPlan(runOptions),
-      ]);
-
-      setScanResult(scan);
-      setAnalysisResult(analysis);
-      setCleanupPlan(plan);
-      setSelectedCleanupPaths(plan.candidates.map((candidate) => candidate.path));
-      setLastScanAtMs(Date.now());
+      await refreshWorkspaceData({
+        root,
+        ecosystems: [...ecosystems],
+      });
     });
-  }, [root, runOptions]);
+  }, [root]);
 
   const summary = useMemo(
     () => createWorkspaceSummary(analysisResult?.artifacts),
     [analysisResult?.artifacts],
   );
-
-  const activeEcosystem = ecosystemForCategory(activeCategory);
 
   const filteredScanArtifacts = useMemo(() => {
     const artifacts = scanResult?.artifacts ?? [];
@@ -146,6 +151,29 @@ export function useAppState() {
       ),
     [filteredCleanupCandidates, selectedCleanupPaths, deleteMode, search],
   );
+
+  const explorerItems = useMemo(() => {
+    if (explorerWorkflow === 'analysis') {
+      return analysisItems;
+    }
+
+    if (explorerWorkflow === 'cleanup') {
+      return cleanupItems;
+    }
+
+    return scanItems;
+  }, [explorerWorkflow, analysisItems, cleanupItems, scanItems]);
+
+  useEffect(() => {
+    if (!explorerItems.length) {
+      setSelectedItemId(null);
+      return;
+    }
+
+    if (!selectedItemId || !explorerItems.some((item) => item.id === selectedItemId)) {
+      setSelectedItemId(explorerItems[0].id);
+    }
+  }, [explorerItems, selectedItemId]);
 
   const selectedCandidateBytes = useMemo(() => {
     return filteredCleanupCandidates
@@ -195,7 +223,7 @@ export function useAppState() {
     ? error
     : cleanupResult
       ? `Last cleanup freed ${formatBytes(cleanupResult.freedSizeBytes)} across ${cleanupResult.deletedPaths.length} paths.`
-      : 'Select a category from the sidebar to scan, review artifacts, and confirm cleanup actions.';
+      : 'Select a location, scan the workspace, review artifacts, and confirm cleanup before files are moved to Trash.';
 
   const confirmSamplePaths = selectedCleanupPaths.slice(0, 5);
 
@@ -212,17 +240,11 @@ export function useAppState() {
     }
   }
 
-  function toggleCleanupPath(path: string) {
-    setSelectedCleanupPaths((current) =>
-      current.includes(path) ? current.filter((value) => value !== path) : [...current, path],
-    );
-  }
-
-  async function refreshWorkspaceData() {
+  async function refreshWorkspaceData(options: RunOptions) {
     const [scan, analysis, plan] = await Promise.all([
-      scanArtifacts(runOptions),
-      analyzeArtifacts(runOptions),
-      buildCleanupPlan(runOptions),
+      scanArtifacts(options),
+      analyzeArtifacts(options),
+      buildCleanupPlan(options),
     ]);
 
     setScanResult(scan);
@@ -232,9 +254,23 @@ export function useAppState() {
     setLastScanAtMs(Date.now());
   }
 
+  function toggleCleanupPath(path: string) {
+    setSelectedCleanupPaths((current) =>
+      current.includes(path) ? current.filter((value) => value !== path) : [...current, path],
+    );
+  }
+
   async function handleScanCategory() {
     await runAction('scan', async () => {
-      await refreshWorkspaceData();
+      await refreshWorkspaceData(runOptions);
+      setExplorerWorkflow('scan');
+    });
+  }
+
+  async function handleAnalyzeCategory() {
+    await runAction('analyze', async () => {
+      setAnalysisResult(await analyzeArtifacts(runOptions));
+      setExplorerWorkflow('analysis');
     });
   }
 
@@ -243,6 +279,7 @@ export function useAppState() {
       const plan = await buildCleanupPlan(runOptions);
       setCleanupPlan(plan);
       setSelectedCleanupPaths(plan.candidates.map((candidate) => candidate.path));
+      setExplorerWorkflow('cleanup');
     });
   }
 
@@ -293,6 +330,7 @@ export function useAppState() {
     search,
     activeCategory,
     activeCategoryConfig,
+    explorerWorkflow,
     selectedItemId,
     deleteMode,
     busyAction,
@@ -303,6 +341,7 @@ export function useAppState() {
     scanItems,
     analysisItems,
     cleanupItems,
+    explorerItems,
     historyEntries,
     confirmDialogOpen,
     confirmSamplePaths,
@@ -310,18 +349,22 @@ export function useAppState() {
     canRunActions,
     statusMessage,
     reclaimableBytes: cleanupPlan?.reclaimableSizeBytes ?? 0,
+    artifactCount: scanResult?.artifacts.length ?? 0,
     summary,
     deleteModes,
+    supportedEcosystems: ecosystems,
     isLanguageCategory,
     isFutureCategory,
     setRoot,
     setSearch,
     setActiveCategory,
+    setExplorerWorkflow,
     setSelectedItemId,
     setDeleteMode,
     setConfirmDialogOpen,
     toggleCleanupPath,
     handleScanCategory,
+    handleAnalyzeCategory,
     handleBuildCleanupPlan,
     handleRequestCleanup,
     handleConfirmCleanup,
