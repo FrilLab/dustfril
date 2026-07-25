@@ -1,40 +1,39 @@
-import { StorageSummary } from '../../../components/StorageSummary/StorageSummary';
-import { formatBytes, formatCount, formatDate } from '../../../lib/format';
-import type { SidebarEntry } from '../../../components/Sidebar/Sidebar';
+import { StorageSummary } from '../StorageSummary/StorageSummary';
+import { formatBytes, formatCount, formatDate } from '../../lib/format';
+import type { SidebarEntry } from '../Sidebar/Sidebar';
+import type { Ecosystem } from '../../types/workflow';
 
-type OverviewViewProps = {
+type DashboardProps = {
   sidebarEntries: SidebarEntry[];
   lastScanAtMs: number | null;
   reclaimableBytes: number;
+  artifactCount: number;
+  supportedEcosystems: Ecosystem[];
   statusMessage: string;
   error: string | null;
 };
 
-export function OverviewView(props: OverviewViewProps) {
-  const languageCount = props.sidebarEntries
-    .filter((entry) => entry.section === 'language')
-    .reduce((total, entry) => total + entry.count, 0);
-
+export function Dashboard(props: DashboardProps) {
   return (
     <div className="space-y-4">
       <section className="rounded-[24px] border border-white/8 bg-[#2b2b2e] px-4 py-4">
-        <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Workspace Overview</p>
-        <h2 className="mt-1 text-2xl font-semibold text-white">System Management Dashboard</h2>
+        <p className="text-xs uppercase tracking-[0.22em] text-slate-500">DustFril</p>
+        <h2 className="mt-1 text-2xl font-semibold text-white">Desktop Dashboard</h2>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
-          Inspect reclaimable storage, review scan results by category, and run safe cleanup flows
-          with confirmation before files are moved to Trash.
+          Discover artifacts, analyze disk usage, review cleanup candidates, and inspect history
+          from a Finder-like desktop interface powered by DustFril Core.
         </p>
       </section>
 
       <StorageSummary
         metrics={[
           {
-            label: 'Reclaimable Storage',
+            label: 'Reclaimable',
             value: formatBytes(props.reclaimableBytes),
           },
           {
-            label: 'Detected Artifacts',
-            value: formatCount(languageCount),
+            label: 'Artifacts',
+            value: formatCount(props.artifactCount),
           },
           {
             label: 'Last Scan',
@@ -48,6 +47,20 @@ export function OverviewView(props: OverviewViewProps) {
           },
         ]}
       />
+
+      <section className="rounded-[24px] border border-white/8 bg-black/12 p-4">
+        <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Supported Ecosystems</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {props.supportedEcosystems.map((ecosystem) => (
+            <span
+              key={ecosystem}
+              className="rounded-full border border-white/10 bg-white/6 px-3 py-1 text-xs text-slate-200"
+            >
+              {ecosystem}
+            </span>
+          ))}
+        </div>
+      </section>
 
       <section className="rounded-[24px] border border-white/8 bg-black/12 p-4">
         <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Cleanup Summary</p>

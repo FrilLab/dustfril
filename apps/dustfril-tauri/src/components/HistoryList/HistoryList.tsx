@@ -2,11 +2,11 @@ import type { CleanupHistoryEntry } from '../../types/workflow';
 import { formatBytes, formatDate } from '../../lib/format';
 import { EmptyState } from '../EmptyState/EmptyState';
 
-type CleanupHistoryProps = {
+type HistoryListProps = {
   entries: CleanupHistoryEntry[];
 };
 
-export function CleanupHistory(props: CleanupHistoryProps) {
+export function HistoryList(props: HistoryListProps) {
   if (!props.entries.length) {
     return <EmptyState message="No cleanup history yet. Completed cleanups will appear here." />;
   }

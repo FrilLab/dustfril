@@ -1,4 +1,4 @@
-import { CleanupHistory } from '../../../components/CleanupHistory/CleanupHistory';
+import { HistoryList } from '../../../components/HistoryList/HistoryList';
 import type { CleanupHistoryEntry } from '../../../types/workflow';
 
 type HistoryViewProps = {
@@ -16,7 +16,7 @@ export function HistoryView(props: HistoryViewProps) {
         </p>
       </section>
 
-      <CleanupHistory entries={props.entries} />
+      <HistoryList entries={props.entries} />
     </div>
   );
 }

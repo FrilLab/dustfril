@@ -1,10 +1,10 @@
-import { ConfirmDialog } from '../../components/ConfirmDialog/ConfirmDialog';
+import { CleanupDialog } from '../../components/CleanupDialog/CleanupDialog';
+import { Dashboard } from '../../components/Dashboard/Dashboard';
 import { Sidebar } from '../../components/Sidebar/Sidebar';
 import { AppHeader } from './components/AppHeader';
 import { useAppState } from './hooks/useAppState';
 import { CategoryCleanupView } from './views/CategoryCleanupView';
 import { HistoryView } from './views/HistoryView';
-import { OverviewView } from './views/OverviewView';
 import { PlaceholderCategoryView } from './views/PlaceholderCategoryView';
 
 export function AppShell() {
@@ -29,10 +29,12 @@ export function AppShell() {
 
           <div className="min-h-0 overflow-y-auto px-4 py-4">
             {app.activeCategory === 'overview' ? (
-              <OverviewView
+              <Dashboard
                 sidebarEntries={app.sidebarEntries}
                 lastScanAtMs={app.lastScanAtMs}
                 reclaimableBytes={app.reclaimableBytes}
+                artifactCount={app.artifactCount}
+                supportedEcosystems={app.supportedEcosystems}
                 statusMessage={app.statusMessage}
                 error={app.error}
               />
@@ -41,6 +43,8 @@ export function AppShell() {
             {app.isLanguageCategory(app.activeCategory) ? (
               <CategoryCleanupView
                 category={app.activeCategoryConfig}
+                explorerWorkflow={app.explorerWorkflow}
+                explorerItems={app.explorerItems}
                 scanItems={app.scanItems}
                 analysisItems={app.analysisItems}
                 cleanupItems={app.cleanupItems}
@@ -50,9 +54,11 @@ export function AppShell() {
                 deleteMode={app.deleteMode}
                 busyAction={app.busyAction}
                 canRunActions={app.canRunActions}
+                onWorkflowChange={app.setExplorerWorkflow}
                 onSelectItem={app.setSelectedItemId}
                 onToggleCleanupPath={app.toggleCleanupPath}
                 onScanCategory={app.handleScanCategory}
+                onAnalyzeCategory={app.handleAnalyzeCategory}
                 onBuildCleanupPlan={app.handleBuildCleanupPlan}
                 onRequestCleanup={app.handleRequestCleanup}
                 onDeleteModeChange={app.setDeleteMode}
@@ -81,7 +87,7 @@ export function AppShell() {
         </footer>
       </div>
 
-      <ConfirmDialog
+      <CleanupDialog
         open={app.confirmDialogOpen}
         itemCount={app.selectedCleanupPaths.length}
         totalBytes={app.selectedCandidateBytes}

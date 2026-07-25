@@ -1,7 +1,7 @@
 import { formatBytes } from '../../lib/format';
 import type { DeleteMode } from '../../types/workflow';
 
-type ConfirmDialogProps = {
+type CleanupDialogProps = {
   open: boolean;
   itemCount: number;
   totalBytes: number;
@@ -12,7 +12,7 @@ type ConfirmDialogProps = {
   onConfirm: () => void | Promise<void>;
 };
 
-export function ConfirmDialog(props: ConfirmDialogProps) {
+export function CleanupDialog(props: CleanupDialogProps) {
   if (!props.open) {
     return null;
   }
@@ -24,11 +24,11 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
       <div
         role="dialog"
         aria-modal="true"
-        aria-labelledby="confirm-dialog-title"
+        aria-labelledby="cleanup-dialog-title"
         className="w-full max-w-lg rounded-[28px] border border-white/10 bg-[#242426] p-6 shadow-[0_30px_80px_rgba(0,0,0,0.45)]"
       >
         <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Confirm Cleanup</p>
-        <h2 id="confirm-dialog-title" className="mt-2 text-xl font-semibold text-white">
+        <h2 id="cleanup-dialog-title" className="mt-2 text-xl font-semibold text-white">
           {actionLabel}?
         </h2>
         <p className="mt-3 text-sm leading-6 text-slate-300">

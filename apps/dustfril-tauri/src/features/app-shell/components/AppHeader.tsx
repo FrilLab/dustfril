@@ -1,4 +1,4 @@
-import { FolderIcon, SearchIcon } from '../../workspace-browser/components/icons';
+import { FolderIcon, SearchIcon } from '../../../components/icons';
 
 type AppHeaderProps = {
   root: string;

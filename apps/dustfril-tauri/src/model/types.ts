@@ -1,6 +1,6 @@
-import type { Recommendation, RiskLevel } from '../../../types/workflow';
+import type { Recommendation, RiskLevel } from '../types/workflow';
 
-export type BrowserPane = 'scan' | 'analysis' | 'cleanup' | 'audit';
+export type ExplorerWorkflow = 'scan' | 'analysis' | 'cleanup';
 
 export type BrowserItemKind = 'folder' | 'document' | 'warning' | 'safe';
 
@@ -16,25 +16,12 @@ export type BrowserItem = {
   path?: string;
 };
 
-export type PaneConfig = {
-  key: BrowserPane;
-  title: string;
-  description: string;
-  count: number;
-  accent: string;
-};
-
 export type WorkspaceSummary = {
   keepCount: number;
   reviewCount: number;
   safeCount: number;
   reviewBytes: number;
   safeBytes: number;
-};
-
-export type StatusMetric = {
-  label: string;
-  value: string;
 };
 
 export type TotalsMetric = {
