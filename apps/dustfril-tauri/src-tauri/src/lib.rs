@@ -50,90 +50,95 @@ fn system_time_to_ms(value: std::time::SystemTime) -> Option<u64> {
 }
 
 #[tauri::command]
-fn default_root() -> Result<String, String> {
-    default_root_path().map(|path| path.display().to_string())
+async fn default_root() -> Result<String, String> {
+    tokio::task::spawn_blocking(|| default_root_path().map(|path| path.display().to_string()))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-fn scan(options: RunOptions) -> Result<ScanResponse, String> {
+async fn scan(options: RunOptions) -> Result<ScanResponse, String> {
     let root = resolve_root(options.root)?;
-    let ecosystems = options
-        .ecosystems
-        .into_iter()
-        .map(Into::into)
-        .collect::<Vec<_>>();
-    let result = api::scan(&root, &ecosystems).map_err(|error| error.to_string())?;
+    let ecosystems: Vec<_> = options.ecosystems.into_iter().map(Into::into).collect();
 
-    Ok(ScanResponse {
-        artifacts: result
-            .artifacts
-            .into_iter()
-            .map(|artifact| ArtifactDto {
-                path: artifact_path(&artifact.path),
-                ecosystem: artifact.ecosystem.into(),
-            })
-            .collect(),
+    tokio::task::spawn_blocking(move || {
+        let result = api::scan(&root, &ecosystems).map_err(|error| error.to_string())?;
+
+        Ok(ScanResponse {
+            artifacts: result
+                .artifacts
+                .into_iter()
+                .map(|artifact| ArtifactDto {
+                    path: artifact_path(&artifact.path),
+                    ecosystem: artifact.ecosystem.into(),
+                })
+                .collect(),
+        })
     })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-fn analyze(options: RunOptions) -> Result<AnalysisResponse, String> {
+async fn analyze(options: RunOptions) -> Result<AnalysisResponse, String> {
     let root = resolve_root(options.root)?;
-    let ecosystems = options
-        .ecosystems
-        .into_iter()
-        .map(Into::into)
-        .collect::<Vec<_>>();
-    let scan_result = api::scan(&root, &ecosystems).map_err(|error| error.to_string())?;
-    let analysis = api::analyze(scan_result).map_err(|error| error.to_string())?;
+    let ecosystems: Vec<_> = options.ecosystems.into_iter().map(Into::into).collect();
 
-    Ok(AnalysisResponse {
-        total_size_bytes: analysis.total_size_bytes,
-        artifacts: analysis
-            .artifacts
-            .into_iter()
-            .map(|artifact| ArtifactAnalysisDto {
-                path: artifact_path(&artifact.artifact.path),
-                ecosystem: artifact.artifact.ecosystem.into(),
-                size_bytes: artifact.size_bytes,
-                last_modified_ms: artifact.last_modified.and_then(system_time_to_ms),
-                age_days: artifact.age_days,
-                recommendation: artifact.recommendation.into(),
-            })
-            .collect(),
+    tokio::task::spawn_blocking(move || {
+        let scan_result = api::scan(&root, &ecosystems).map_err(|error| error.to_string())?;
+        let analysis = api::analyze(scan_result).map_err(|error| error.to_string())?;
+
+        Ok(AnalysisResponse {
+            total_size_bytes: analysis.total_size_bytes,
+            artifacts: analysis
+                .artifacts
+                .into_iter()
+                .map(|artifact| ArtifactAnalysisDto {
+                    path: artifact_path(&artifact.artifact.path),
+                    ecosystem: artifact.artifact.ecosystem.into(),
+                    size_bytes: artifact.size_bytes,
+                    last_modified_ms: artifact.last_modified.and_then(system_time_to_ms),
+                    age_days: artifact.age_days,
+                    recommendation: artifact.recommendation.into(),
+                })
+                .collect(),
+        })
     })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-fn build_cleanup_plan(options: RunOptions) -> Result<CleanupPlanResponse, String> {
+async fn build_cleanup_plan(options: RunOptions) -> Result<CleanupPlanResponse, String> {
     let root = resolve_root(options.root)?;
-    let ecosystems = options
-        .ecosystems
-        .into_iter()
-        .map(Into::into)
-        .collect::<Vec<_>>();
-    let scan_result = api::scan(&root, &ecosystems).map_err(|error| error.to_string())?;
-    let plan = api::clean::build_plan(scan_result).map_err(|error| error.to_string())?;
+    let ecosystems: Vec<_> = options.ecosystems.into_iter().map(Into::into).collect();
 
-    Ok(CleanupPlanResponse {
-        reclaimable_size_bytes: plan.reclaimable_size_bytes(),
-        candidates: plan
-            .candidates
-            .into_iter()
-            .map(|candidate| CleanupCandidateDto {
-                path: artifact_path(&candidate.path),
-                ecosystem: candidate.ecosystem.into(),
-                size_bytes: candidate.size_bytes,
-                age_days: candidate.age_days,
-            })
-            .collect(),
+    tokio::task::spawn_blocking(move || {
+        let scan_result = api::scan(&root, &ecosystems).map_err(|error| error.to_string())?;
+        let plan = api::clean::build_plan(scan_result).map_err(|error| error.to_string())?;
+
+        Ok(CleanupPlanResponse {
+            reclaimable_size_bytes: plan.reclaimable_size_bytes(),
+            candidates: plan
+                .candidates
+                .into_iter()
+                .map(|candidate| CleanupCandidateDto {
+                    path: artifact_path(&candidate.path),
+                    ecosystem: candidate.ecosystem.into(),
+                    size_bytes: candidate.size_bytes,
+                    age_days: candidate.age_days,
+                })
+                .collect(),
+        })
     })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-fn execute_cleanup(request: ExecuteCleanupRequest) -> Result<CleanupResultResponse, String> {
+async fn execute_cleanup(request: ExecuteCleanupRequest) -> Result<CleanupResultResponse, String> {
     let mode = request.mode.into();
-    let candidates = request
+    let candidates: Vec<_> = request
         .candidates
         .into_iter()
         .map(|candidate| CleanupCandidate {
@@ -142,45 +147,53 @@ fn execute_cleanup(request: ExecuteCleanupRequest) -> Result<CleanupResultRespon
             size_bytes: candidate.size_bytes,
             age_days: candidate.age_days,
         })
-        .collect::<Vec<_>>();
-    let plan = CleanupPlan { candidates };
-    let result = api::clean::execute(&plan, mode).map_err(|error| error.to_string())?;
-    history::record(mode, &result).map_err(|error| error.to_string())?;
+        .collect();
 
-    Ok(CleanupResultResponse {
-        deleted_paths: result
-            .deleted_paths
-            .into_iter()
-            .map(|path| artifact_path(&path))
-            .collect(),
-        failed_paths: result
-            .failed_paths
-            .into_iter()
-            .map(|failure| CleanupFailureDto {
-                path: artifact_path(&failure.path),
-                reason: cleanup_failure_reason(&failure.reason),
-            })
-            .collect(),
-        freed_size_bytes: result.freed_size_bytes,
+    tokio::task::spawn_blocking(move || {
+        let plan = CleanupPlan { candidates };
+        let result = api::clean::execute(&plan, mode).map_err(|error| error.to_string())?;
+        history::record(mode, &result).map_err(|error| error.to_string())?;
+
+        Ok(CleanupResultResponse {
+            deleted_paths: result
+                .deleted_paths
+                .into_iter()
+                .map(|path| artifact_path(&path))
+                .collect(),
+            failed_paths: result
+                .failed_paths
+                .into_iter()
+                .map(|failure| CleanupFailureDto {
+                    path: artifact_path(&failure.path),
+                    reason: cleanup_failure_reason(&failure.reason),
+                })
+                .collect(),
+            freed_size_bytes: result.freed_size_bytes,
+        })
     })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-fn load_cleanup_history() -> Result<Vec<CleanupHistoryEntryDto>, String> {
-    history::load_entries().map_err(|error| error.to_string())
+async fn load_cleanup_history() -> Result<Vec<CleanupHistoryEntryDto>, String> {
+    tokio::task::spawn_blocking(|| history::load_entries().map_err(|error| error.to_string()))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-fn audit(options: RunOptions) -> Result<Vec<LifecycleScriptDto>, String> {
+async fn audit(options: RunOptions) -> Result<Vec<LifecycleScriptDto>, String> {
     let root = resolve_root(options.root)?;
-    let ecosystems = options
-        .ecosystems
-        .into_iter()
-        .map(Into::into)
-        .collect::<Vec<_>>();
-    let result = api::audit(&root, &ecosystems).map_err(|error| error.to_string())?;
+    let ecosystems: Vec<_> = options.ecosystems.into_iter().map(Into::into).collect();
 
-    Ok(result.into_iter().map(Into::into).collect())
+    tokio::task::spawn_blocking(move || {
+        let result = api::audit(&root, &ecosystems).map_err(|error| error.to_string())?;
+
+        Ok(result.into_iter().map(Into::into).collect())
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
