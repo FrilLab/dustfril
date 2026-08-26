@@ -2,6 +2,14 @@ export type Ecosystem = 'Rust' | 'Node' | 'Java';
 export type Recommendation = 'Keep' | 'NeedsReview' | 'SafeToClean';
 export type DeleteMode = 'Trash' | 'Permanent';
 export type RiskLevel = 'Low' | 'Medium' | 'High' | 'None';
+export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun' | 'unknown';
+export type ScriptType =
+  | 'preinstall'
+  | 'install'
+  | 'postinstall'
+  | 'prepare'
+  | 'prepublish'
+  | 'prepublishOnly';
 
 export type Artifact = {
   path: string;
@@ -51,8 +59,8 @@ export type CleanupResultResponse = {
 
 export type LifecycleScript = {
   package: string;
-  packageManager: string;
-  scriptType: string;
+  packageManager: PackageManager;
+  scriptType: ScriptType;
   command: string;
   riskLevel: RiskLevel;
 };
