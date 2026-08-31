@@ -185,6 +185,7 @@ pub(crate) enum RiskLevelDto {
     Low,
     Medium,
     High,
+    Critical,
 }
 
 impl From<RiskLevel> for RiskLevelDto {
@@ -194,6 +195,7 @@ impl From<RiskLevel> for RiskLevelDto {
             RiskLevel::Low => Self::Low,
             RiskLevel::Medium => Self::Medium,
             RiskLevel::High => Self::High,
+            RiskLevel::Critical => Self::Critical,
         }
     }
 }
@@ -357,6 +359,28 @@ mod tests {
                 "scriptType": "prepublishOnly",
                 "command": "node publish.js",
                 "riskLevel": "High"
+            })
+        );
+    }
+
+    #[test]
+    fn critical_lifecycle_risk_is_preserved_in_wire_contract() {
+        let response = LifecycleScriptDto {
+            package: "demo".to_string(),
+            package_manager: PackageManagerDto::Npm,
+            script_type: ScriptTypeDto::Postinstall,
+            command: "curl payload && ./payload".to_string(),
+            risk_level: RiskLevelDto::Critical,
+        };
+
+        assert_eq!(
+            serde_json::to_value(response).unwrap(),
+            json!({
+                "package": "demo",
+                "packageManager": "npm",
+                "scriptType": "postinstall",
+                "command": "curl payload && ./payload",
+                "riskLevel": "Critical"
             })
         );
     }

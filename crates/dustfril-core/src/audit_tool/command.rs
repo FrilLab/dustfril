@@ -96,24 +96,88 @@ pub fn parse(command: &str) -> Vec<Segment> {
 }
 
 pub fn executable(tokens: &[String]) -> Option<&str> {
-    first_token(tokens).map(|token| token.rsplit(['/', '\\']).next().unwrap_or(token))
+    command_token(tokens).map(|token| token.rsplit(['/', '\\']).next().unwrap_or(token))
 }
 
-pub fn first_token(tokens: &[String]) -> Option<&str> {
-    tokens
-        .iter()
-        .find(|token| !token.is_empty() && !is_environment_assignment(token))
-        .map(String::as_str)
+pub fn command_token(tokens: &[String]) -> Option<&str> {
+    executable_index(tokens).map(|index| tokens[index].as_str())
 }
 
-pub fn has_token(tokens: &[String], expected: &str) -> bool {
-    tokens.iter().any(|token| token == expected)
+pub fn arguments(tokens: &[String]) -> &[String] {
+    executable_index(tokens)
+        .map(|index| &tokens[index + 1..])
+        .unwrap_or(&[])
 }
 
 fn is_environment_assignment(token: &str) -> bool {
     token
         .find('=')
         .is_some_and(|position| position > 0 && !token[..position].contains(['/', '\\']))
+}
+
+fn first_token_index(tokens: &[String]) -> Option<usize> {
+    tokens
+        .iter()
+        .position(|token| !token.is_empty() && !is_environment_assignment(token))
+}
+
+fn executable_index(tokens: &[String]) -> Option<usize> {
+    let mut index = first_token_index(tokens)?;
+
+    loop {
+        let executable = tokens[index]
+            .rsplit(['/', '\\'])
+            .next()
+            .unwrap_or(&tokens[index]);
+
+        match executable {
+            "command" => {
+                index += 1;
+            }
+            "env" => {
+                index += 1;
+                while index < tokens.len()
+                    && (is_environment_assignment(&tokens[index]) || tokens[index] == "-i")
+                {
+                    index += 1;
+                }
+            }
+            "sudo" => {
+                index += 1;
+                skip_sudo_options(tokens, &mut index);
+            }
+            _ => return (index < tokens.len()).then_some(index),
+        }
+
+        if index >= tokens.len() {
+            return None;
+        }
+    }
+}
+
+fn skip_sudo_options(tokens: &[String], index: &mut usize) {
+    while *index < tokens.len() {
+        let token = &tokens[*index];
+
+        if is_environment_assignment(token) {
+            *index += 1;
+            continue;
+        }
+
+        if !token.starts_with('-') {
+            break;
+        }
+
+        let takes_value = matches!(
+            token.as_str(),
+            "-u" | "--user" | "-g" | "--group" | "-p" | "--prompt" | "-C" | "--chdir"
+        );
+        *index += 1;
+
+        if takes_value && *index < tokens.len() {
+            *index += 1;
+        }
+    }
 }
 
 fn push_token(tokens: &mut Vec<String>, token: &mut String) {
@@ -166,5 +230,13 @@ mod tests {
         let segments = parse(r".\payload");
 
         assert_eq!(segments[0].tokens, [r".\payload"]);
+    }
+
+    #[test]
+    fn executable_skips_command_wrappers() {
+        let segments = parse("sudo -u root rm -rf /tmp/example");
+
+        assert_eq!(executable(&segments[0].tokens), Some("rm"));
+        assert_eq!(arguments(&segments[0].tokens), ["-rf", "/tmp/example"]);
     }
 }

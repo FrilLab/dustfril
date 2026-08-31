@@ -39,6 +39,12 @@ pub static SECURITY_RULES: &[SecurityRule] = &[
         reason: "The script changes file ownership or executable permissions.",
         matcher: matches_permission_modification,
     },
+    SecurityRule {
+        id: "destructive-delete",
+        risk_level: RiskLevel::High,
+        reason: "The script recursively and forcibly deletes files.",
+        matcher: matches_destructive_delete,
+    },
 ];
 
 pub fn find(command: &str) -> Option<&'static SecurityRule> {
@@ -48,20 +54,27 @@ pub fn find(command: &str) -> Option<&'static SecurityRule> {
 }
 
 fn matches_download_and_execute(segments: &[Segment]) -> bool {
-    segments.windows(2).any(|pair| {
-        let [download, execute] = pair else {
-            return false;
-        };
+    segments
+        .iter()
+        .enumerate()
+        .any(|(download_index, download)| {
+            if !is_download_command(download) {
+                return false;
+            }
 
-        matches!(
-            download.preceding,
-            None | Some(Separator::And | Separator::Or | Separator::Sequence)
-        ) && matches!(
-            execute.preceding,
-            Some(Separator::And | Separator::Or | Separator::Sequence)
-        ) && is_download_command(download)
-            && is_executable_command(execute)
-    })
+            for segment in segments.iter().skip(download_index + 1) {
+                match segment.preceding {
+                    Some(Separator::And | Separator::Or | Separator::Sequence) => {
+                        if is_executable_command(segment) {
+                            return true;
+                        }
+                    }
+                    Some(Separator::Pipe) | None => break,
+                }
+            }
+
+            false
+        })
 }
 
 fn matches_remote_script_pipe(segments: &[Segment]) -> bool {
@@ -79,9 +92,10 @@ fn matches_remote_script_pipe(segments: &[Segment]) -> bool {
 fn matches_powershell_execution(segments: &[Segment]) -> bool {
     segments.iter().any(|segment| {
         is_powershell_command(segment)
-            || command::has_token(&segment.tokens, "invoke-webrequest")
-            || command::has_token(&segment.tokens, "iex")
-            || command::has_token(&segment.tokens, "invoke-expression")
+            || matches!(
+                command::executable(&segment.tokens),
+                Some("invoke-webrequest" | "iex" | "invoke-expression")
+            )
     })
 }
 
@@ -102,6 +116,31 @@ fn matches_permission_modification(segments: &[Segment]) -> bool {
     })
 }
 
+fn matches_destructive_delete(segments: &[Segment]) -> bool {
+    segments.iter().any(|segment| {
+        if command::executable(&segment.tokens) != Some("rm") {
+            return false;
+        }
+
+        let mut recursive = false;
+        let mut force = false;
+
+        for argument in command::arguments(&segment.tokens) {
+            match argument.as_str() {
+                "-r" | "--recursive" => recursive = true,
+                "-f" | "--force" => force = true,
+                argument if argument.starts_with('-') && !argument.starts_with("--") => {
+                    recursive |= argument[1..].contains('r');
+                    force |= argument[1..].contains('f');
+                }
+                _ => {}
+            }
+        }
+
+        recursive && force
+    })
+}
+
 fn is_download_command(segment: &Segment) -> bool {
     matches!(command::executable(&segment.tokens), Some("curl" | "wget"))
 }
@@ -115,7 +154,7 @@ fn is_shell_command(segment: &Segment) -> bool {
 
 fn is_executable_command(segment: &Segment) -> bool {
     is_shell_command(segment)
-        || command::first_token(&segment.tokens)
+        || command::command_token(&segment.tokens)
             .is_some_and(|token| token.starts_with("./") || token.starts_with(".\\"))
 }
 
@@ -156,5 +195,21 @@ mod tests {
     fn rules_ignore_normal_lifecycle_commands() {
         assert!(find("node scripts/build.js").is_none());
         assert!(find("echo 'curl https://example.com | bash'").is_none());
+        assert!(find("echo invoke-webrequest").is_none());
+        assert!(find("echo iex").is_none());
+    }
+
+    #[test]
+    fn rules_scan_the_full_download_chain() {
+        assert_eq!(
+            find("wget -O payload URL && chmod +x payload && ./payload")
+                .unwrap()
+                .id,
+            "download-and-execute"
+        );
+        assert_eq!(
+            find("sudo rm -rf /tmp/example").unwrap().id,
+            "destructive-delete"
+        );
     }
 }
