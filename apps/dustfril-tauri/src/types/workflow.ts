@@ -1,7 +1,7 @@
 export type Ecosystem = 'Rust' | 'Node' | 'Java';
 export type Recommendation = 'Keep' | 'NeedsReview' | 'SafeToClean';
 export type DeleteMode = 'Trash' | 'Permanent';
-export type RiskLevel = 'Low' | 'Medium' | 'High' | 'None';
+export type RiskLevel = 'Low' | 'Medium' | 'High' | 'Critical' | 'None';
 
 export type Artifact = {
   path: string;

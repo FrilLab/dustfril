@@ -11,6 +11,7 @@ This crate contains the filesystem scanners, analyzers, cleanup planner and exec
 - `api::clean::build_plan`: build cleanup candidates from scan results
 - `api::clean::execute`: execute cleanup in Trash or permanent mode
 - `api::audit`: inspect supported lifecycle scripts
+- `api::security_scan`: detect suspicious lifecycle commands without executing them
 - `api::history`: record and load cleanup history
 
 ## Supported Coverage
@@ -19,6 +20,7 @@ This crate contains the filesystem scanners, analyzers, cleanup planner and exec
 - Node.js: `node_modules/`
 - Java: `build/`
 - Audit: Node lifecycle scripts for npm, pnpm, yarn, and bun
+- Security rules: remote script pipes, download-and-execute chains, PowerShell execution, and permission changes
 
 ## Test
 

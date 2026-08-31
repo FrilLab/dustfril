@@ -29,6 +29,21 @@ pub enum Commands {
 
     /// Audit lifecycle scripts
     Audit(PathArgs),
+
+    /// Scan lifecycle scripts for suspicious commands
+    Security(SecurityArgs),
+}
+
+#[derive(Args)]
+pub struct SecurityArgs {
+    #[command(subcommand)]
+    pub command: SecurityCommands,
+}
+
+#[derive(Subcommand)]
+pub enum SecurityCommands {
+    /// Scan Node lifecycle scripts for suspicious commands
+    Scan(PathArgs),
 }
 
 #[derive(Args)]
@@ -133,5 +148,17 @@ mod tests {
         };
 
         assert_eq!(args.ecosystems(), vec![Ecosystem::Node, Ecosystem::Java]);
+    }
+
+    #[test]
+    fn cli_parses_security_scan_command() {
+        let cli = Cli::try_parse_from(["dfr", "security", "scan", "--node"]).unwrap();
+
+        assert!(matches!(
+            cli.command,
+            Commands::Security(SecurityArgs {
+                command: SecurityCommands::Scan(PathArgs { node: true, .. })
+            })
+        ));
     }
 }

