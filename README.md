@@ -18,6 +18,7 @@ The repository is split into a reusable Rust core crate, a CLI app, and a Tauri 
 - Build a cleanup plan before deleting anything
 - Clean artifacts with Trash or permanent deletion mode
 - Audit Node lifecycle scripts such as `preinstall` and `postinstall`
+- Check supported lockfile presence and Git status
 - Persist CLI cleanup history to the OS app data directory
 
 ## Detected Artifacts
@@ -27,6 +28,11 @@ The repository is split into a reusable Rust core crate, a CLI app, and a Tauri 
 | Rust      | `target/`          |
 | Node.js   | `node_modules/`    |
 | Java      | `build/`           |
+
+Supported lockfiles are `package-lock.json`, `pnpm-lock.yaml`, `bun.lock`,
+and `Cargo.lock`. The Core API reports `Missing`, `Modified`, `Untracked`, or
+`Clean`; Git worktrees use porcelain-equivalent status, while non-Git paths
+only validate existence.
 
 ## CLI Usage
 

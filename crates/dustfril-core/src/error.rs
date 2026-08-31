@@ -13,6 +13,8 @@ pub enum DustError {
     AnalysisFailed,
     /// Indicates an unrecoverable cleanup failure.
     CleanupFailed,
+    /// Indicates that Git status could not be read for an integrity check.
+    Git(String),
 }
 
 /// Standard result type used by the core crate.
@@ -35,6 +37,9 @@ impl fmt::Display for DustError {
             }
             DustError::CleanupFailed => {
                 write!(f, "Cleanup failed")
+            }
+            DustError::Git(message) => {
+                write!(f, "Git error: {message}")
             }
         }
     }
