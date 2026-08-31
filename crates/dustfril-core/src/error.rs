@@ -15,6 +15,8 @@ pub enum DustError {
     CleanupFailed,
     /// Indicates that Git status could not be read for an integrity check.
     Git(String),
+    /// Indicates that a project manifest could not be parsed for an integrity check.
+    Manifest(String),
 }
 
 /// Standard result type used by the core crate.
@@ -40,6 +42,9 @@ impl fmt::Display for DustError {
             }
             DustError::Git(message) => {
                 write!(f, "Git error: {message}")
+            }
+            DustError::Manifest(message) => {
+                write!(f, "Manifest error: {message}")
             }
         }
     }
@@ -77,5 +82,12 @@ mod tests {
     #[test]
     fn display_formats_cleanup_error() {
         assert_eq!(DustError::CleanupFailed.to_string(), "Cleanup failed");
+    }
+
+    #[test]
+    fn display_formats_manifest_error() {
+        let error = DustError::Manifest("package.json is invalid".to_owned());
+
+        assert_eq!(error.to_string(), "Manifest error: package.json is invalid");
     }
 }

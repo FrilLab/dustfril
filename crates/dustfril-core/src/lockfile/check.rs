@@ -36,6 +36,11 @@ pub fn check_lockfile_integrity(root: &Path) -> DustResult<Vec<LockfileCheck>> {
     check_lockfiles(root, &expected)
 }
 
+enum NodeLockfileSelection {
+    Supported(LockfileKind),
+    Unsupported,
+}
+
 fn check_lockfiles_with_provider(
     root: &Path,
     expected: &[LockfileKind],
@@ -100,12 +105,11 @@ fn infer_expected_lockfiles(root: &Path) -> DustResult<Vec<LockfileKind>> {
             .filter(|kind| kind.ecosystem() == Ecosystem::Node)
             .collect::<Vec<_>>();
 
-        if let Some(kind) = package_manager_lockfile(&root.join("package.json")) {
-            expected.push(kind);
-        } else if node_lockfiles.is_empty() {
-            expected.push(LockfileKind::PackageLockJson);
-        } else {
-            expected.extend(node_lockfiles);
+        match package_manager_lockfile(&root.join("package.json"))? {
+            Some(NodeLockfileSelection::Supported(kind)) => expected.push(kind),
+            Some(NodeLockfileSelection::Unsupported) => {}
+            None if node_lockfiles.is_empty() => expected.push(LockfileKind::PackageLockJson),
+            None => expected.extend(node_lockfiles),
         }
     }
 
@@ -118,20 +122,31 @@ fn infer_expected_lockfiles(root: &Path) -> DustResult<Vec<LockfileKind>> {
     Ok(expected)
 }
 
-fn package_manager_lockfile(path: &Path) -> Option<LockfileKind> {
-    let content = fs::read_to_string(path).ok()?;
-    let package_json: Value = serde_json::from_str(&content).ok()?;
-    let package_manager = package_json.get("packageManager")?.as_str()?;
+fn package_manager_lockfile(path: &Path) -> DustResult<Option<NodeLockfileSelection>> {
+    let content = fs::read_to_string(path)?;
+    let package_json: Value = serde_json::from_str(&content)
+        .map_err(|error| DustError::Manifest(format!("{}: {error}", path.display())))?;
+    let Some(package_manager_value) = package_json.get("packageManager") else {
+        return Ok(None);
+    };
+    let package_manager = package_manager_value.as_str().ok_or_else(|| {
+        DustError::Manifest(format!(
+            "{}: packageManager must be a string",
+            path.display()
+        ))
+    })?;
 
-    if package_manager.starts_with("pnpm@") {
-        Some(LockfileKind::PnpmLockYaml)
+    let selection = if package_manager.starts_with("pnpm@") {
+        NodeLockfileSelection::Supported(LockfileKind::PnpmLockYaml)
     } else if package_manager.starts_with("bun@") {
-        Some(LockfileKind::BunLock)
+        NodeLockfileSelection::Supported(LockfileKind::BunLock)
     } else if package_manager.starts_with("npm@") {
-        Some(LockfileKind::PackageLockJson)
+        NodeLockfileSelection::Supported(LockfileKind::PackageLockJson)
     } else {
-        None
-    }
+        NodeLockfileSelection::Unsupported
+    };
+
+    Ok(Some(selection))
 }
 
 fn deduplicate(kinds: &mut Vec<LockfileKind>) {
@@ -245,6 +260,31 @@ mod tests {
         assert_eq!(checks.len(), 1);
         assert_eq!(checks[0].kind, LockfileKind::PnpmLockYaml);
         assert_eq!(checks[0].status, LockfileStatus::Missing);
+    }
+
+    #[test]
+    fn integrity_check_does_not_assume_npm_for_unsupported_package_manager() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(
+            temp_dir.path().join("package.json"),
+            r#"{"name":"demo","packageManager":"yarn@4.0.0"}"#,
+        )
+        .unwrap();
+        fs::write(temp_dir.path().join("yarn.lock"), "__metadata:\n").unwrap();
+
+        let checks = check_lockfile_integrity(temp_dir.path()).unwrap();
+
+        assert!(checks.is_empty());
+    }
+
+    #[test]
+    fn integrity_check_reports_malformed_package_manifest() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("package.json"), "{invalid json").unwrap();
+
+        let result = check_lockfile_integrity(temp_dir.path());
+
+        assert!(matches!(result, Err(DustError::Manifest(_))));
     }
 
     #[test]
