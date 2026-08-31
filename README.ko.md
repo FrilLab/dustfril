@@ -19,6 +19,7 @@ DustFril은 개발 산출물을 스캔, 분석, 점검, 정리하기 위한 워�
 - 휴지통 이동 또는 영구 삭제 모드로 정리 실행
 - `preinstall`, `postinstall` 같은 Node 라이프사이클 스크립트 점검
 - 규칙 기반 보안 경고로 의심스러운 라이프사이클 명령 탐지
+- 지원 lockfile의 존재 여부와 Git 상태 점검
 - CLI 정리 이력을 운영체제 앱 데이터 디렉터리에 저장
 
 ## 현재 탐지 대상
@@ -28,6 +29,11 @@ DustFril은 개발 산출물을 스캔, 분석, 점검, 정리하기 위한 워�
 | Rust   | `target/` |
 | Node.js | `node_modules/` |
 | Java   | `build/` |
+
+지원 lockfile은 `package-lock.json`, `pnpm-lock.yaml`, `bun.lock`,
+`Cargo.lock`입니다. Core API는 `Missing`, `Modified`, `Untracked`, `Clean`
+상태를 반환합니다. Git worktree에서는 porcelain과 같은 상태를 사용하고,
+Git 저장소가 아니면 파일 존재 여부만 확인합니다.
 
 ## CLI 사용법
 
