@@ -1,12 +1,17 @@
 use crate::{
     analyzer, cleaner,
     error::DustResult,
-    models::{CleanupPlan, CleanupResult, DeleteMode, ScanResult},
+    models::{AnalysisResult, CleanupPlan, CleanupResult, DeleteMode, ScanResult},
 };
 
 /// Builds a cleanup plan from scanned artifacts using analyzer recommendations.
 pub fn build_plan(scan: ScanResult) -> DustResult<CleanupPlan> {
     let analysis = analyzer::Analyzer::analyze(scan)?;
+    build_plan_from_analysis(analysis)
+}
+
+/// Builds a cleanup plan from an analysis that has already been computed.
+pub fn build_plan_from_analysis(analysis: AnalysisResult) -> DustResult<CleanupPlan> {
     cleaner::create_cleanup_plan(analysis)
 }
 
@@ -34,6 +39,23 @@ mod tests {
         };
 
         let plan = build_plan(scan).unwrap();
+
+        assert!(plan.candidates.is_empty());
+    }
+
+    #[test]
+    fn build_plan_from_analysis_returns_expected_candidates() {
+        let temp_dir = TempDir::new().unwrap();
+        std::fs::write(temp_dir.path().join("artifact.bin"), b"hello").unwrap();
+        let scan = ScanResult {
+            artifacts: vec![Artifact::new(
+                temp_dir.path().to_path_buf(),
+                Ecosystem::Rust,
+            )],
+        };
+
+        let analysis = crate::api::analyze(scan).unwrap();
+        let plan = build_plan_from_analysis(analysis).unwrap();
 
         assert!(plan.candidates.is_empty());
     }

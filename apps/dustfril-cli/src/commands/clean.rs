@@ -80,9 +80,11 @@ fn build_cleanup_plan(args: &CleanArgs) -> Result<CleanupPlan, DustError> {
     let ecosystems = args.ecosystems();
 
     let scan = api::scan(&path, &ecosystems)?;
-    let total_size_bytes = api::analyze(scan.clone())?.total_size_bytes;
-    api::history::record_scan(&path, &scan, total_size_bytes)?;
-    let plan = api::clean::build_plan(scan)?;
+    let analysis = api::analyze(scan.clone())?;
+    if let Err(error) = api::history::record_scan(&path, &scan, analysis.total_size_bytes) {
+        eprintln!("Failed to record scan history: {error}");
+    }
+    let plan = api::clean::build_plan_from_analysis(analysis)?;
 
     Ok(plan)
 }

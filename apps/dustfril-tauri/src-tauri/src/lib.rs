@@ -197,7 +197,9 @@ fn scan(options: RunOptions) -> Result<ScanResponse, String> {
     let total_size_bytes = api::analyze(result.clone())
         .map_err(|error| error.to_string())?
         .total_size_bytes;
-    history::record_scan(&root, &result, total_size_bytes)?;
+    if let Err(error) = history::record_scan(&root, &result, total_size_bytes) {
+        eprintln!("Failed to record scan history: {error}");
+    }
 
     Ok(ScanResponse {
         artifacts: result
@@ -216,8 +218,7 @@ fn analyze(options: RunOptions) -> Result<AnalysisResponse, String> {
     let root = resolve_root(options.root)?;
     let ecosystems = parse_ecosystems(&options.ecosystems)?;
     let scan_result = api::scan(&root, &ecosystems).map_err(|error| error.to_string())?;
-    let analysis = api::analyze(scan_result.clone()).map_err(|error| error.to_string())?;
-    history::record_scan(&root, &scan_result, analysis.total_size_bytes)?;
+    let analysis = api::analyze(scan_result).map_err(|error| error.to_string())?;
 
     Ok(AnalysisResponse {
         total_size_bytes: analysis.total_size_bytes,
@@ -241,11 +242,8 @@ fn build_cleanup_plan(options: RunOptions) -> Result<CleanupPlanResponse, String
     let root = resolve_root(options.root)?;
     let ecosystems = parse_ecosystems(&options.ecosystems)?;
     let scan_result = api::scan(&root, &ecosystems).map_err(|error| error.to_string())?;
-    let total_size_bytes = api::analyze(scan_result.clone())
-        .map_err(|error| error.to_string())?
-        .total_size_bytes;
-    history::record_scan(&root, &scan_result, total_size_bytes)?;
-    let plan = api::clean::build_plan(scan_result).map_err(|error| error.to_string())?;
+    let analysis = api::analyze(scan_result.clone()).map_err(|error| error.to_string())?;
+    let plan = api::clean::build_plan_from_analysis(analysis).map_err(|error| error.to_string())?;
 
     Ok(CleanupPlanResponse {
         reclaimable_size_bytes: plan.reclaimable_size_bytes(),
