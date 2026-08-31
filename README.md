@@ -18,7 +18,7 @@ The repository is split into a reusable Rust core crate, a CLI app, and a Tauri 
 - Build a cleanup plan before deleting anything
 - Clean artifacts with Trash or permanent deletion mode
 - Audit Node lifecycle scripts such as `preinstall` and `postinstall`
-- Persist CLI cleanup history to the OS app data directory
+- Persist versioned local activity history (including legacy cleanup history migration)
 
 ## Detected Artifacts
 

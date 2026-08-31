@@ -194,6 +194,10 @@ fn scan(options: RunOptions) -> Result<ScanResponse, String> {
     let root = resolve_root(options.root)?;
     let ecosystems = parse_ecosystems(&options.ecosystems)?;
     let result = api::scan(&root, &ecosystems).map_err(|error| error.to_string())?;
+    let total_size_bytes = api::analyze(result.clone())
+        .map_err(|error| error.to_string())?
+        .total_size_bytes;
+    history::record_scan(&root, &result, total_size_bytes)?;
 
     Ok(ScanResponse {
         artifacts: result
@@ -212,7 +216,8 @@ fn analyze(options: RunOptions) -> Result<AnalysisResponse, String> {
     let root = resolve_root(options.root)?;
     let ecosystems = parse_ecosystems(&options.ecosystems)?;
     let scan_result = api::scan(&root, &ecosystems).map_err(|error| error.to_string())?;
-    let analysis = api::analyze(scan_result).map_err(|error| error.to_string())?;
+    let analysis = api::analyze(scan_result.clone()).map_err(|error| error.to_string())?;
+    history::record_scan(&root, &scan_result, analysis.total_size_bytes)?;
 
     Ok(AnalysisResponse {
         total_size_bytes: analysis.total_size_bytes,
@@ -236,6 +241,10 @@ fn build_cleanup_plan(options: RunOptions) -> Result<CleanupPlanResponse, String
     let root = resolve_root(options.root)?;
     let ecosystems = parse_ecosystems(&options.ecosystems)?;
     let scan_result = api::scan(&root, &ecosystems).map_err(|error| error.to_string())?;
+    let total_size_bytes = api::analyze(scan_result.clone())
+        .map_err(|error| error.to_string())?
+        .total_size_bytes;
+    history::record_scan(&root, &scan_result, total_size_bytes)?;
     let plan = api::clean::build_plan(scan_result).map_err(|error| error.to_string())?;
 
     Ok(CleanupPlanResponse {
@@ -294,8 +303,13 @@ fn execute_cleanup(request: ExecuteCleanupRequest) -> Result<CleanupResultRespon
 }
 
 #[tauri::command]
-fn load_cleanup_history() -> Result<Vec<history::CleanupHistoryEntryDto>, String> {
+fn load_activity_history() -> Result<Vec<history::ActivityRecordDto>, String> {
     history::load_entries().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn load_cleanup_history() -> Result<Vec<history::CleanupHistoryEntryDto>, String> {
+    history::load_cleanup_entries().map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -327,6 +341,7 @@ pub fn run() {
             analyze,
             build_cleanup_plan,
             execute_cleanup,
+            load_activity_history,
             load_cleanup_history,
             audit
         ])

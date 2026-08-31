@@ -80,6 +80,8 @@ fn build_cleanup_plan(args: &CleanArgs) -> Result<CleanupPlan, DustError> {
     let ecosystems = args.ecosystems();
 
     let scan = api::scan(&path, &ecosystems)?;
+    let total_size_bytes = api::analyze(scan.clone())?.total_size_bytes;
+    api::history::record_scan(&path, &scan, total_size_bytes)?;
     let plan = api::clean::build_plan(scan)?;
 
     Ok(plan)

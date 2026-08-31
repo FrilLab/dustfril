@@ -11,7 +11,7 @@ This crate contains the filesystem scanners, analyzers, cleanup planner and exec
 - `api::clean::build_plan`: build cleanup candidates from scan results
 - `api::clean::execute`: execute cleanup in Trash or permanent mode
 - `api::audit`: inspect supported lifecycle scripts
-- `api::history`: record and load cleanup history
+- `api::history`: record and load versioned activity history, including cleanup-history migration
 
 ## Supported Coverage
 

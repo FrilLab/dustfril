@@ -65,7 +65,7 @@ export const categoryConfigs: CategoryConfig[] = [
   {
     key: 'history',
     title: 'History',
-    description: 'Previous cleanup operations',
+    description: 'Previous scans and cleanup operations',
     section: 'primary',
   },
 ];

@@ -24,7 +24,7 @@ All business rules remain in `dustfril-core`. The desktop layer handles presenta
 - Finder-like artifact explorer with category sidebar navigation
 - Scan, analyze, review, and cleanup workflow
 - Safe cleanup with Trash or permanent delete confirmation
-- Cleanup history viewer backed by shared core history storage
+- Activity history viewer backed by shared, versioned core history storage
 
 ## UI Components
 
