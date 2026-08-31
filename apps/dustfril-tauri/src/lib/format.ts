@@ -49,6 +49,8 @@ export function riskTone(level: RiskLevel) {
   switch (level) {
     case 'High':
       return 'border-rose-400/30 bg-rose-400/10 text-rose-100';
+    case 'Critical':
+      return 'border-red-500/40 bg-red-500/15 text-red-50';
     case 'Medium':
       return 'border-amber-400/30 bg-amber-400/10 text-amber-100';
     case 'Low':

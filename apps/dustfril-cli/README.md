@@ -10,6 +10,7 @@ This package exposes the `dfr` binary and wraps the shared logic from `dustfril-
 - `analyze`: report artifact size, age, and cleanup recommendation
 - `clean`: preview or execute cleanup
 - `audit`: inspect Node lifecycle scripts
+- `security scan`: detect suspicious Node lifecycle commands
 
 ## Run
 
@@ -20,6 +21,7 @@ cargo run -p dustfril-cli -- scan
 cargo run -p dustfril-cli -- analyze
 cargo run -p dustfril-cli -- clean --dry-run
 cargo run -p dustfril-cli -- audit --node
+cargo run -p dustfril-cli -- security scan --node
 ```
 
 Direct package build:

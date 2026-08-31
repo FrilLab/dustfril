@@ -1,38 +1,24 @@
-use crate::models::RiskLevel;
+use crate::{
+    audit_tool::{command, rule},
+    models::RiskLevel,
+};
 
 /// Estimates the risk level of a lifecycle script command.
 pub fn classify(command: &str) -> RiskLevel {
-    let command = command.to_ascii_lowercase();
-
-    if contains_any(
-        &command,
-        &[
-            "curl",
-            "wget",
-            "invoke-webrequest",
-            "powershell",
-            "bash",
-            "sh ",
-            "chmod",
-            "sudo",
-            "rm -rf",
-        ],
-    ) {
-        return RiskLevel::High;
+    if let Some(rule) = rule::find(command) {
+        return rule.risk_level;
     }
 
-    if contains_any(
-        &command,
-        &[
-            "node", "tsx", "ts-node", "python", "python3", "npm", "pnpm", "yarn", "bun",
-        ],
-    ) {
+    if command::parse(command).iter().any(is_known_runtime_command) {
         return RiskLevel::Medium;
     }
 
     RiskLevel::Low
 }
 
-fn contains_any(command: &str, patterns: &[&str]) -> bool {
-    patterns.iter().any(|pattern| command.contains(pattern))
+fn is_known_runtime_command(segment: &command::Segment) -> bool {
+    matches!(
+        command::executable(&segment.tokens),
+        Some("node" | "tsx" | "ts-node" | "python" | "python3" | "npm" | "pnpm" | "yarn" | "bun")
+    )
 }

@@ -18,6 +18,7 @@ The repository is split into a reusable Rust core crate, a CLI app, and a Tauri 
 - Build a cleanup plan before deleting anything
 - Clean artifacts with Trash or permanent deletion mode
 - Audit Node lifecycle scripts such as `preinstall` and `postinstall`
+- Detect suspicious lifecycle commands with rule-based security warnings
 - Check supported lockfile presence and Git status
 - Persist CLI cleanup history to the OS app data directory
 
@@ -51,6 +52,7 @@ cargo run -p dustfril-cli -- clean --dry-run
 cargo run -p dustfril-cli -- clean
 cargo run -p dustfril-cli -- clean --permanent
 cargo run -p dustfril-cli -- audit --node
+cargo run -p dustfril-cli -- security scan --node
 ```
 
 Filter by ecosystem or pass a target path:
@@ -66,6 +68,11 @@ Available commands:
 - `analyze [path] [--rust] [--node] [--java]`
 - `clean [path] [--dry-run] [--permanent] [--rust] [--node] [--java]`
 - `audit [path] [--node]`
+- `security scan [path] [--node]`
+
+`security scan` statically checks Node lifecycle scripts for suspicious remote
+script execution, PowerShell execution, permission changes, and download-then-
+execute chains. It never runs the detected commands or modifies project files.
 
 ## Desktop App
 

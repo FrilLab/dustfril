@@ -10,6 +10,16 @@ pub struct LifecycleScript {
     pub risk_level: RiskLevel,
 }
 
+/// A lifecycle script finding produced by the security rule engine.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SecurityWarning {
+    pub package: String,
+    pub script_type: String,
+    pub command: String,
+    pub risk_level: RiskLevel,
+    pub reason: String,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum PackageManager {
     Npm,
@@ -78,6 +88,7 @@ pub enum RiskLevel {
     Low,
     Medium,
     High,
+    Critical,
 }
 
 impl fmt::Display for RiskLevel {
@@ -87,6 +98,7 @@ impl fmt::Display for RiskLevel {
             Self::Low => "Low",
             Self::Medium => "Medium",
             Self::High => "High",
+            Self::Critical => "Critical",
         };
 
         write!(f, "{value}")

