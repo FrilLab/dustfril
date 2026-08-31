@@ -3,21 +3,13 @@ use dustfril_core::{
     models::{CleanupResult, DeleteMode},
 };
 
-#[derive(Debug, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CleanupHistoryEntryDto {
-    pub executed_at_ms: u64,
-    pub mode: String,
-    pub freed_size_bytes: u64,
-    pub deleted_paths: Vec<String>,
-    pub failed_paths: Vec<String>,
-}
+use crate::contract::CleanupHistoryEntryDto;
 
 pub fn record(mode: DeleteMode, result: &CleanupResult) -> Result<(), String> {
     api::history::record(mode, result).map_err(|error| error.to_string())
 }
 
-pub fn load_entries() -> Result<Vec<CleanupHistoryEntryDto>, String> {
+pub(crate) fn load_entries() -> Result<Vec<CleanupHistoryEntryDto>, String> {
     api::history::load_all()
         .map_err(|error| error.to_string())?
         .into_iter()
@@ -37,7 +29,7 @@ fn history_entry_to_dto(
 
     Ok(CleanupHistoryEntryDto {
         executed_at_ms,
-        mode: delete_mode_to_string(entry.mode),
+        mode: entry.mode.into(),
         freed_size_bytes: entry.freed_size_bytes,
         deleted_paths: entry
             .deleted_paths
@@ -50,11 +42,4 @@ fn history_entry_to_dto(
             .map(|path| path.display().to_string())
             .collect(),
     })
-}
-
-fn delete_mode_to_string(mode: DeleteMode) -> String {
-    match mode {
-        DeleteMode::Trash => "Trash".to_string(),
-        DeleteMode::Permanent => "Permanent".to_string(),
-    }
 }
