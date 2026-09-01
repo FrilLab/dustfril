@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::{fmt, path::PathBuf};
+
+use super::LockfileCheck;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LifecycleScript {
@@ -18,6 +20,83 @@ pub struct SecurityWarning {
     pub command: String,
     pub risk_level: RiskLevel,
     pub reason: String,
+}
+
+/// The type of supply-chain issue reported by the security scanner.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub enum SecurityFindingKind {
+    SuspiciousScript,
+    UntrustedDependency,
+    KnownMaliciousPackage,
+    MissingLockfile,
+    ModifiedLockfile,
+    UntrackedLockfile,
+}
+
+impl fmt::Display for SecurityFindingKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let value = match self {
+            Self::SuspiciousScript => "Suspicious script",
+            Self::UntrustedDependency => "Untrusted dependency",
+            Self::KnownMaliciousPackage => "Known malicious package",
+            Self::MissingLockfile => "Missing lockfile",
+            Self::ModifiedLockfile => "Modified lockfile",
+            Self::UntrackedLockfile => "Untracked lockfile",
+        };
+
+        f.write_str(value)
+    }
+}
+
+/// A normalized supply-chain security finding.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SecurityFinding {
+    /// Manifest or lockfile that produced the finding.
+    pub path: PathBuf,
+    /// Broad category of the finding.
+    pub kind: SecurityFindingKind,
+    /// Package name when the finding concerns a dependency.
+    pub package: Option<String>,
+    /// Severity assigned by the offline rule set.
+    pub risk_level: RiskLevel,
+    /// Optional command, dependency source, or lockfile status that supports the finding.
+    pub evidence: Option<String>,
+    /// Human-readable explanation and remediation context.
+    pub reason: String,
+}
+
+impl SecurityFinding {
+    /// Creates a normalized security finding.
+    pub fn new(
+        path: PathBuf,
+        kind: SecurityFindingKind,
+        package: Option<String>,
+        risk_level: RiskLevel,
+        evidence: Option<String>,
+        reason: impl Into<String>,
+    ) -> Self {
+        Self {
+            path,
+            kind,
+            package,
+            risk_level,
+            evidence,
+            reason: reason.into(),
+        }
+    }
+}
+
+/// Complete result of a read-only supply-chain security scan.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct SecurityReport {
+    /// All findings, including lifecycle warnings and lockfile issues.
+    pub findings: Vec<SecurityFinding>,
+    /// Lifecycle warnings retained for callers using the original audit model.
+    pub lifecycle_warnings: Vec<SecurityWarning>,
+    /// Lockfiles inspected while building the report.
+    pub lockfiles: Vec<LockfileCheck>,
+    /// Manifests successfully inspected by the report.
+    pub manifests: Vec<PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

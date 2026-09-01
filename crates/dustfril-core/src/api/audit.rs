@@ -3,7 +3,8 @@ use std::path::Path;
 use crate::{
     audit_tool,
     error::DustResult,
-    models::{Ecosystem, LifecycleScript, SecurityWarning},
+    models::{Ecosystem, LifecycleScript, SecurityReport, SecurityWarning},
+    security,
 };
 
 /// Audits supported package lifecycle scripts under the given root path.
@@ -24,6 +25,11 @@ pub fn security_scan(root: &Path, ecosystems: &[Ecosystem]) -> DustResult<Vec<Se
     }
 
     audit_tool::security_scan(root)
+}
+
+/// Runs the complete read-only supply-chain security scan.
+pub fn security_scan_report(root: &Path, ecosystems: &[Ecosystem]) -> DustResult<SecurityReport> {
+    security::scan(root, ecosystems)
 }
 
 #[cfg(test)]
@@ -72,5 +78,21 @@ mod tests {
         assert_eq!(result[0].script_type, "postinstall");
         assert_eq!(result[0].risk_level, crate::models::RiskLevel::High);
         assert!(result[0].reason.contains("piped"));
+    }
+
+    #[test]
+    fn security_scan_report_includes_lockfile_findings() {
+        let temp_dir = TempDir::new().unwrap();
+        std::fs::write(
+            temp_dir.path().join("package.json"),
+            r#"{"name":"demo","dependencies":{}}"#,
+        )
+        .unwrap();
+
+        let result = security_scan_report(temp_dir.path(), &[Ecosystem::Node]).unwrap();
+
+        assert!(result.findings.iter().any(|finding| {
+            finding.kind == crate::models::SecurityFindingKind::MissingLockfile
+        }));
     }
 }

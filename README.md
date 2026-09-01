@@ -19,7 +19,7 @@ The repository is split into a reusable Rust core crate, a CLI app, and a Tauri 
 - Clean artifacts with Trash or permanent deletion mode
 - Audit Node lifecycle scripts such as `preinstall` and `postinstall`
 - Persist versioned local activity history (including legacy cleanup history migration)
-- Detect suspicious lifecycle commands with rule-based security warnings
+- Run an offline supply-chain security scan for Node and Rust projects
 - Check supported lockfile presence and Git status
 - Persist CLI cleanup history to the OS app data directory
 
@@ -76,9 +76,12 @@ Available commands:
 - `audit [path] [--node]`
 - `security scan [path] [--node]`
 
-`security scan` statically checks Node lifecycle scripts for suspicious remote
-script execution, PowerShell execution, permission changes, and download-then-
-execute chains. It never runs the detected commands or modifies project files.
+`security scan` is a read-only, offline check of `package.json`, `Cargo.toml`,
+`package-lock.json`, `pnpm-lock.yaml`, `bun.lock`, and `Cargo.lock`. It reports
+suspicious lifecycle scripts, dependencies sourced outside public registries,
+package names on a built-in list of historically compromised packages, and
+missing or changed lockfiles. It never runs detected commands or modifies
+project files.
 
 ## Desktop App
 

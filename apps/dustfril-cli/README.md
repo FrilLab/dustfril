@@ -10,7 +10,7 @@ This package exposes the `dfr` binary and wraps the shared logic from `dustfril-
 - `analyze`: report artifact size, age, and cleanup recommendation
 - `clean`: preview or execute cleanup
 - `audit`: inspect Node lifecycle scripts
-- `security scan`: detect suspicious Node lifecycle commands
+- `security scan`: inspect Node and Rust manifests and lockfiles for supply-chain risks
 
 ## Run
 
@@ -35,5 +35,6 @@ cargo build -p dustfril-cli
 - Supported ecosystem filters: `--rust`, `--node`, `--java`
 - `clean` asks for confirmation before deletion
 - command failures return a non-zero process exit status
+- security scans are read-only and use deterministic offline checks
 - Activity history is stored in the OS app data directory as a versioned `history.json`.
   Existing cleanup-history arrays are migrated when the file is read or appended to.
