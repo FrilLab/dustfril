@@ -852,10 +852,12 @@ fn scan_cargo_lock(path: &Path, report: &mut SecurityReport) -> DustResult<()> {
     let lockfile_table = lockfile
         .as_table()
         .ok_or_else(|| manifest_error(path, "Cargo.lock must contain a TOML table".to_owned()))?;
-    let version = lockfile_table
-        .get("version")
-        .and_then(toml::Value::as_integer)
-        .ok_or_else(|| manifest_error(path, "Cargo.lock must declare version".to_owned()))?;
+    let version = match lockfile_table.get("version") {
+        Some(value) => value.as_integer().ok_or_else(|| {
+            manifest_error(path, "Cargo.lock version must be an integer".to_owned())
+        })?,
+        None => 1,
+    };
     if !(1..=4).contains(&version) {
         return Err(manifest_error(
             path,
@@ -1354,6 +1356,28 @@ mod tests {
     }
 
     #[test]
+    fn cargo_lock_v1_without_version_is_supported() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(
+            temp_dir.path().join("Cargo.toml"),
+            "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        fs::write(
+            temp_dir.path().join("Cargo.lock"),
+            "[root]\nname = \"demo\"\nversion = \"0.1.0\"\ndependencies = []\n",
+        )
+        .unwrap();
+
+        let report = scan(temp_dir.path(), &[Ecosystem::Rust]).unwrap();
+
+        assert!(report.findings.is_empty());
+        assert!(report.lockfiles.iter().any(|check| {
+            check.kind == LockfileKind::CargoLock && check.status == LockfileStatus::Clean
+        }));
+    }
+
+    #[test]
     fn package_selector_supports_scoped_and_unscoped_names() {
         assert_eq!(
             package_name_from_selector("@scope/package@1.0.0"),
@@ -1463,7 +1487,11 @@ mod tests {
             "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
         )
         .unwrap();
-        fs::write(cargo_dir.path().join("Cargo.lock"), "package = []\n").unwrap();
+        fs::write(
+            cargo_dir.path().join("Cargo.lock"),
+            "package = \"not-an-array\"\n",
+        )
+        .unwrap();
         assert!(matches!(
             scan(cargo_dir.path(), &[Ecosystem::Rust]),
             Err(DustError::Manifest(message)) if message.contains("Cargo.lock")
