@@ -239,6 +239,13 @@ export function useAppState() {
     } catch (invokeError) {
       if (requestId === actionRequestRef.current) {
         setError(String(invokeError));
+
+        // Failed operations can still leave an activity record behind. Refresh
+        // it without allowing a history-read failure to hide the primary error.
+        const refreshedHistory = await loadActivityHistory().catch(() => null);
+        if (requestId === actionRequestRef.current && refreshedHistory) {
+          setHistoryEntries(refreshedHistory);
+        }
       }
     } finally {
       if (requestId === actionRequestRef.current) {
