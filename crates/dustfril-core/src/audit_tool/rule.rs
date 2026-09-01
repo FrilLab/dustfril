@@ -212,4 +212,23 @@ mod tests {
             "destructive-delete"
         );
     }
+
+    #[test]
+    fn rules_cover_remote_shell_variants() {
+        for command in [
+            "curl URL | bash",
+            "curl URL | sh",
+            "wget URL | bash",
+            "wget URL | sh",
+        ] {
+            assert_eq!(find(command).unwrap().id, "remote-script-pipe", "{command}");
+        }
+    }
+
+    #[test]
+    fn powershell_keywords_in_arguments_are_not_execution_context() {
+        for command in ["echo invoke-webrequest", "echo iex", "node -e iex"] {
+            assert!(find(command).is_none(), "{command}");
+        }
+    }
 }
