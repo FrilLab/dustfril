@@ -59,24 +59,28 @@ async fn default_root() -> Result<String, String> {
 #[tauri::command]
 async fn scan(options: RunOptions) -> Result<ScanResponse, String> {
     let root = resolve_root(options.root)?;
-    let ecosystems = parse_ecosystems(&options.ecosystems)?;
-    let result = api::scan(&root, &ecosystems).map_err(|error| error.to_string())?;
-    let total_size_bytes = api::analyze(result.clone())
-        .map_err(|error| error.to_string())?
-        .total_size_bytes;
-    if let Err(error) = history::record_scan(&root, &result, total_size_bytes) {
-        eprintln!("Failed to record scan history: {error}");
-    }
+    let ecosystems: Vec<_> = options.ecosystems.into_iter().map(Into::into).collect();
 
-    Ok(ScanResponse {
-        artifacts: result
-            .artifacts
-            .into_iter()
-            .map(|artifact| ArtifactDto {
-                path: artifact_path(&artifact.path),
-                ecosystem: artifact.ecosystem.to_string(),
-            })
-            .collect(),
+    tokio::task::spawn_blocking(move || {
+        let result = api::scan(&root, &ecosystems).map_err(|error| error.to_string())?;
+        let total_size_bytes = api::analyze(result.clone())
+            .map_err(|error| error.to_string())?
+            .total_size_bytes;
+
+        if let Err(error) = history::record_scan(&root, &result, total_size_bytes) {
+            eprintln!("Failed to record scan history: {error}");
+        }
+
+        Ok(ScanResponse {
+            artifacts: result
+                .artifacts
+                .into_iter()
+                .map(|artifact| ArtifactDto {
+                    path: artifact_path(&artifact.path),
+                    ecosystem: artifact.ecosystem.into(),
+                })
+                .collect(),
+        })
     })
     .await
     .map_err(|error| error.to_string())?
@@ -114,23 +118,27 @@ async fn analyze(options: RunOptions) -> Result<AnalysisResponse, String> {
 #[tauri::command]
 async fn build_cleanup_plan(options: RunOptions) -> Result<CleanupPlanResponse, String> {
     let root = resolve_root(options.root)?;
-    let ecosystems = parse_ecosystems(&options.ecosystems)?;
-    let scan_result = api::scan(&root, &ecosystems).map_err(|error| error.to_string())?;
-    let analysis = api::analyze(scan_result.clone()).map_err(|error| error.to_string())?;
-    let plan = api::clean::build_plan_from_analysis(analysis).map_err(|error| error.to_string())?;
+    let ecosystems: Vec<_> = options.ecosystems.into_iter().map(Into::into).collect();
 
-    Ok(CleanupPlanResponse {
-        reclaimable_size_bytes: plan.reclaimable_size_bytes(),
-        candidates: plan
-            .candidates
-            .into_iter()
-            .map(|candidate| CleanupCandidateDto {
-                path: artifact_path(&candidate.path),
-                ecosystem: candidate.ecosystem.to_string(),
-                size_bytes: candidate.size_bytes,
-                age_days: candidate.age_days,
-            })
-            .collect(),
+    tokio::task::spawn_blocking(move || {
+        let scan_result = api::scan(&root, &ecosystems).map_err(|error| error.to_string())?;
+        let analysis = api::analyze(scan_result).map_err(|error| error.to_string())?;
+        let plan =
+            api::clean::build_plan_from_analysis(analysis).map_err(|error| error.to_string())?;
+
+        Ok(CleanupPlanResponse {
+            reclaimable_size_bytes: plan.reclaimable_size_bytes(),
+            candidates: plan
+                .candidates
+                .into_iter()
+                .map(|candidate| CleanupCandidateDto {
+                    path: artifact_path(&candidate.path),
+                    ecosystem: candidate.ecosystem.into(),
+                    size_bytes: candidate.size_bytes,
+                    age_days: candidate.age_days,
+                })
+                .collect(),
+        })
     })
     .await
     .map_err(|error| error.to_string())?
@@ -177,17 +185,23 @@ async fn execute_cleanup(request: ExecuteCleanupRequest) -> Result<CleanupResult
 }
 
 #[tauri::command]
-fn load_activity_history() -> Result<Vec<history::ActivityRecordDto>, String> {
-    history::load_entries().map_err(|error| error.to_string())
+async fn load_activity_history() -> Result<Vec<history::ActivityRecordDto>, String> {
+    tokio::task::spawn_blocking(|| history::load_entries().map_err(|error| error.to_string()))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-fn load_cleanup_history() -> Result<Vec<history::CleanupHistoryEntryDto>, String> {
-    history::load_cleanup_entries().map_err(|error| error.to_string())
+async fn load_cleanup_history() -> Result<Vec<CleanupHistoryEntryDto>, String> {
+    tokio::task::spawn_blocking(|| {
+        history::load_cleanup_entries().map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-fn audit(options: RunOptions) -> Result<Vec<LifecycleScriptDto>, String> {
+async fn audit(options: RunOptions) -> Result<Vec<LifecycleScriptDto>, String> {
     let root = resolve_root(options.root)?;
     let ecosystems: Vec<_> = options.ecosystems.into_iter().map(Into::into).collect();
 

@@ -6,6 +6,8 @@ use dustfril_core::{
 };
 use serde::Serialize;
 
+use crate::contract::CleanupHistoryEntryDto;
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ActivityRecordDto {
@@ -13,17 +15,6 @@ pub struct ActivityRecordDto {
     pub timestamp_ms: u64,
     pub kind: String,
     pub result: dustfril_core::models::ActivityResult,
-}
-
-/// Legacy cleanup-only DTO retained for existing Tauri consumers.
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CleanupHistoryEntryDto {
-    pub executed_at_ms: u64,
-    pub mode: String,
-    pub freed_size_bytes: u64,
-    pub deleted_paths: Vec<String>,
-    pub failed_paths: Vec<String>,
 }
 
 /// Records a cleanup operation for the desktop activity log.
@@ -93,10 +84,7 @@ fn cleanup_entry_to_dto(
 
     Ok(CleanupHistoryEntryDto {
         executed_at_ms,
-        mode: match entry.mode {
-            DeleteMode::Trash => "Trash".to_string(),
-            DeleteMode::Permanent => "Permanent".to_string(),
-        },
+        mode: entry.mode.into(),
         freed_size_bytes: entry.freed_size_bytes,
         deleted_paths: entry
             .deleted_paths
