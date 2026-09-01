@@ -33,6 +33,10 @@ pub enum Commands {
     /// Audit lifecycle scripts
     Audit(PathArgs),
 
+    /// Report dependency inventory and version exposure
+    #[command(name = "dependencies", visible_alias = "dependency")]
+    Dependencies(PathArgs),
+
     /// Scan lifecycle scripts for suspicious commands
     Security(SecurityArgs),
 
@@ -194,6 +198,16 @@ mod tests {
             Commands::Security(SecurityArgs {
                 command: SecurityCommands::Scan(PathArgs { node: true, .. })
             })
+        ));
+    }
+
+    #[test]
+    fn cli_parses_dependency_report_command() {
+        let cli = Cli::try_parse_from(["dfr", "dependencies", "--rust"]).unwrap();
+
+        assert!(matches!(
+            cli.command,
+            Commands::Dependencies(PathArgs { rust: true, .. })
         ));
     }
 

@@ -15,6 +15,7 @@ This crate contains the filesystem scanners, analyzers, cleanup planner and exec
 - `api::history`: record and load versioned activity history, including cleanup-history migration and security scan summaries
 - `api::security_scan`: preserve the lifecycle-only security warnings API
 - `api::security_scan_report`: run the complete offline supply-chain scan
+- `api::dependency_report`: build structured dependency exposure/inventory reports
 - `api::integrity`: resolve selected development tools without executing them, hash their bytes, and compare local baselines
 - `api::integrity::verify_signature`: inspect an already resolved executable with the supported platform verifier
 - `api::check_lockfile_integrity`: check supported lockfile presence and Git status
@@ -72,6 +73,15 @@ Lockfile checks report `Missing`, `Modified`, `Untracked`, or `Clean`. Git
 worktrees use libgit2 status information equivalent to
 `git status --porcelain -- <lockfile>`; outside Git, only file existence is
 validated, so existing files are reported as `Clean`.
+
+Dependency reports read only manifests and lockfiles. Node direct counts are
+reported separately for `dependencies`, `devDependencies`,
+`optionalDependencies`, and `peerDependencies`; Rust reports `dependencies`,
+`dev-dependencies`, and `build-dependencies`. Resolved and transitive counts
+are explicit unknown values when a lockfile is missing, and duplicate versions
+are returned in sorted order. Installed trees, registry caches, Java dependency
+formats, Yarn lockfiles, and legacy binary Bun lockfiles are outside this
+report's scope.
 
 ## Test
 

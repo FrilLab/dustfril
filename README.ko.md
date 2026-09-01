@@ -20,6 +20,7 @@ DustFril은 개발 산출물을 스캔, 분석, 점검, 정리하기 위한 워�
 - `preinstall`, `postinstall` 같은 Node 라이프사이클 스크립트 점검
 - 스캔·정리 활동 이력을 버전 형식으로 운영체제 앱 데이터 디렉터리에 저장
 - Node 및 Rust 프로젝트의 오프라인 공급망 보안 점검
+- 매니페스트와 lockfile에서 Node 및 Rust 의존성 inventory를 결정적으로 계산
 - 지원 lockfile의 존재 여부와 Git 상태 점검
 - 대상 개발 도구를 실행하지 않고 로컬 SHA-256 baseline과 실행 파일 무결성 비교
 - CLI 정리 이력을 운영체제 앱 데이터 디렉터리에 저장
@@ -59,6 +60,7 @@ cargo run -p dustfril-cli -- clean --dry-run
 cargo run -p dustfril-cli -- clean
 cargo run -p dustfril-cli -- clean --permanent
 cargo run -p dustfril-cli -- audit --node
+cargo run -p dustfril-cli -- dependencies --node
 cargo run -p dustfril-cli -- security scan --node
 cargo run -p dustfril-cli -- integrity scan --tool node --tool git
 ```
@@ -76,6 +78,7 @@ cargo run -p dustfril-cli -- analyze /path/to/workspace --node
 - `analyze [path] [--rust] [--node] [--java]`
 - `clean [path] [--dry-run] [--permanent] [--rust] [--node] [--java]`
 - `audit [path] [--node]`
+- `dependencies [path] [--rust] [--node] [--java]`
 - `security scan [path] [--node]`
 - `integrity scan [--tool <name>]...`
 
@@ -86,6 +89,14 @@ cargo run -p dustfril-cli -- analyze /path/to/workspace --node
 잘못되었거나 지원되지 않으면 해당 파일 경로를 포함한 오류를 반환합니다. 탐지된
 명령이나 패키지 매니저를 실행하지 않고, 네트워크 및 프로젝트 파일 변경도 사용하지
 않습니다.
+
+`dependencies`는 매니페스트와 lockfile만 읽어 카테고리별 직접 의존성 수,
+해결된 lockfile 노드 수, 형식이 보존하는 경우의 전이 의존성 수, 여러 버전으로
+해결된 패키지를 출력합니다. `package.json`은 npm `package-lock.json`(1–3),
+`pnpm-lock.yaml`(5–9), Bun JSONC `bun.lock`(1–2)을 지원하고, Rust는
+`Cargo.toml`과 `Cargo.lock`(1–4)을 지원합니다. lockfile 누락과 Yarn, 레거시
+`bun.lockb`, Java 및 지원하지 않는 package manager는 명시적인 상태로
+출력합니다. 설치된 의존성의 디스크 크기나 취약점 점수는 계산하지 않습니다.
 
 `integrity scan`은 PATH에서 요청한 개발 도구를 찾고 파일 메타데이터와 바이트를
 읽어 SHA-256을 스트리밍 계산합니다. 대상 실행 파일을 절대 실행하지 않으며,
