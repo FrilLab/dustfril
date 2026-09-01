@@ -1,6 +1,9 @@
-use std::path::Path;
+use std::{fs, path::Path};
 
-use crate::models::PackageManager;
+use crate::{
+    error::{DustError, DustResult},
+    models::PackageManager,
+};
 
 /// Detects the package manager used by a Node project from lockfiles in a directory.
 pub fn detect_in_dir(dir: &Path) -> Option<PackageManager> {
@@ -23,14 +26,31 @@ pub fn detect_in_dir(dir: &Path) -> Option<PackageManager> {
     None
 }
 
-/// Resolves the package manager for a package.json path by checking the package
-/// directory and walking up toward the scan root.
-pub fn detect_for_package(package_json: &Path, scan_root: &Path) -> PackageManager {
+/// Resolves the package manager for a package.json path.
+///
+/// An explicit `packageManager` declaration takes precedence over lockfiles.
+/// This keeps lifecycle audit results aligned with the project's own package
+/// manager selection instead of inventing npm when a different manager is
+/// declared.
+pub fn detect_for_package(package_json: &Path, scan_root: &Path) -> DustResult<PackageManager> {
+    if let Some(package_manager) = declared_manager(package_json)? {
+        return Ok(package_manager);
+    }
+
     let mut current = package_json.parent();
 
     while let Some(dir) = current {
+        if Some(dir) != package_json.parent() {
+            let parent_manifest = dir.join("package.json");
+            if parent_manifest.is_file()
+                && let Some(package_manager) = declared_manager(&parent_manifest)?
+            {
+                return Ok(package_manager);
+            }
+        }
+
         if let Some(package_manager) = detect_in_dir(dir) {
-            return package_manager;
+            return Ok(package_manager);
         }
 
         if dir == scan_root {
@@ -52,7 +72,38 @@ pub fn detect_for_package(package_json: &Path, scan_root: &Path) -> PackageManag
         };
     }
 
-    PackageManager::Unknown
+    Ok(PackageManager::Unknown)
+}
+
+fn declared_manager(package_json: &Path) -> DustResult<Option<PackageManager>> {
+    let content = fs::read_to_string(package_json)?;
+    let manifest: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|error| DustError::Manifest(format!("{}: {error}", package_json.display())))?;
+
+    let Some(value) = manifest.get("packageManager") else {
+        return Ok(None);
+    };
+
+    let value = value.as_str().ok_or_else(|| {
+        DustError::Manifest(format!(
+            "{}: packageManager must be a string",
+            package_json.display()
+        ))
+    })?;
+
+    Ok(Some(manager_from_declaration(value)))
+}
+
+fn manager_from_declaration(value: &str) -> PackageManager {
+    let manager = value.split_once('@').map_or(value, |(manager, _)| manager);
+
+    match manager {
+        "npm" => PackageManager::Npm,
+        "pnpm" => PackageManager::Pnpm,
+        "yarn" => PackageManager::Yarn,
+        "bun" => PackageManager::Bun,
+        _ => PackageManager::Unknown,
+    }
 }
 
 #[cfg(test)]
@@ -99,8 +150,36 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            detect_for_package(&dependency_dir.join("package.json"), temp_dir.path()),
+            detect_for_package(&dependency_dir.join("package.json"), temp_dir.path()).unwrap(),
             PackageManager::Pnpm
         );
+    }
+
+    #[test]
+    fn explicit_package_manager_takes_precedence_over_lockfiles() {
+        let temp_dir = TempDir::new().unwrap();
+        std::fs::write(
+            temp_dir.path().join("package.json"),
+            r#"{"name":"demo","packageManager":"pnpm@9.0.0"}"#,
+        )
+        .unwrap();
+        std::fs::write(temp_dir.path().join("package-lock.json"), "{}").unwrap();
+
+        assert_eq!(
+            detect_for_package(&temp_dir.path().join("package.json"), temp_dir.path()).unwrap(),
+            PackageManager::Pnpm
+        );
+    }
+
+    #[test]
+    fn malformed_package_manager_manifest_is_not_silently_ignored() {
+        let temp_dir = TempDir::new().unwrap();
+        let package_json = temp_dir.path().join("package.json");
+        std::fs::write(&package_json, "{invalid json").unwrap();
+
+        assert!(matches!(
+            detect_for_package(&package_json, temp_dir.path()),
+            Err(DustError::Manifest(message)) if message.contains("package.json")
+        ));
     }
 }

@@ -23,6 +23,9 @@ DustFril은 개발 산출물을 스캔, 분석, 점검, 정리하기 위한 워�
 - 지원 lockfile의 존재 여부와 Git 상태 점검
 - CLI 정리 이력을 운영체제 앱 데이터 디렉터리에 저장
 
+공급망 보안 스캐너는 v0.0.1 이후 작업입니다. v0.0.1 릴리스 범위는
+`AGENTS.md`에 정의된 데스크톱 산출물 정리 흐름으로 유지됩니다.
+
 ## 현재 탐지 대상
 
 | 생태계 | 탐지 대상 |
@@ -31,10 +34,12 @@ DustFril은 개발 산출물을 스캔, 분석, 점검, 정리하기 위한 워�
 | Node.js | `node_modules/` |
 | Java   | `build/` |
 
-지원 lockfile은 `package-lock.json`, `pnpm-lock.yaml`, `bun.lock`,
-`Cargo.lock`입니다. Core API는 `Missing`, `Modified`, `Untracked`, `Clean`
-상태를 반환합니다. Git worktree에서는 porcelain과 같은 상태를 사용하고,
-Git 저장소가 아니면 파일 존재 여부만 확인합니다.
+보안 스캐너가 구조적으로 분석하는 형식은 `package-lock.json`(1–3), pnpm
+YAML, Bun JSONC `bun.lock`(1–2), Cargo.lock(1–4)입니다. Yarn lockfile과
+레거시 바이너리 `bun.lockb`는 파싱하지 않으며, 이 파일들만 있는 경우 npm
+lockfile 누락으로 잘못 보고하지 않습니다. Core API는 `Missing`, `Modified`,
+`Untracked`, `Clean` 상태를 반환합니다. Git worktree에서는 porcelain과 같은
+상태를 사용하고, Git 저장소가 아니면 파일 존재 여부만 확인합니다.
 
 ## CLI 사용법
 
@@ -74,8 +79,10 @@ cargo run -p dustfril-cli -- analyze /path/to/workspace --node
 `security scan`은 `package.json`, `Cargo.toml`, `package-lock.json`,
 `pnpm-lock.yaml`, `bun.lock`, `Cargo.lock`을 읽기 전용으로 오프라인 점검합니다.
 의심스러운 라이프사이클 스크립트, 공개 레지스트리 외부에서 가져오는 의존성,
-내장된 과거 손상 패키지 목록, 누락되거나 변경된 lockfile을 경고합니다. 탐지된
-명령을 실행하거나 프로젝트 파일을 변경하지 않습니다.
+내장된 과거 손상 패키지 목록, 누락되거나 변경된 lockfile을 경고합니다. 형식이
+잘못되었거나 지원되지 않으면 해당 파일 경로를 포함한 오류를 반환합니다. 탐지된
+명령이나 패키지 매니저를 실행하지 않고, 네트워크 및 프로젝트 파일 변경도 사용하지
+않습니다.
 
 ## 데스크톱 앱
 

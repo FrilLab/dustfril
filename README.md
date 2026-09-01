@@ -23,6 +23,9 @@ The repository is split into a reusable Rust core crate, a CLI app, and a Tauri 
 - Check supported lockfile presence and Git status
 - Persist CLI cleanup history to the OS app data directory
 
+The supply-chain scanner is post-v0.0.1 work. The v0.0.1 release remains
+focused on the desktop artifact-cleaner workflow described in `AGENTS.md`.
+
 Scans reject missing, symbolic-link, or non-directory roots and report
 filesystem traversal errors. Cleanup only accepts real artifact directories,
 refuses symbolic links and protected paths, and reports Trash failures without
@@ -36,10 +39,14 @@ permanently deleting the candidate as a fallback.
 | Node.js   | `node_modules/`    |
 | Java      | `build/`           |
 
-Supported lockfiles are `package-lock.json`, `pnpm-lock.yaml`, `bun.lock`,
-and `Cargo.lock`. The Core API reports `Missing`, `Modified`, `Untracked`, or
-`Clean`; Git worktrees use porcelain-equivalent status, while non-Git paths
-only validate existence.
+Supported security lockfile formats are `package-lock.json` versions 1–3,
+pnpm YAML, Bun JSONC `bun.lock` versions 1–2, and Cargo.lock versions 1–4.
+The scanner validates each format before inspecting package names and
+available source URLs. Yarn lockfiles and legacy binary `bun.lockb` files are
+not parsed; when they are the only lockfile present, they are not reported as
+missing npm lockfiles. The Core API reports `Missing`, `Modified`,
+`Untracked`, or `Clean`; Git worktrees use porcelain-equivalent status, while
+non-Git paths only validate existence.
 
 ## CLI Usage
 
@@ -80,8 +87,9 @@ Available commands:
 `package-lock.json`, `pnpm-lock.yaml`, `bun.lock`, and `Cargo.lock`. It reports
 suspicious lifecycle scripts, dependencies sourced outside public registries,
 package names on a built-in list of historically compromised packages, and
-missing or changed lockfiles. It never runs detected commands or modifies
-project files.
+missing or changed lockfiles. Parse and read failures identify the relevant
+manifest or lockfile and fail the scan. It never runs detected commands,
+invokes a package manager, contacts the network, or modifies project files.
 
 ## Desktop App
 

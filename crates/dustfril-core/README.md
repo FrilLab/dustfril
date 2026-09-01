@@ -33,6 +33,16 @@ symbolic links, and never falls back from Trash mode to permanent deletion.
 
 The supply-chain report reads `package.json` and `Cargo.toml` plus supported
 lockfiles without executing scripts or contacting an external advisory service.
+It parses npm lockfile versions 1–3, pnpm YAML, Bun JSONC lockfile versions
+1–2, and Cargo.lock versions 1–4. Yarn lockfiles and legacy binary `bun.lockb`
+are intentionally opaque; no npm-missing result is inferred from either when
+it is the only Node lockfile present.
+
+Malformed or unsupported manifests and lockfiles are returned as explicit
+errors. Lifecycle scanning honors an explicit `packageManager` declaration;
+otherwise it uses the nearest applicable lockfile. All security behavior is
+offline and read-only, and belongs to this Core crate; CLI and Tauri only
+invoke the public API and format its results.
 
 Lockfile checks report `Missing`, `Modified`, `Untracked`, or `Clean`. Git
 worktrees use libgit2 status information equivalent to

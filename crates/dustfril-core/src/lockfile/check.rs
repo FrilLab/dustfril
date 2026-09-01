@@ -108,7 +108,9 @@ fn infer_expected_lockfiles(root: &Path) -> DustResult<Vec<LockfileKind>> {
         match package_manager_lockfile(&root.join("package.json"))? {
             Some(NodeLockfileSelection::Supported(kind)) => expected.push(kind),
             Some(NodeLockfileSelection::Unsupported) => {}
-            None if node_lockfiles.is_empty() => expected.push(LockfileKind::PackageLockJson),
+            None if node_lockfiles.is_empty() && !has_unsupported_node_lockfile(root) => {
+                expected.push(LockfileKind::PackageLockJson)
+            }
             None => expected.extend(node_lockfiles),
         }
     }
@@ -120,6 +122,14 @@ fn infer_expected_lockfiles(root: &Path) -> DustResult<Vec<LockfileKind>> {
     deduplicate(&mut expected);
 
     Ok(expected)
+}
+
+fn has_unsupported_node_lockfile(root: &Path) -> bool {
+    // Yarn lockfiles and Bun's legacy binary lockfile are recognized by the
+    // lifecycle audit, but are intentionally outside the structured lockfile
+    // formats inspected by the security scanner. Do not turn either into a
+    // false npm-missing finding when no packageManager field is present.
+    root.join("yarn.lock").is_file() || root.join("bun.lockb").is_file()
 }
 
 fn package_manager_lockfile(path: &Path) -> DustResult<Option<NodeLockfileSelection>> {
@@ -136,11 +146,15 @@ fn package_manager_lockfile(path: &Path) -> DustResult<Option<NodeLockfileSelect
         ))
     })?;
 
-    let selection = if package_manager.starts_with("pnpm@") {
+    let manager = package_manager
+        .split_once('@')
+        .map_or(package_manager, |(manager, _)| manager);
+
+    let selection = if manager == "pnpm" {
         NodeLockfileSelection::Supported(LockfileKind::PnpmLockYaml)
-    } else if package_manager.starts_with("bun@") {
+    } else if manager == "bun" {
         NodeLockfileSelection::Supported(LockfileKind::BunLock)
-    } else if package_manager.starts_with("npm@") {
+    } else if manager == "npm" {
         NodeLockfileSelection::Supported(LockfileKind::PackageLockJson)
     } else {
         NodeLockfileSelection::Unsupported
@@ -271,6 +285,17 @@ mod tests {
         )
         .unwrap();
         fs::write(temp_dir.path().join("yarn.lock"), "__metadata:\n").unwrap();
+
+        let checks = check_lockfile_integrity(temp_dir.path()).unwrap();
+
+        assert!(checks.is_empty());
+    }
+
+    #[test]
+    fn yarn_lockfile_without_a_declaration_does_not_become_missing_npm() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("package.json"), r#"{"name":"demo"}"#).unwrap();
+        fs::write(temp_dir.path().join("yarn.lock"), "# yarn lockfile v1\n").unwrap();
 
         let checks = check_lockfile_integrity(temp_dir.path()).unwrap();
 

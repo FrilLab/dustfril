@@ -22,11 +22,19 @@ pub fn audit_scan(root: &Path) -> DustResult<Vec<LifecycleScript>> {
     for dir in walk_dirs(root)? {
         let package_json = dir.join("package.json");
 
-        if !package_json.is_file() {
-            continue;
+        match fs::symlink_metadata(&package_json) {
+            Ok(metadata) if metadata.is_file() => {}
+            Ok(_) => {
+                return Err(DustError::Manifest(format!(
+                    "{}: expected a regular file",
+                    package_json.display()
+                )));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(DustError::Io(error)),
         }
 
-        let package_manager = package_manager::detect_for_package(&package_json, root);
+        let package_manager = package_manager::detect_for_package(&package_json, root)?;
         scripts.extend(audit_scan_package(&package_json, package_manager)?);
     }
 

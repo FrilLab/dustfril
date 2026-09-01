@@ -7,6 +7,7 @@
 use std::{fs, path::Path};
 
 use serde_json::Value;
+use serde_yaml::Value as YamlValue;
 use url::Url;
 
 use crate::{
@@ -47,6 +48,7 @@ pub fn scan(root: &Path, ecosystems: &[Ecosystem]) -> DustResult<SecurityReport>
     let scan_rust = ecosystems.is_empty() || ecosystems.contains(&Ecosystem::Rust);
 
     if !scan_node && !scan_rust {
+        validate_root(root)?;
         return Ok(SecurityReport::default());
     }
 
@@ -302,31 +304,80 @@ fn scan_package_lock(path: &Path, report: &mut SecurityReport) -> DustResult<()>
     let content = fs::read_to_string(path)?;
     let lockfile: Value =
         serde_json::from_str(&content).map_err(|error| manifest_error(path, error.to_string()))?;
+    let lockfile_object = lockfile.as_object().ok_or_else(|| {
+        manifest_error(
+            path,
+            "package-lock.json must contain a JSON object".to_owned(),
+        )
+    })?;
+    let version = lockfile_object
+        .get("lockfileVersion")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| {
+            manifest_error(
+                path,
+                "package-lock.json must declare a numeric lockfileVersion".to_owned(),
+            )
+        })?;
+    if !(1..=3).contains(&version) {
+        return Err(manifest_error(
+            path,
+            format!("unsupported package-lock.json lockfileVersion {version}"),
+        ));
+    }
 
-    if let Some(packages) = lockfile.get("packages").and_then(Value::as_object) {
+    if version >= 2 && !lockfile_object.contains_key("packages") {
+        return Err(manifest_error(
+            path,
+            format!("package-lock.json lockfileVersion {version} is missing packages"),
+        ));
+    }
+    if version == 1 && !lockfile_object.contains_key("dependencies") {
+        return Err(manifest_error(
+            path,
+            "package-lock.json lockfileVersion 1 is missing dependencies".to_owned(),
+        ));
+    }
+
+    if let Some(packages) = lockfile_object.get("packages") {
+        let packages = packages.as_object().ok_or_else(|| {
+            manifest_error(
+                path,
+                "package-lock.json packages must be an object".to_owned(),
+            )
+        })?;
         for (key, package) in packages {
-            let Some(package) = package.as_object() else {
+            let package = package.as_object().ok_or_else(|| {
+                manifest_error(
+                    path,
+                    format!("package-lock.json package entry {key:?} must be an object"),
+                )
+            })?;
+            if key.is_empty() {
                 continue;
-            };
+            }
             let name = package
                 .get("name")
                 .and_then(Value::as_str)
                 .or_else(|| package_name_from_selector(key));
             let Some(name) = name else { continue };
-            if key.is_empty() && package.get("version").is_none() {
-                continue;
-            }
 
-            let source = package
-                .get("resolved")
-                .or_else(|| package.get("resolvedUrl"))
-                .and_then(Value::as_str);
+            let source = match string_field(package, "resolved", path)? {
+                Some(source) => Some(source),
+                None => string_field(package, "resolvedUrl", path)?,
+            };
             inspect_node_lock_dependency(path, name, source, report);
         }
     }
 
-    if let Some(dependencies) = lockfile.get("dependencies").and_then(Value::as_object) {
-        inspect_npm_dependency_tree(path, dependencies, report);
+    if let Some(dependencies) = lockfile_object.get("dependencies") {
+        let dependencies = dependencies.as_object().ok_or_else(|| {
+            manifest_error(
+                path,
+                "package-lock.json dependencies must be an object".to_owned(),
+            )
+        })?;
+        inspect_npm_dependency_tree(path, dependencies, report)?;
     }
 
     Ok(())
@@ -336,18 +387,32 @@ fn inspect_npm_dependency_tree(
     path: &Path,
     dependencies: &serde_json::Map<String, Value>,
     report: &mut SecurityReport,
-) {
+) -> DustResult<()> {
     for (name, dependency) in dependencies {
-        let source = dependency
-            .get("resolved")
-            .or_else(|| dependency.get("resolvedUrl"))
-            .and_then(Value::as_str);
+        let dependency = dependency.as_object().ok_or_else(|| {
+            manifest_error(
+                path,
+                format!("package-lock.json dependency entry {name:?} must be an object"),
+            )
+        })?;
+        let source = match string_field(dependency, "resolved", path)? {
+            Some(source) => Some(source),
+            None => string_field(dependency, "resolvedUrl", path)?,
+        };
         inspect_node_lock_dependency(path, name, source, report);
 
-        if let Some(nested) = dependency.get("dependencies").and_then(Value::as_object) {
-            inspect_npm_dependency_tree(path, nested, report);
+        if let Some(nested) = dependency.get("dependencies") {
+            let nested = nested.as_object().ok_or_else(|| {
+                manifest_error(
+                    path,
+                    format!("package-lock.json nested dependencies for {name:?} must be an object"),
+                )
+            })?;
+            inspect_npm_dependency_tree(path, nested, report)?;
         }
     }
+
+    Ok(())
 }
 
 fn inspect_node_lock_dependency(
@@ -373,69 +438,116 @@ fn inspect_node_lock_dependency(
 
 fn scan_pnpm_lock(path: &Path, report: &mut SecurityReport) -> DustResult<()> {
     let content = fs::read_to_string(path)?;
-    let mut in_packages = false;
-    let mut current_package: Option<String> = None;
+    let lockfile: YamlValue =
+        serde_yaml::from_str(&content).map_err(|error| manifest_error(path, error.to_string()))?;
+    let lockfile_object = lockfile.as_mapping().ok_or_else(|| {
+        manifest_error(
+            path,
+            "pnpm-lock.yaml must contain a YAML mapping".to_owned(),
+        )
+    })?;
+    let version =
+        yaml_scalar_field(lockfile_object, "lockfileVersion", path)?.ok_or_else(|| {
+            manifest_error(
+                path,
+                "pnpm-lock.yaml must declare lockfileVersion".to_owned(),
+            )
+        })?;
+    if version
+        .split('.')
+        .next()
+        .and_then(|major| major.parse::<u64>().ok())
+        .is_none()
+    {
+        return Err(manifest_error(
+            path,
+            format!("unsupported pnpm lockfileVersion {version:?}"),
+        ));
+    }
 
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if trimmed == "packages:" {
-            in_packages = true;
-            current_package = None;
-            continue;
-        }
-
-        if in_packages && !line.starts_with(' ') && !line.starts_with('\t') {
-            in_packages = false;
-            current_package = None;
-        }
-
-        if !in_packages {
-            continue;
-        }
-
-        let indentation = line
-            .chars()
-            .take_while(|character| character.is_whitespace())
-            .count();
-        if indentation == 2 && trimmed.ends_with(':') {
-            let selector = trimmed[..trimmed.len() - 1]
-                .trim_matches(['\'', '"'])
-                .trim_start_matches('/');
-            current_package = package_name_from_selector(selector).map(str::to_owned);
-
-            if let Some(name) = current_package.as_deref() {
-                report_known_package(path, name, report);
-                if let Some(source) = untrusted_node_source(selector) {
-                    report.finding(
-                        path,
-                        SecurityFindingKind::UntrustedDependency,
-                        Some(name.to_owned()),
-                        RiskLevel::Medium,
-                        Some(selector.to_owned()),
-                        format!(
-                            "pnpm lock entry uses a non-registry source ({source}); review the resolved package."
-                        ),
-                    );
-                }
-            }
-            continue;
-        }
-
-        let Some(name) = current_package.as_deref() else {
+    for section in ["packages", "snapshots"] {
+        let Some(value) = yaml_value_field(lockfile_object, section) else {
             continue;
         };
-        if let Some(source) = yaml_value_after(trimmed, "tarball:")
-            && !is_trusted_node_registry(source)
-        {
-            report.finding(
-                path,
-                SecurityFindingKind::UntrustedDependency,
-                Some(name.to_owned()),
-                RiskLevel::Medium,
-                Some(source.to_owned()),
-                "pnpm lock entry downloads from outside the supported public npm registries; review the artifact source.",
-            );
+        let entries = value.as_mapping().ok_or_else(|| {
+            manifest_error(path, format!("pnpm-lock.yaml {section} must be a mapping"))
+        })?;
+
+        for (selector, package) in entries {
+            let selector = selector.as_str().ok_or_else(|| {
+                manifest_error(
+                    path,
+                    format!("pnpm-lock.yaml {section} keys must be strings"),
+                )
+            })?;
+            inspect_pnpm_entry(path, selector, package, report)?;
         }
+    }
+
+    Ok(())
+}
+
+fn inspect_pnpm_entry(
+    path: &Path,
+    selector: &str,
+    package: &YamlValue,
+    report: &mut SecurityReport,
+) -> DustResult<()> {
+    let name = package_name_from_selector(selector);
+    if let Some(name) = name {
+        report_known_package(path, name, report);
+    }
+    let source_selector = selector
+        .trim()
+        .trim_matches(['\'', '"'])
+        .trim_start_matches('/');
+    if let Some(source) = untrusted_node_source(source_selector) {
+        report.finding(
+            path,
+            SecurityFindingKind::UntrustedDependency,
+            name.map(str::to_owned),
+            RiskLevel::Medium,
+            Some(selector.to_owned()),
+            format!(
+                "pnpm lock entry uses a non-registry source ({source}); review the resolved package."
+            ),
+        );
+    }
+
+    let package_object = package.as_mapping().ok_or_else(|| {
+        manifest_error(
+            path,
+            format!("pnpm-lock.yaml entry {selector:?} must be a mapping"),
+        )
+    })?;
+    let Some(name) = name else {
+        return Ok(());
+    };
+    let Some(resolution) = yaml_value_field(package_object, "resolution") else {
+        return Ok(());
+    };
+    let resolution = resolution.as_mapping().ok_or_else(|| {
+        manifest_error(
+            path,
+            format!("pnpm-lock.yaml resolution for {selector:?} must be a mapping"),
+        )
+    })?;
+
+    for key in ["tarball", "repo", "url"] {
+        let Some(source) = yaml_string_field(resolution, key, path)? else {
+            continue;
+        };
+        if is_trusted_node_registry(source) {
+            continue;
+        }
+        report.finding(
+            path,
+            SecurityFindingKind::UntrustedDependency,
+            Some(name.to_owned()),
+            RiskLevel::Medium,
+            Some(source.to_owned()),
+            "pnpm lock entry downloads from outside the supported public npm registries; review the artifact source.",
+        );
     }
 
     Ok(())
@@ -444,12 +556,104 @@ fn scan_pnpm_lock(path: &Path, report: &mut SecurityReport) -> DustResult<()> {
 fn scan_bun_lock(path: &Path, report: &mut SecurityReport) -> DustResult<()> {
     let content = fs::read_to_string(path)?;
     let lockfile = parse_jsonc(&content).map_err(|error| manifest_error(path, error))?;
-
-    if let Some(packages) = lockfile.get("packages") {
-        inspect_bun_value(path, packages, None, report);
+    let lockfile_object = lockfile
+        .as_object()
+        .ok_or_else(|| manifest_error(path, "bun.lock must contain a JSON object".to_owned()))?;
+    let version = lockfile_object
+        .get("lockfileVersion")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| {
+            manifest_error(
+                path,
+                "bun.lock must declare a numeric lockfileVersion".to_owned(),
+            )
+        })?;
+    if !(1..=2).contains(&version) {
+        return Err(manifest_error(
+            path,
+            format!("unsupported bun.lock lockfileVersion {version}"),
+        ));
     }
-    if let Some(workspaces) = lockfile.get("workspaces") {
+
+    if let Some(packages) = lockfile_object.get("packages") {
+        let packages = packages.as_object().ok_or_else(|| {
+            manifest_error(path, "bun.lock packages must be an object".to_owned())
+        })?;
+        for (selector, package) in packages {
+            inspect_bun_package(path, selector, package, report)?;
+        }
+    }
+    if let Some(workspaces) = lockfile_object.get("workspaces") {
+        if !workspaces.is_object() {
+            return Err(manifest_error(
+                path,
+                "bun.lock workspaces must be an object".to_owned(),
+            ));
+        }
         inspect_bun_value(path, workspaces, None, report);
+    }
+
+    Ok(())
+}
+
+fn inspect_bun_package(
+    path: &Path,
+    selector: &str,
+    package: &Value,
+    report: &mut SecurityReport,
+) -> DustResult<()> {
+    let name = package_name_from_selector(selector).ok_or_else(|| {
+        manifest_error(
+            path,
+            format!("bun.lock package key {selector:?} is not a package selector"),
+        )
+    })?;
+    report_known_package(path, name, report);
+
+    match package {
+        Value::Array(entries) => inspect_bun_package_array(path, name, entries, report),
+        Value::Object(_) => {
+            inspect_bun_value(path, package, Some(name), report);
+            Ok(())
+        }
+        _ => Err(manifest_error(
+            path,
+            format!("bun.lock package entry {selector:?} must be an array or object"),
+        )),
+    }
+}
+
+fn inspect_bun_package_array(
+    path: &Path,
+    name: &str,
+    entries: &[Value],
+    report: &mut SecurityReport,
+) -> DustResult<()> {
+    if let Some(version_selector) = entries.first().and_then(Value::as_str) {
+        report_known_package(path, name, report);
+        if let Some(source) = untrusted_node_source(version_selector) {
+            report.finding(
+                path,
+                SecurityFindingKind::UntrustedDependency,
+                Some(name.to_owned()),
+                RiskLevel::Medium,
+                Some(version_selector.to_owned()),
+                format!(
+                    "Bun lock entry uses a non-registry source ({source}); review the resolved package."
+                ),
+            );
+        }
+    }
+
+    for (index, entry) in entries.iter().enumerate().skip(1) {
+        if index == 1
+            && let Some(source) = entry.as_str().filter(|source| !source.is_empty())
+        {
+            inspect_node_lock_dependency(path, name, Some(source), report);
+            continue;
+        }
+
+        inspect_bun_value(path, entry, Some(name), report);
     }
 
     Ok(())
@@ -645,20 +849,46 @@ fn scan_cargo_lock(path: &Path, report: &mut SecurityReport) -> DustResult<()> {
     let content = fs::read_to_string(path)?;
     let lockfile: toml::Value =
         toml::from_str(&content).map_err(|error| manifest_error(path, error.to_string()))?;
+    let lockfile_table = lockfile
+        .as_table()
+        .ok_or_else(|| manifest_error(path, "Cargo.lock must contain a TOML table".to_owned()))?;
+    let version = lockfile_table
+        .get("version")
+        .and_then(toml::Value::as_integer)
+        .ok_or_else(|| manifest_error(path, "Cargo.lock must declare version".to_owned()))?;
+    if !(1..=4).contains(&version) {
+        return Err(manifest_error(
+            path,
+            format!("unsupported Cargo.lock version {version}"),
+        ));
+    }
 
-    let Some(packages) = lockfile.get("package").and_then(toml::Value::as_array) else {
+    let Some(packages) = lockfile_table.get("package") else {
         return Ok(());
     };
+    let packages = packages
+        .as_array()
+        .ok_or_else(|| manifest_error(path, "Cargo.lock package must be an array".to_owned()))?;
 
     for package in packages {
-        let Some(name) = package.get("name").and_then(toml::Value::as_str) else {
-            continue;
-        };
+        let package = package.as_table().ok_or_else(|| {
+            manifest_error(path, "Cargo.lock package entries must be tables".to_owned())
+        })?;
+        let name = package
+            .get("name")
+            .and_then(toml::Value::as_str)
+            .ok_or_else(|| manifest_error(path, "Cargo.lock package is missing name".to_owned()))?;
         report_known_package(path, name, report);
 
-        let Some(source) = package.get("source").and_then(toml::Value::as_str) else {
+        let Some(source) = package.get("source") else {
             continue;
         };
+        let source = source.as_str().ok_or_else(|| {
+            manifest_error(
+                path,
+                format!("Cargo.lock source for {name:?} must be a string"),
+            )
+        })?;
         if !is_trusted_cargo_registry(source) {
             report.finding(
                 path,
@@ -724,12 +954,16 @@ fn untrusted_node_source(specification: &str) -> Option<&'static str> {
     if value.starts_with("file:")
         || value.starts_with("link:")
         || value.starts_with("workspace:")
+        || value.starts_with('/')
         || value.starts_with("./")
         || value.starts_with("../")
     {
         return Some("local or workspace source");
     }
-    if value.split('/').count() == 2 && !value.chars().any(char::is_whitespace) {
+    if !value.starts_with('@')
+        && value.split('/').count() == 2
+        && !value.chars().any(char::is_whitespace)
+    {
         return Some("repository shorthand");
     }
 
@@ -775,6 +1009,10 @@ fn is_trusted_node_registry(source: &str) -> bool {
 
     url.scheme() == "https"
         && url.port().is_none()
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.query().is_none()
+        && url.fragment().is_none()
         && matches!(
             url.host_str(),
             Some("registry.npmjs.org" | "registry.yarnpkg.com")
@@ -789,7 +1027,13 @@ fn is_trusted_cargo_registry(source: &str) -> bool {
         return false;
     };
 
-    if url.scheme() != "https" || url.port().is_some() || url.query().is_some() {
+    if url.scheme() != "https"
+        || url.port().is_some()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
         return false;
     }
 
@@ -811,23 +1055,51 @@ fn package_name_from_selector(selector: &str) -> Option<&str> {
         .trim_matches(['\'', '"'])
         .trim_start_matches("node_modules/")
         .trim_start_matches('/');
-    if selector.is_empty() || is_lock_metadata_key(selector) {
+    let selector = selector.split('(').next().unwrap_or(selector).trim();
+    if selector.is_empty()
+        || is_lock_metadata_key(selector)
+        || selector.contains("://")
+        || selector.starts_with("file:")
+        || selector.starts_with("link:")
+        || selector.starts_with("workspace:")
+    {
         return None;
     }
 
-    let at = if let Some(stripped) = selector.strip_prefix('@') {
-        stripped.find('@').map(|index| index + 1)
+    let name = if let Some(stripped) = selector.strip_prefix('@') {
+        if let Some(index) = stripped.find('@') {
+            &selector[..index + 1]
+        } else {
+            let mut parts = selector.split('/');
+            match (parts.next(), parts.next(), parts.next()) {
+                (Some(scope), Some(package), Some(_version)) => {
+                    &selector[..scope.len() + 1 + package.len()]
+                }
+                _ => selector,
+            }
+        }
+    } else if let Some(index) = selector.find('@') {
+        &selector[..index]
     } else {
-        selector.find('@')
+        let mut parts = selector.split('/');
+        match (parts.next(), parts.next()) {
+            (Some(name), Some(version)) if looks_like_version(version) => name,
+            _ => selector,
+        }
     };
-
-    let name = at.map(|index| &selector[..index]).unwrap_or(selector);
-    let name = name.split('(').next().unwrap_or(name).trim_end_matches(':');
+    let name = name.trim_end_matches(':');
     (!name.is_empty()
         && name
             .chars()
             .any(|character| character.is_ascii_alphabetic()))
     .then_some(name)
+}
+
+fn looks_like_version(value: &str) -> bool {
+    value
+        .chars()
+        .next()
+        .is_some_and(|character| character.is_ascii_digit() || character == 'v')
 }
 
 fn is_lock_metadata_key(value: &str) -> bool {
@@ -845,10 +1117,57 @@ fn is_lock_metadata_key(value: &str) -> bool {
     )
 }
 
-fn yaml_value_after<'a>(line: &'a str, key: &str) -> Option<&'a str> {
-    line.strip_prefix(key)
-        .map(str::trim)
-        .map(|value| value.trim_matches(['\'', '"']))
+fn string_field<'a>(
+    object: &'a serde_json::Map<String, Value>,
+    key: &str,
+    path: &Path,
+) -> DustResult<Option<&'a str>> {
+    let Some(value) = object.get(key) else {
+        return Ok(None);
+    };
+
+    value
+        .as_str()
+        .map(Some)
+        .ok_or_else(|| manifest_error(path, format!("{key} field in JSON object must be a string")))
+}
+
+fn yaml_value_field<'a>(object: &'a serde_yaml::Mapping, key: &str) -> Option<&'a YamlValue> {
+    object.get(YamlValue::String(key.to_owned()))
+}
+
+fn yaml_scalar_field(
+    object: &serde_yaml::Mapping,
+    key: &str,
+    path: &Path,
+) -> DustResult<Option<String>> {
+    let Some(value) = yaml_value_field(object, key) else {
+        return Ok(None);
+    };
+
+    match value {
+        YamlValue::String(value) => Ok(Some(value.clone())),
+        YamlValue::Number(value) => Ok(Some(value.to_string())),
+        _ => Err(manifest_error(
+            path,
+            format!("{key} field in YAML must be a scalar string or number"),
+        )),
+    }
+}
+
+fn yaml_string_field<'a>(
+    object: &'a serde_yaml::Mapping,
+    key: &str,
+    path: &Path,
+) -> DustResult<Option<&'a str>> {
+    let Some(value) = yaml_value_field(object, key) else {
+        return Ok(None);
+    };
+
+    value
+        .as_str()
+        .map(Some)
+        .ok_or_else(|| manifest_error(path, format!("{key} field in YAML must be a string")))
 }
 
 fn manifest_error(path: &Path, message: String) -> DustError {
@@ -939,6 +1258,17 @@ mod tests {
 
         assert!(report.findings.is_empty());
         assert!(report.manifests.is_empty());
+    }
+
+    #[test]
+    fn selected_unknown_ecosystem_still_validates_the_root() {
+        let temp_dir = TempDir::new().unwrap();
+        let missing = temp_dir.path().join("missing");
+
+        assert!(matches!(
+            scan(&missing, &[Ecosystem::Java]),
+            Err(DustError::InvalidPath(path)) if path == missing
+        ));
     }
 
     #[test]
@@ -1033,6 +1363,24 @@ mod tests {
             package_name_from_selector("/event-stream@3.3.6"),
             Some("event-stream")
         );
+        assert_eq!(
+            package_name_from_selector("/@scope/package/1.0.0"),
+            Some("@scope/package")
+        );
+        assert_eq!(
+            package_name_from_selector("/event-stream/3.3.6"),
+            Some("event-stream")
+        );
+    }
+
+    #[test]
+    fn scoped_registry_dependencies_are_not_repository_shorthands() {
+        assert!(untrusted_node_source("@scope/package").is_none());
+        assert!(untrusted_node_source("@scope/package@1.0.0").is_none());
+        assert_eq!(
+            untrusted_node_source("owner/repository"),
+            Some("repository shorthand")
+        );
     }
 
     #[test]
@@ -1046,6 +1394,9 @@ mod tests {
         assert!(!is_trusted_node_registry(
             "https://registry.yarnpkg.com.evil.example/package.tgz"
         ));
+        assert!(!is_trusted_node_registry(
+            "https://user@registry.npmjs.org/package.tgz"
+        ));
 
         assert!(is_trusted_cargo_registry(
             "registry+https://github.com/rust-lang/crates.io-index"
@@ -1053,6 +1404,9 @@ mod tests {
         assert!(is_trusted_cargo_registry("sparse+https://index.crates.io/"));
         assert!(!is_trusted_cargo_registry(
             "registry+https://evil.example/crates.io/index"
+        ));
+        assert!(!is_trusted_cargo_registry(
+            "registry+https://github.com/rust-lang/crates.io-index#evil"
         ));
     }
 
@@ -1071,5 +1425,145 @@ mod tests {
         assert!(
             matches!(result, Err(DustError::Manifest(message)) if message.contains("bun.lock"))
         );
+    }
+
+    #[test]
+    fn malformed_supported_lockfiles_are_reported() {
+        let package_lock_dir = TempDir::new().unwrap();
+        fs::write(
+            package_lock_dir.path().join("package.json"),
+            r#"{"name":"demo","packageManager":"npm@10.0.0"}"#,
+        )
+        .unwrap();
+        fs::write(
+            package_lock_dir.path().join("package-lock.json"),
+            r#"{"lockfileVersion":3,"packages":[]}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            scan(package_lock_dir.path(), &[Ecosystem::Node]),
+            Err(DustError::Manifest(message)) if message.contains("package-lock.json")
+        ));
+
+        let pnpm_dir = TempDir::new().unwrap();
+        fs::write(
+            pnpm_dir.path().join("package.json"),
+            r#"{"name":"demo","packageManager":"pnpm@9.0.0"}"#,
+        )
+        .unwrap();
+        fs::write(pnpm_dir.path().join("pnpm-lock.yaml"), "packages: [").unwrap();
+        assert!(matches!(
+            scan(pnpm_dir.path(), &[Ecosystem::Node]),
+            Err(DustError::Manifest(message)) if message.contains("pnpm-lock.yaml")
+        ));
+
+        let cargo_dir = TempDir::new().unwrap();
+        fs::write(
+            cargo_dir.path().join("Cargo.toml"),
+            "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        fs::write(cargo_dir.path().join("Cargo.lock"), "package = []\n").unwrap();
+        assert!(matches!(
+            scan(cargo_dir.path(), &[Ecosystem::Rust]),
+            Err(DustError::Manifest(message)) if message.contains("Cargo.lock")
+        ));
+    }
+
+    #[test]
+    fn actual_bun_package_tuples_keep_source_with_package_name() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(
+            temp_dir.path().join("package.json"),
+            r#"{"name":"demo","packageManager":"bun@1.3.0"}"#,
+        )
+        .unwrap();
+        fs::write(
+            temp_dir.path().join("bun.lock"),
+            r#"{
+                "lockfileVersion": 1,
+                "packages": {
+                    "@scope/package": [
+                        "@scope/package@1.0.0",
+                        "https://registry.npmjs.org/@scope/package/-/package-1.0.0.tgz",
+                        {},
+                        "sha512-example"
+                    ],
+                    "remote": [
+                        "remote@1.0.0",
+                        "https://registry.npmjs.org.evil.example/remote.tgz",
+                        {},
+                        "sha512-example"
+                    ]
+                }
+            }"#,
+        )
+        .unwrap();
+
+        let report = scan(temp_dir.path(), &[Ecosystem::Node]).unwrap();
+        assert!(report.findings.iter().any(|finding| {
+            finding.kind == SecurityFindingKind::UntrustedDependency
+                && finding.package.as_deref() == Some("remote")
+                && finding.evidence.as_deref()
+                    == Some("https://registry.npmjs.org.evil.example/remote.tgz")
+        }));
+        assert!(!report.findings.iter().any(|finding| {
+            finding.kind == SecurityFindingKind::UntrustedDependency
+                && finding.package.as_deref() == Some("@scope/package")
+        }));
+    }
+
+    #[test]
+    fn pnpm_parser_handles_v9_entries_and_sources() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(
+            temp_dir.path().join("package.json"),
+            r#"{"name":"demo","packageManager":"pnpm@9.0.0"}"#,
+        )
+        .unwrap();
+        fs::write(
+            temp_dir.path().join("pnpm-lock.yaml"),
+            "lockfileVersion: '9.0'\npackages:\n  '@scope/package@1.0.0':\n    resolution:\n      tarball: https://registry.npmjs.org/@scope/package/-/package-1.0.0.tgz\n  remote@1.0.0:\n    resolution:\n      tarball: https://registry.npmjs.org.evil.example/remote.tgz\nsnapshots:\n  remote@1.0.0: {}\n",
+        )
+        .unwrap();
+
+        let report = scan(temp_dir.path(), &[Ecosystem::Node]).unwrap();
+        assert!(report.findings.iter().any(|finding| {
+            finding.kind == SecurityFindingKind::UntrustedDependency
+                && finding.package.as_deref() == Some("remote")
+        }));
+        assert!(!report.findings.iter().any(|finding| {
+            finding.kind == SecurityFindingKind::UntrustedDependency
+                && finding.package.as_deref() == Some("@scope/package")
+        }));
+    }
+
+    #[test]
+    fn package_lock_v1_dependency_tree_is_supported() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(
+            temp_dir.path().join("package.json"),
+            r#"{"name":"demo","packageManager":"npm@10.0.0"}"#,
+        )
+        .unwrap();
+        fs::write(
+            temp_dir.path().join("package-lock.json"),
+            r#"{
+                "lockfileVersion": 1,
+                "dependencies": {
+                    "@scope/package": {
+                        "version": "1.0.0",
+                        "resolved": "https://registry.npmjs.org/@scope/package/-/package-1.0.0.tgz"
+                    }
+                }
+            }"#,
+        )
+        .unwrap();
+
+        let report = scan(temp_dir.path(), &[Ecosystem::Node]).unwrap();
+        assert!(report.findings.is_empty());
+        assert!(report.lockfiles.iter().any(|check| {
+            check.kind == LockfileKind::PackageLockJson && check.status == LockfileStatus::Clean
+        }));
     }
 }
