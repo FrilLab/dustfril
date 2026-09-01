@@ -42,6 +42,8 @@ cargo build -p dustfril-cli
 - command failures return a non-zero process exit status
 - security scans are read-only and use deterministic offline checks
 - executable-integrity scans read metadata and bytes only; they never invoke a target tool
+- executable-integrity scans report platform signature evidence separately from hash changes
+- Linux and Windows currently report executable signature verification as explicitly unsupported
 - executable-integrity baselines are stored separately from activity history in the OS app data directory
 - activity-history write failures are reported without discarding a completed operation result
 - Activity history is stored in the OS app data directory as a versioned `history.json`.
