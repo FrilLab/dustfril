@@ -21,20 +21,15 @@ pub fn scan(args: &PathArgs) -> bool {
 
     let ecosystems = args.ecosystems();
 
-    let warnings = match api::security_scan(&path, &ecosystems) {
-        Ok(warnings) => warnings,
+    let report = match api::security_scan_report(&path, &ecosystems) {
+        Ok(report) => report,
         Err(error) => {
             eprintln!("Security scan failed: {error}");
             return false;
         }
     };
 
-    if warnings.is_empty() {
-        println!("No suspicious lifecycle scripts detected.");
-        return true;
-    }
-
-    format::print_security_report(&warnings);
+    format::print_security_scan_report(&report);
 
     true
 }

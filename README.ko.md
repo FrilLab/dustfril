@@ -19,7 +19,7 @@ DustFril은 개발 산출물을 스캔, 분석, 점검, 정리하기 위한 워�
 - 휴지통 이동 또는 영구 삭제 모드로 정리 실행
 - `preinstall`, `postinstall` 같은 Node 라이프사이클 스크립트 점검
 - 스캔·정리 활동 이력을 버전 형식으로 운영체제 앱 데이터 디렉터리에 저장
-- 규칙 기반 보안 경고로 의심스러운 라이프사이클 명령 탐지
+- Node 및 Rust 프로젝트의 오프라인 공급망 보안 점검
 - 지원 lockfile의 존재 여부와 Git 상태 점검
 - CLI 정리 이력을 운영체제 앱 데이터 디렉터리에 저장
 
@@ -71,9 +71,11 @@ cargo run -p dustfril-cli -- analyze /path/to/workspace --node
 - `audit [path] [--node]`
 - `security scan [path] [--node]`
 
-`security scan`은 Node 라이프사이클 스크립트를 정적으로 검사합니다. 원격
-스크립트 실행, PowerShell 실행, 권한 변경, 다운로드 후 실행 체인을 경고하며
-탐지된 명령을 실행하거나 프로젝트 파일을 변경하지 않습니다.
+`security scan`은 `package.json`, `Cargo.toml`, `package-lock.json`,
+`pnpm-lock.yaml`, `bun.lock`, `Cargo.lock`을 읽기 전용으로 오프라인 점검합니다.
+의심스러운 라이프사이클 스크립트, 공개 레지스트리 외부에서 가져오는 의존성,
+내장된 과거 손상 패키지 목록, 누락되거나 변경된 lockfile을 경고합니다. 탐지된
+명령을 실행하거나 프로젝트 파일을 변경하지 않습니다.
 
 ## 데스크톱 앱
 

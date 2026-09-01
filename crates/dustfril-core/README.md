@@ -13,7 +13,8 @@ This crate contains the filesystem scanners, analyzers, cleanup planner and exec
 - `api::audit`: inspect supported lifecycle scripts; malformed manifests are
   returned as errors instead of being silently ignored
 - `api::history`: record and load versioned activity history, including cleanup-history migration
-- `api::security_scan`: detect suspicious lifecycle commands without executing them
+- `api::security_scan`: preserve the lifecycle-only security warnings API
+- `api::security_scan_report`: run the complete offline supply-chain scan
 - `api::check_lockfile_integrity`: check supported lockfile presence and Git status
 - `api::history`: record and load cleanup history using atomic replacement;
   corrupted or unsupported history files are returned as errors
@@ -27,8 +28,11 @@ symbolic links, and never falls back from Trash mode to permanent deletion.
 - Node.js: `node_modules/`
 - Java: `build/`
 - Audit: Node lifecycle scripts for npm, pnpm, yarn, and bun
-- Security rules: remote script pipes, download-and-execute chains, PowerShell execution, and permission changes
+- Security rules: suspicious lifecycle commands, non-registry dependency sources, historically compromised package names, and lockfile issues
 - Lockfile integrity: `package-lock.json`, `pnpm-lock.yaml`, `bun.lock`, and `Cargo.lock`
+
+The supply-chain report reads `package.json` and `Cargo.toml` plus supported
+lockfiles without executing scripts or contacting an external advisory service.
 
 Lockfile checks report `Missing`, `Modified`, `Untracked`, or `Clean`. Git
 worktrees use libgit2 status information equivalent to

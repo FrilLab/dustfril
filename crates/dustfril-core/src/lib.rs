@@ -9,3 +9,4 @@ mod fs;
 mod history;
 mod lockfile;
 mod scanner;
+mod security;
