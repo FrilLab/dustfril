@@ -1,5 +1,5 @@
-use std::path::Path;
 use std::time::SystemTime;
+use std::{fs, path::Path};
 
 use crate::error::DustResult;
 use crate::models::{
@@ -21,7 +21,10 @@ impl Analyzer {
 
         artifacts.sort_by_key(|artifact| std::cmp::Reverse(artifact.size_bytes));
 
-        let total_size_bytes = artifacts.iter().map(|a| a.size_bytes).sum();
+        let total_size_bytes = artifacts
+            .iter()
+            .map(|artifact| artifact.size_bytes)
+            .fold(0, u64::saturating_add);
 
         Ok(AnalysisResult {
             artifacts,
@@ -30,8 +33,7 @@ impl Analyzer {
     }
 
     fn analyze_artifact(artifact: Artifact) -> ArtifactAnalysis {
-        let size_bytes = calculate_directory_size(&artifact.path);
-        let last_modified = find_latest_modified(&artifact.path);
+        let (size_bytes, last_modified) = calculate_artifact_metadata(&artifact.path);
         let age_days = calculate_age_days(last_modified);
         let recommendation = recommend_cleanup(age_days);
 
@@ -71,24 +73,62 @@ fn recommend_cleanup(age_days: Option<u64>) -> CleanupRecommendation {
     }
 }
 
-fn calculate_directory_size(path: &Path) -> u64 {
+fn calculate_artifact_metadata(path: &Path) -> (u64, Option<SystemTime>) {
     WalkDir::new(path)
         .into_iter()
         .filter_map(Result::ok)
         .filter_map(|entry| {
-            entry
-                .metadata()
-                .ok()
-                .filter(|metadata| metadata.is_file())
-                .map(|metadata| metadata.len())
+            let metadata = fs::symlink_metadata(entry.path()).ok()?;
+            let size = if metadata.is_file() {
+                metadata.len()
+            } else {
+                0
+            };
+            let modified = metadata.modified().ok();
+
+            Some((size, modified))
         })
-        .sum()
+        .fold(
+            (0, None),
+            |(size, latest_modified), (entry_size, modified)| {
+                (
+                    size.saturating_add(entry_size),
+                    latest_modified.max(modified),
+                )
+            },
+        )
 }
 
-fn find_latest_modified(path: &Path) -> Option<SystemTime> {
-    WalkDir::new(path)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter_map(|entry| entry.metadata().ok()?.modified().ok())
-        .max()
+#[cfg(test)]
+mod tests {
+    use super::{calculate_age_days, recommend_cleanup};
+    use crate::models::CleanupRecommendation;
+
+    #[test]
+    fn cleanup_recommendations_use_documented_age_boundaries() {
+        assert_eq!(recommend_cleanup(None), CleanupRecommendation::NeedsReview);
+        assert_eq!(recommend_cleanup(Some(30)), CleanupRecommendation::Keep);
+        assert_eq!(
+            recommend_cleanup(Some(31)),
+            CleanupRecommendation::NeedsReview
+        );
+        assert_eq!(
+            recommend_cleanup(Some(90)),
+            CleanupRecommendation::NeedsReview
+        );
+        assert_eq!(
+            recommend_cleanup(Some(91)),
+            CleanupRecommendation::SafeToClean
+        );
+    }
+
+    #[test]
+    fn future_modification_times_have_unknown_age() {
+        assert_eq!(
+            calculate_age_days(Some(
+                std::time::SystemTime::now() + std::time::Duration::from_secs(1),
+            )),
+            None
+        );
+    }
 }

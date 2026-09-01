@@ -54,10 +54,12 @@ export function useAppState() {
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [lastScanAtMs, setLastScanAtMs] = useState<number | null>(null);
   const previousRootRef = useRef<string | null>(null);
+  const workspaceRequestRef = useRef(0);
+  const actionRequestRef = useRef(0);
 
   useEffect(() => {
     defaultRoot()
-      .then(setRoot)
+      .then(handleRootChange)
       .catch((invokeError) => setError(String(invokeError)));
 
     loadActivityHistory()
@@ -228,24 +230,34 @@ export function useAppState() {
   const confirmSamplePaths = selectedCleanupPaths.slice(0, 5);
 
   async function runAction(action: string, runner: () => Promise<void>) {
+    const requestId = ++actionRequestRef.current;
     setBusyAction(action);
     setError(null);
 
     try {
       await runner();
     } catch (invokeError) {
-      setError(String(invokeError));
+      if (requestId === actionRequestRef.current) {
+        setError(String(invokeError));
+      }
     } finally {
-      setBusyAction(null);
+      if (requestId === actionRequestRef.current) {
+        setBusyAction(null);
+      }
     }
   }
 
   async function refreshWorkspaceData(options: RunOptions) {
+    const requestId = ++workspaceRequestRef.current;
     const [scan, analysis, plan] = await Promise.all([
       scanArtifacts(options),
       analyzeArtifacts(options),
       buildCleanupPlan(options),
     ]);
+
+    if (requestId !== workspaceRequestRef.current) {
+      return;
+    }
 
     setScanResult(scan);
     setAnalysisResult(analysis);
@@ -253,6 +265,25 @@ export function useAppState() {
     setSelectedCleanupPaths(plan.candidates.map((candidate) => candidate.path));
     setLastScanAtMs(Date.now());
     setHistoryEntries(await loadActivityHistory());
+  }
+
+  function handleRootChange(nextRoot: string) {
+    if (nextRoot === root) {
+      return;
+    }
+
+    workspaceRequestRef.current += 1;
+    setRoot(nextRoot);
+    setError(null);
+    setScanResult(null);
+    setAnalysisResult(null);
+    setCleanupPlan(null);
+    setCleanupResult(null);
+    setSelectedCleanupPaths([]);
+    setSelectedItemId(null);
+    setConfirmDialogOpen(false);
+    setLastScanAtMs(null);
+    setExplorerWorkflow('scan');
   }
 
   function toggleCleanupPath(path: string) {
@@ -307,6 +338,9 @@ export function useAppState() {
       const result = await executeCleanup(candidates, deleteMode);
 
       setCleanupResult(result);
+      if (result.failedPaths.length) {
+        setError(formatCleanupFailure(result));
+      }
       setCleanupPlan((current) =>
         current
           ? {
@@ -358,7 +392,7 @@ export function useAppState() {
     supportedEcosystems: ecosystems,
     isLanguageCategory,
     isFutureCategory,
-    setRoot,
+    setRoot: handleRootChange,
     setSearch,
     setActiveCategory,
     setExplorerWorkflow,
@@ -372,4 +406,12 @@ export function useAppState() {
     handleRequestCleanup,
     handleConfirmCleanup,
   };
+}
+
+function formatCleanupFailure(result: CleanupResultResponse): string {
+  const failures = result.failedPaths
+    .map((failure) => `${failure.path} (${failure.reason})`)
+    .join('; ');
+
+  return `Cleanup completed with ${result.failedPaths.length} failure(s). Freed ${formatBytes(result.freedSizeBytes)}. Failed: ${failures}`;
 }

@@ -2,6 +2,7 @@ use tempfile::TempDir;
 
 use crate::{
     audit_tool::audit_scan,
+    error::DustError,
     models::{PackageManager, RiskLevel, ScriptType},
 };
 
@@ -106,5 +107,17 @@ fn security_scan_detects_required_warning_patterns_and_ignores_normal_scripts() 
         !warnings
             .iter()
             .any(|warning| warning.script_type == "prepare")
+    );
+}
+
+#[test]
+fn audit_scan_reports_malformed_package_json() {
+    let temp_dir = TempDir::new().unwrap();
+    std::fs::write(temp_dir.path().join("package.json"), "{invalid json").unwrap();
+
+    let result = audit_scan(temp_dir.path());
+
+    assert!(
+        matches!(result, Err(DustError::Manifest(message)) if message.contains("package.json"))
     );
 }

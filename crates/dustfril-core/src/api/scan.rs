@@ -32,4 +32,17 @@ mod tests {
         assert_eq!(result.artifacts[0].path, target);
         assert_eq!(result.artifacts[0].ecosystem, Ecosystem::Rust);
     }
+
+    #[test]
+    fn scan_rejects_a_missing_root() {
+        let temp_dir = TempDir::new().unwrap();
+        let missing = temp_dir.path().join("missing");
+
+        let result = scan(&missing, &[]);
+
+        assert!(matches!(
+            result,
+            Err(crate::error::DustError::InvalidPath(path)) if path == missing
+        ));
+    }
 }

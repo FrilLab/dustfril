@@ -56,12 +56,17 @@ fn print_summary(analysis: &AnalysisResult) {
     println!("\n----------------------------------------\n");
 }
 
-pub fn execute(args: PathArgs) {
-    let path = resolve_path(&args.path);
+pub fn execute(args: PathArgs) -> bool {
+    let path = match resolve_path(&args.path) {
+        Ok(path) => path,
+        Err(error) => {
+            eprintln!("Failed to resolve path: {error}");
+            return false;
+        }
+    };
 
     if !validate_path(&path) {
-        eprintln!("Invalid path");
-        return;
+        return false;
     }
 
     let ecosystems = args.ecosystems();
@@ -70,7 +75,7 @@ pub fn execute(args: PathArgs) {
         Ok(res) => res,
         Err(e) => {
             eprintln!("Scan failed: {}", e);
-            return;
+            return false;
         }
     };
 
@@ -78,7 +83,7 @@ pub fn execute(args: PathArgs) {
         Ok(res) => res,
         Err(e) => {
             eprintln!("Analysis failed: {}", e);
-            return;
+            return false;
         }
     };
 
@@ -90,7 +95,7 @@ pub fn execute(args: PathArgs) {
 
     if analysis_result.artifacts.is_empty() {
         println!("No artifacts found.");
-        return;
+        return true;
     }
 
     println!("Found {} artifact(s)\n", analysis_result.artifacts.len());
@@ -116,4 +121,6 @@ pub fn execute(args: PathArgs) {
     }
 
     print_summary(&analysis_result);
+
+    true
 }

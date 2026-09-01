@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{fs, path::Path};
 
 use crate::models::{Artifact, Ecosystem};
 
@@ -21,7 +21,11 @@ pub trait Detector: Sync {
         self.artifact_paths()
             .iter()
             .map(|name| root.join(name))
-            .filter(|path| path.is_dir())
+            .filter(|path| {
+                fs::symlink_metadata(path)
+                    .map(|metadata| metadata.is_dir())
+                    .unwrap_or(false)
+            })
             .map(|path| Artifact::new(path, self.ecosystem()))
             .collect()
     }

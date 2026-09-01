@@ -76,7 +76,7 @@ mod tests {
             }],
         };
 
-        let result = execute(&plan, DeleteMode::default()).unwrap();
+        let result = execute(&plan, DeleteMode::Permanent).unwrap();
 
         assert!(!target.exists());
         assert_eq!(result.deleted_paths, vec![target]);
