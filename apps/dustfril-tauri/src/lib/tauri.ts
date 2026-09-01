@@ -18,6 +18,7 @@ const commands = {
   buildCleanupPlan: 'build_cleanup_plan',
   audit: 'audit',
   executeCleanup: 'execute_cleanup',
+  loadActivityHistory: 'load_activity_history',
   loadCleanupHistory: 'load_cleanup_history',
 } as const;
 
@@ -48,5 +49,5 @@ export function executeCleanup(candidates: CleanupCandidate[], mode: DeleteMode)
 }
 
 export function loadActivityHistory() {
-  return invoke<ActivityRecord[]>('load_activity_history');
+  return invoke<ActivityRecord[]>(commands.loadActivityHistory);
 }

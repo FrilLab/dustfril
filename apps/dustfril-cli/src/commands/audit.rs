@@ -6,11 +6,17 @@ use crate::{
     shared::path::{resolve_path, validate_path},
 };
 
-pub fn execute(args: &PathArgs) {
-    let path = resolve_path(&args.path);
+pub fn execute(args: &PathArgs) -> bool {
+    let path = match resolve_path(&args.path) {
+        Ok(path) => path,
+        Err(error) => {
+            eprintln!("Failed to resolve path: {error}");
+            return false;
+        }
+    };
 
     if !validate_path(&path) {
-        return;
+        return false;
     }
 
     let ecosystems = args.ecosystems();
@@ -19,14 +25,16 @@ pub fn execute(args: &PathArgs) {
         Ok(scripts) => scripts,
         Err(error) => {
             eprintln!("Audit failed: {error}");
-            return;
+            return false;
         }
     };
 
     if scripts.is_empty() {
         println!("No lifecycle scripts found.");
-        return;
+        return true;
     }
 
     format::print_audit_report(&scripts);
+
+    true
 }

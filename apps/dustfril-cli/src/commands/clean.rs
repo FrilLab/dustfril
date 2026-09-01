@@ -12,43 +12,52 @@ use crate::{
     shared::path::{resolve_path, validate_path},
 };
 
-pub fn dry_run(args: &CleanArgs) {
+pub fn dry_run(args: &CleanArgs) -> bool {
     let plan = match build_cleanup_plan(args) {
         Ok(plan) => plan,
         Err(e) => {
             eprintln!("Cleanup preview failed: {}", e);
-            return;
+            return false;
         }
     };
 
     if plan.candidates.is_empty() {
         println!("No cleanup candidates found.");
-        return;
+        return true;
     }
 
     print_cleanup_plan(&plan);
     println!("No files were deleted.");
+
+    true
 }
 
-pub fn execute(args: &CleanArgs) {
+pub fn execute(args: &CleanArgs) -> bool {
     let plan = match build_cleanup_plan(args) {
         Ok(plan) => plan,
         Err(e) => {
             eprintln!("Cleanup preparation failed: {}", e);
-            return;
+            return false;
         }
     };
 
     if plan.candidates.is_empty() {
         println!("No cleanup candidates found.");
-        return;
+        return true;
     }
 
     print_cleanup_plan(&plan);
 
-    if !confirm_cleanup() {
-        println!("Cleanup cancelled.");
-        return;
+    match confirm_cleanup() {
+        Ok(true) => {}
+        Ok(false) => {
+            println!("Cleanup cancelled.");
+            return true;
+        }
+        Err(error) => {
+            eprintln!("Could not read cleanup confirmation: {error}");
+            return false;
+        }
     }
 
     let mode = if args.permanent {
@@ -61,17 +70,19 @@ pub fn execute(args: &CleanArgs) {
         Ok(res) => res,
         Err(e) => {
             eprintln!("Cleanup failed: {}", e);
-            return;
+            return false;
         }
     };
     history::record(mode, &result)
         .unwrap_or_else(|e| eprintln!("Failed to record cleanup history: {}", e));
 
     print_cleanup_result(&result);
+
+    true
 }
 
 fn build_cleanup_plan(args: &CleanArgs) -> Result<CleanupPlan, DustError> {
-    let path = resolve_path(&args.path_args.path);
+    let path = resolve_path(&args.path_args.path)?;
 
     if !validate_path(&path) {
         return Err(DustError::InvalidPath(path));
@@ -89,18 +100,15 @@ fn build_cleanup_plan(args: &CleanArgs) -> Result<CleanupPlan, DustError> {
     Ok(plan)
 }
 
-fn confirm_cleanup() -> bool {
+fn confirm_cleanup() -> io::Result<bool> {
     print!("Continue? (y/N): ");
-
-    io::stdout().flush().expect("Failed to flush stdout");
+    io::stdout().flush()?;
 
     let mut input = String::new();
 
-    io::stdin()
-        .read_line(&mut input)
-        .expect("Failed to read input");
+    io::stdin().read_line(&mut input)?;
 
-    matches!(input.trim(), "y" | "Y")
+    Ok(matches!(input.trim(), "y" | "Y"))
 }
 
 fn print_cleanup_plan(plan: &CleanupPlan) {

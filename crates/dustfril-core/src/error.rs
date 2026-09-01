@@ -50,7 +50,14 @@ impl fmt::Display for DustError {
     }
 }
 
-impl std::error::Error for DustError {}
+impl std::error::Error for DustError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Io(error) => Some(error),
+            _ => None,
+        }
+    }
+}
 
 impl From<std::io::Error> for DustError {
     fn from(error: std::io::Error) -> Self {
@@ -70,6 +77,13 @@ mod tests {
         let error = DustError::from(io::Error::other("boom"));
 
         assert!(matches!(error, DustError::Io(_)));
+    }
+
+    #[test]
+    fn io_errors_expose_their_source() {
+        let error = DustError::from(io::Error::other("boom"));
+
+        assert!(std::error::Error::source(&error).is_some());
     }
 
     #[test]

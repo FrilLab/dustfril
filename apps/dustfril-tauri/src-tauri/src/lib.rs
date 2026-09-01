@@ -2,7 +2,8 @@ mod contract;
 mod history;
 
 use std::{
-    env,
+    env, fs,
+    io::ErrorKind,
     path::{Path, PathBuf},
     time::UNIX_EPOCH,
 };
@@ -21,10 +22,18 @@ fn resolve_root(root: Option<String>) -> Result<PathBuf, String> {
     match root.map(|value| value.trim().to_string()) {
         Some(value) if !value.is_empty() => {
             let path = PathBuf::from(value);
-            if !path.exists() {
-                return Err(format!("Path does not exist: {}", path.display()));
+            match fs::symlink_metadata(&path) {
+                Ok(metadata) if metadata.file_type().is_symlink() => Err(format!(
+                    "Path must not be a symbolic link: {}",
+                    path.display()
+                )),
+                Ok(metadata) if metadata.is_dir() => Ok(path),
+                Ok(_) => Err(format!("Path is not a directory: {}", path.display())),
+                Err(error) if error.kind() == ErrorKind::NotFound => {
+                    Err(format!("Path does not exist: {}", path.display()))
+                }
+                Err(error) => Err(format!("Cannot access path {}: {error}", path.display())),
             }
-            Ok(path)
         }
         _ => default_root_path(),
     }

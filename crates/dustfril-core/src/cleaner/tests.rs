@@ -152,7 +152,7 @@ fn execute_cleanup_removes_target_directory() {
         candidates: vec![candidate],
     };
 
-    let result = execute_cleanup(&plan, DeleteMode::default()).unwrap();
+    let result = execute_cleanup(&plan, DeleteMode::Permanent).unwrap();
 
     assert!(!target_dir.exists());
     assert_eq!(result.deleted_paths.len(), 1);
@@ -253,4 +253,66 @@ fn execute_cleanup_rejects_unsafe_path() {
         result.failed_paths[0].reason,
         CleanupFailureReason::UnsafePath
     );
+}
+
+#[test]
+fn execute_cleanup_rejects_a_regular_file_with_an_artifact_name() {
+    let temp = TempDir::new().unwrap();
+    let target = temp.path().join("target");
+    fs::write(&target, "not a directory").unwrap();
+
+    let plan = CleanupPlan {
+        candidates: vec![CleanupCandidate {
+            path: target.clone(),
+            ecosystem: Ecosystem::Rust,
+            size_bytes: 0,
+            age_days: None,
+        }],
+    };
+
+    let result = execute_cleanup(&plan, DeleteMode::Permanent).unwrap();
+
+    assert!(target.exists());
+    assert_eq!(
+        result.failed_paths[0].reason,
+        CleanupFailureReason::UnsafePath
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn execute_cleanup_rejects_symbolic_link_candidates() {
+    use std::os::unix::fs::symlink;
+
+    let temp = TempDir::new().unwrap();
+    let real_target = temp.path().join("real-target");
+    let link = temp.path().join("target");
+    fs::create_dir(&real_target).unwrap();
+    symlink(&real_target, &link).unwrap();
+
+    let plan = CleanupPlan {
+        candidates: vec![CleanupCandidate {
+            path: link.clone(),
+            ecosystem: Ecosystem::Rust,
+            size_bytes: 0,
+            age_days: None,
+        }],
+    };
+
+    let result = execute_cleanup(&plan, DeleteMode::Permanent).unwrap();
+
+    assert!(link.exists());
+    assert!(real_target.exists());
+    assert_eq!(
+        result.failed_paths[0].reason,
+        CleanupFailureReason::SymbolicLink
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn protected_path_check_rejects_direct_children_of_filesystem_root() {
+    assert!(super::executor::is_protected_path(&PathBuf::from(
+        "/target"
+    )));
 }

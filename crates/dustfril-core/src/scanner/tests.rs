@@ -169,3 +169,18 @@ fn rust_detector_reports_target_as_safe_artifact() {
 
     assert_eq!(detector.artifact_paths(), &["target"]);
 }
+
+#[cfg(unix)]
+#[test]
+fn scanner_does_not_return_symbolic_link_artifacts() {
+    use std::os::unix::fs::symlink;
+
+    let root = TempDir::new().unwrap();
+    let real_target = TempDir::new().unwrap();
+    std::fs::write(root.path().join("Cargo.toml"), "[package]").unwrap();
+    symlink(real_target.path(), root.path().join("target")).unwrap();
+
+    let result = scan(root.path(), &[Ecosystem::Rust]).unwrap();
+
+    assert!(result.artifacts.is_empty());
+}

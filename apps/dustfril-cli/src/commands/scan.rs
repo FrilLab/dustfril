@@ -5,12 +5,17 @@ use crate::{
     shared::path::{resolve_path, validate_path},
 };
 
-pub fn execute(args: PathArgs) {
-    let path = resolve_path(&args.path);
+pub fn execute(args: PathArgs) -> bool {
+    let path = match resolve_path(&args.path) {
+        Ok(path) => path,
+        Err(error) => {
+            eprintln!("Failed to resolve path: {error}");
+            return false;
+        }
+    };
 
     if !validate_path(&path) {
-        eprintln!("Invalid path");
-        return;
+        return false;
     }
 
     let ecosystems = args.ecosystems();
@@ -19,20 +24,25 @@ pub fn execute(args: PathArgs) {
         Ok(res) => res,
         Err(e) => {
             eprintln!("Scan failed: {}", e);
-            return;
+            return false;
         }
     };
 
-    let total_size_bytes = api::analyze(result.clone())
-        .map(|analysis| analysis.total_size_bytes)
-        .unwrap_or_default();
-    if let Err(error) = api::history::record_scan(&path, &result, total_size_bytes) {
-        eprintln!("Failed to record scan history: {error}");
+    match api::analyze(result.clone()) {
+        Ok(analysis) => {
+            if let Err(error) = api::history::record_scan(&path, &result, analysis.total_size_bytes)
+            {
+                eprintln!("Failed to record scan history: {error}");
+            }
+        }
+        Err(error) => {
+            eprintln!("Failed to calculate scan size; history was not recorded: {error}");
+        }
     }
 
     if result.artifacts.is_empty() {
         println!("No artifacts found.");
-        return;
+        return true;
     }
 
     println!("Found {} artifact(s)\n", result.artifacts.len());
@@ -40,4 +50,6 @@ pub fn execute(args: PathArgs) {
     for artifact in result.artifacts {
         println!("  [{}] {}", artifact.ecosystem, artifact.path.display());
     }
+
+    true
 }

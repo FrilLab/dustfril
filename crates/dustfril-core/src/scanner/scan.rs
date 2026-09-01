@@ -12,7 +12,7 @@ pub fn scan(root: &Path, ecosystems: &[Ecosystem]) -> DustResult<ScanResult> {
 
     let mut result = ScanResult::default();
 
-    for dir in walk_dirs(root) {
+    for dir in walk_dirs(root)? {
         for detector in &detectors {
             if !detector.matches(&dir) {
                 continue;

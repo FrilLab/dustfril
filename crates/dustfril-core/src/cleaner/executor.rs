@@ -1,5 +1,7 @@
 use std::{fs, io, path::Path};
 
+use directories::BaseDirs;
+
 use crate::{
     error::DustResult,
     models::{
@@ -40,7 +42,7 @@ pub fn execute_cleanup(plan: &CleanupPlan, mode: DeleteMode) -> DustResult<Clean
     Ok(result)
 }
 
-pub fn delete_path(path: &Path, mode: DeleteMode) -> io::Result<()> {
+fn delete_path(path: &Path, mode: DeleteMode) -> io::Result<()> {
     match mode {
         DeleteMode::Trash => move_to_trash(path),
         DeleteMode::Permanent => permanently_delete(path),
@@ -48,22 +50,35 @@ pub fn delete_path(path: &Path, mode: DeleteMode) -> io::Result<()> {
 }
 
 fn permanently_delete(path: &Path) -> io::Result<()> {
-    let metadata = fs::metadata(path)?;
+    let metadata = fs::symlink_metadata(path)?;
 
-    if metadata.is_dir() {
-        fs::remove_dir_all(path)
-    } else {
-        fs::remove_file(path)
+    if metadata.file_type().is_symlink() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "refusing to delete a symbolic link",
+        ));
     }
+
+    if !metadata.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "refusing to delete a non-directory artifact",
+        ));
+    }
+
+    fs::remove_dir_all(path)
 }
 
 fn move_to_trash(path: &Path) -> io::Result<()> {
-    // TODO: Revisit trash behavior per platform and replace this fallback with
-    // a stricter capability check once audit/cleanup UX is finalized.
-    match trash::delete(path) {
-        Ok(()) if !path.exists() => Ok(()),
-        Ok(()) | Err(_) => permanently_delete(path),
+    trash::delete(path).map_err(|error| io::Error::other(error.to_string()))?;
+
+    if path.exists() {
+        return Err(io::Error::other(
+            "trash operation completed but the artifact is still present",
+        ));
     }
+
+    Ok(())
 }
 
 fn failure_reason(error: &io::Error) -> CleanupFailureReason {
@@ -78,6 +93,10 @@ fn validate_candidate(candidate: &CleanupCandidate) -> Result<(), CleanupFailure
     let metadata = fs::symlink_metadata(&candidate.path).map_err(|e| failure_reason(&e))?;
     if metadata.file_type().is_symlink() {
         return Err(CleanupFailureReason::SymbolicLink);
+    }
+
+    if !metadata.is_dir() {
+        return Err(CleanupFailureReason::UnsafePath);
     }
 
     if !is_safe_cleanup_candidate(candidate) {
@@ -96,5 +115,33 @@ fn is_safe_cleanup_candidate(candidate: &CleanupCandidate) -> bool {
         return false;
     };
 
-    detector.artifact_paths().contains(&name)
+    if !detector.artifact_paths().contains(&name) {
+        return false;
+    }
+
+    let Ok(canonical_path) = fs::canonicalize(&candidate.path) else {
+        return false;
+    };
+
+    // Never remove a directory directly below a filesystem root, the current
+    // working directory, or the user's home directory. The plan does not carry
+    // a project root, so these checks provide a conservative final boundary at
+    // execution time.
+    if is_protected_path(&canonical_path) {
+        return false;
+    }
+
+    true
+}
+
+pub(super) fn is_protected_path(path: &Path) -> bool {
+    path.parent()
+        .map(|parent| parent.parent().is_none())
+        .unwrap_or(true)
+        || std::env::current_dir()
+            .map(|current_dir| path == current_dir)
+            .unwrap_or(false)
+        || BaseDirs::new()
+            .map(|base_dirs| path == base_dirs.home_dir())
+            .unwrap_or(false)
 }

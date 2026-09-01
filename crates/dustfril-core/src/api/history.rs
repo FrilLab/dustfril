@@ -80,3 +80,63 @@ fn cleanup_entry(activity: ActivityRecord) -> Option<CleanupHistoryEntry> {
         failed_paths,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+    use crate::models::{ActivityKind, ActivityResult};
+
+    #[test]
+    fn cleanup_history_projection_preserves_cleanup_details() {
+        let activity = ActivityRecord {
+            id: "activity-1".to_owned(),
+            timestamp: chrono::DateTime::parse_from_rfc3339("2026-01-02T03:04:05Z")
+                .unwrap()
+                .with_timezone(&chrono::Utc),
+            kind: ActivityKind::Cleanup,
+            result: ActivityResult::new(
+                false,
+                json!({
+                    "mode": "permanent",
+                    "deleted": ["target"],
+                    "failed": [{"path": "node_modules", "reason": "NotFound"}],
+                    "freed": 2048
+                }),
+            ),
+        };
+
+        let entry = cleanup_entry(activity).unwrap();
+
+        assert_eq!(entry.mode, DeleteMode::Permanent);
+        assert_eq!(entry.freed_size_bytes, 2048);
+        assert_eq!(
+            entry.deleted_paths,
+            vec![std::path::PathBuf::from("target")]
+        );
+        assert_eq!(
+            entry.failed_paths,
+            vec![std::path::PathBuf::from("node_modules")]
+        );
+    }
+
+    #[test]
+    fn cleanup_history_projection_ignores_non_cleanup_or_invalid_records() {
+        let scan = ActivityRecord {
+            id: "scan-1".to_owned(),
+            timestamp: chrono::Utc::now(),
+            kind: ActivityKind::Scan,
+            result: ActivityResult::new(true, json!({})),
+        };
+        let invalid_cleanup = ActivityRecord {
+            id: "cleanup-1".to_owned(),
+            timestamp: chrono::Utc::now(),
+            kind: ActivityKind::Cleanup,
+            result: ActivityResult::new(true, json!({"mode": "unknown"})),
+        };
+
+        assert!(cleanup_entry(scan).is_none());
+        assert!(cleanup_entry(invalid_cleanup).is_none());
+    }
+}

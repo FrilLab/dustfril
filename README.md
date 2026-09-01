@@ -23,6 +23,11 @@ The repository is split into a reusable Rust core crate, a CLI app, and a Tauri 
 - Check supported lockfile presence and Git status
 - Persist CLI cleanup history to the OS app data directory
 
+Scans reject missing, symbolic-link, or non-directory roots and report
+filesystem traversal errors. Cleanup only accepts real artifact directories,
+refuses symbolic links and protected paths, and reports Trash failures without
+permanently deleting the candidate as a fallback.
+
 ## Detected Artifacts
 
 | Ecosystem | Detected Artifacts |

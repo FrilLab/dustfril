@@ -44,12 +44,10 @@ fn analyze_sets_cleanup_recommendation() {
     let analysis =
         Analyzer::analyze(scan_result(dir.path().to_path_buf(), Ecosystem::Rust)).unwrap();
 
-    assert!(matches!(
+    assert_eq!(
         analysis.artifacts[0].recommendation,
         CleanupRecommendation::Keep
-            | CleanupRecommendation::NeedsReview
-            | CleanupRecommendation::SafeToClean
-    ));
+    );
 }
 
 #[test]
@@ -120,4 +118,25 @@ fn analyze_preserves_artifact_metadata() {
     assert_eq!(artifact.artifact.ecosystem, Ecosystem::Node);
 
     assert_eq!(artifact.artifact.path, dir.path());
+}
+
+#[cfg(unix)]
+#[test]
+fn analyze_does_not_count_files_reached_through_symbolic_links() {
+    use std::os::unix::fs::symlink;
+
+    let root = TempDir::new().unwrap();
+    let outside = TempDir::new().unwrap();
+    fs::write(outside.path().join("outside.txt"), b"outside").unwrap();
+    symlink(
+        outside.path().join("outside.txt"),
+        root.path().join("link.txt"),
+    )
+    .unwrap();
+
+    let analysis =
+        Analyzer::analyze(scan_result(root.path().to_path_buf(), Ecosystem::Rust)).unwrap();
+
+    assert_eq!(analysis.artifacts[0].size_bytes, 0);
+    assert_eq!(analysis.total_size_bytes, 0);
 }

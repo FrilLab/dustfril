@@ -34,5 +34,6 @@ cargo build -p dustfril-cli
 
 - Supported ecosystem filters: `--rust`, `--node`, `--java`
 - `clean` asks for confirmation before deletion
+- command failures return a non-zero process exit status
 - Activity history is stored in the OS app data directory as a versioned `history.json`.
   Existing cleanup-history arrays are migrated when the file is read or appended to.

@@ -1,5 +1,6 @@
 use std::{
-    fs, io,
+    fs::{self, OpenOptions},
+    io::{self, Write},
     path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
 };
@@ -14,6 +15,8 @@ use crate::{
 };
 
 const HISTORY_VERSION: u32 = 1;
+
+static NEXT_TEMP_FILE_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ActivityHistoryFile {
@@ -118,10 +121,37 @@ fn save(path: &Path, records: &[ActivityRecord]) -> DustResult<()> {
         records: records.to_vec(),
     };
     let json = serde_json::to_string_pretty(&history).map_err(json_error)?;
+    let temporary_path = temporary_path(path);
 
-    fs::write(path, json)?;
+    let write_result = (|| -> io::Result<()> {
+        let mut file = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&temporary_path)?;
+        file.write_all(json.as_bytes())?;
+        file.sync_all()?;
+        fs::rename(&temporary_path, path)
+    })();
+
+    if let Err(error) = write_result {
+        // The original history remains untouched when serialization or the
+        // replacement fails. Best-effort cleanup avoids leaving stale files
+        // beside the history file without hiding the actual write error.
+        let _ = fs::remove_file(&temporary_path);
+        return Err(error.into());
+    }
 
     Ok(())
+}
+
+fn temporary_path(path: &Path) -> PathBuf {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("history.json");
+    let id = NEXT_TEMP_FILE_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+    path.with_file_name(format!(".{file_name}.{}.{}.tmp", std::process::id(), id))
 }
 
 fn json_error(error: serde_json::Error) -> DustError {
@@ -225,6 +255,48 @@ mod tests {
         .unwrap();
 
         assert_eq!(load_unlocked(&path).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn corrupted_history_is_reported_without_overwriting_the_file() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("history.json");
+        let original = "{not valid json";
+        std::fs::write(&path, original).unwrap();
+
+        let result = load_unlocked(&path);
+
+        assert!(matches!(result, Err(DustError::Io(_))));
+        assert_eq!(std::fs::read_to_string(path).unwrap(), original);
+    }
+
+    #[test]
+    fn unsupported_history_version_is_rejected() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("history.json");
+        std::fs::write(&path, r#"{"version":2,"records":[]}"#).unwrap();
+
+        let result = load_unlocked(&path);
+
+        assert!(
+            matches!(result, Err(DustError::Io(error)) if error.to_string().contains("Unsupported activity history version: 2"))
+        );
+    }
+
+    #[test]
+    fn save_replaces_history_without_leaving_a_temporary_file() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("history.json");
+        let activity = ActivityRecord::new(
+            ActivityKind::Scan,
+            ActivityResult::new(true, json!({"artifacts": 0})),
+        );
+
+        record_to(&path, activity).unwrap();
+
+        let files = std::fs::read_dir(temp.path()).unwrap().collect::<Vec<_>>();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].as_ref().unwrap().file_name(), "history.json");
     }
 
     #[test]

@@ -98,3 +98,47 @@ fn cleanup_entry_to_dto(
             .collect(),
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::contract::DeleteModeDto;
+    use dustfril_core::models::{ActivityResult, CleanupHistoryEntry};
+    use serde_json::json;
+
+    #[test]
+    fn activity_record_conversion_preserves_kind_and_result() {
+        let entry = ActivityRecord::new(
+            ActivityKind::Security,
+            ActivityResult::new(true, json!({"warnings": 0})),
+        );
+
+        let dto = activity_record_to_dto(entry).unwrap();
+
+        assert_eq!(dto.kind, "Security");
+        assert!(dto.timestamp_ms > 0);
+        assert_eq!(dto.result.details["warnings"], 0);
+    }
+
+    #[test]
+    fn cleanup_entry_conversion_maps_paths_and_mode() {
+        let entry = CleanupHistoryEntry {
+            executed_at: ActivityRecord::new(
+                ActivityKind::Cleanup,
+                ActivityResult::new(true, json!({})),
+            )
+            .timestamp,
+            mode: DeleteMode::Permanent,
+            freed_size_bytes: 10,
+            deleted_paths: vec!["target".into()],
+            failed_paths: vec!["node_modules".into()],
+        };
+
+        let dto = cleanup_entry_to_dto(entry).unwrap();
+
+        assert_eq!(dto.mode, DeleteModeDto::Permanent);
+        assert_eq!(dto.freed_size_bytes, 10);
+        assert_eq!(dto.deleted_paths, vec!["target"]);
+        assert_eq!(dto.failed_paths, vec!["node_modules"]);
+    }
+}
