@@ -133,8 +133,21 @@ mod tests {
     fn write_tool(directory: &Path, name: &str, bytes: &[u8]) -> std::path::PathBuf {
         let path = directory.join(name);
         fs::write(&path, bytes).unwrap();
+        make_executable(&path);
         path
     }
+
+    #[cfg(unix)]
+    fn make_executable(path: &Path) {
+        use std::os::unix::fs::PermissionsExt;
+
+        let mut permissions = fs::metadata(path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(path, permissions).unwrap();
+    }
+
+    #[cfg(not(unix))]
+    fn make_executable(_path: &Path) {}
 
     fn scan_one(tool_name: &str, resolver: &ToolResolver, baseline_path: &Path) -> IntegrityCheck {
         scan_with_resolver(&[tool(tool_name)], resolver, baseline_path)
@@ -167,7 +180,9 @@ mod tests {
         let state_path = temp.path().join("integrity.json");
         let resolver = ToolResolver::from_paths([temp.path().to_path_buf()]);
 
-        let first = scan_one("node", &resolver, &state_path);
+        let first_report = scan_with_resolver(&[tool("node")], &resolver, &state_path).unwrap();
+        assert!(!first_report.has_changes());
+        let first = first_report.checks.into_iter().next().unwrap();
         assert_eq!(first.status, IntegrityStatus::NewBaseline);
         assert_eq!(first.observation.as_ref().unwrap().size_bytes, 13);
         assert_eq!(
@@ -218,6 +233,31 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn path_lookup_skips_a_non_executable_shadow_candidate() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = TempDir::new().unwrap();
+        let shadow_directory = temp.path().join("shadow");
+        let executable_directory = temp.path().join("executable");
+        fs::create_dir(&shadow_directory).unwrap();
+        fs::create_dir(&executable_directory).unwrap();
+        let shadow = write_tool(&shadow_directory, "node", b"not runnable");
+        write_tool(&executable_directory, "node", b"runnable");
+        let mut permissions = fs::metadata(&shadow).unwrap().permissions();
+        permissions.set_mode(0o644);
+        fs::set_permissions(&shadow, permissions).unwrap();
+        let resolver = ToolResolver::from_paths([shadow_directory, executable_directory.clone()]);
+
+        let observation = inspect_tool(&tool("node"), &resolver).unwrap();
+
+        assert_eq!(
+            observation.canonical_path,
+            fs::canonicalize(executable_directory.join("node")).unwrap()
+        );
+    }
+
     #[test]
     fn missing_tool_is_reported_without_erasing_previous_baseline() {
         let temp = TempDir::new().unwrap();
@@ -233,7 +273,9 @@ mod tests {
         );
         fs::remove_file(directory.join("node")).unwrap();
 
-        let missing = scan_one("node", &resolver, &state_path);
+        let missing_report = scan_with_resolver(&[tool("node")], &resolver, &state_path).unwrap();
+        assert!(missing_report.has_changes());
+        let missing = missing_report.checks.into_iter().next().unwrap();
         assert_eq!(missing.status, IntegrityStatus::Missing);
         assert_eq!(
             missing.failure.unwrap().kind,

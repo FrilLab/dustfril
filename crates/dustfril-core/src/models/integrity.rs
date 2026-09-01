@@ -77,6 +77,8 @@ pub enum IntegrityFailureKind {
     NotFound,
     /// The resolved target is not a regular file.
     NonRegularFile,
+    /// The resolved regular file is not executable for the current platform.
+    NonExecutable,
     /// Metadata, opening, or reading the target was denied or unavailable.
     Unreadable,
     /// A symlink target does not exist.
@@ -93,6 +95,7 @@ impl fmt::Display for IntegrityFailureKind {
             Self::InvalidToolName => "Invalid tool name",
             Self::NotFound => "Tool not found",
             Self::NonRegularFile => "Resolved target is not a regular file",
+            Self::NonExecutable => "Resolved target is not executable",
             Self::Unreadable => "Target is unreadable",
             Self::BrokenSymlink => "Broken symlink",
             Self::SymlinkLoop => "Symlink loop",
@@ -162,7 +165,7 @@ impl IntegrityReport {
             matches!(
                 check.status,
                 IntegrityStatus::ContentChanged | IntegrityStatus::ResolvedPathChanged
-            )
+            ) || (check.status == IntegrityStatus::Missing && check.previous_observation.is_some())
         })
     }
 }

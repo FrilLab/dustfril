@@ -62,7 +62,12 @@ impl ToolResolver {
             for candidate_name in candidate_names(&tool.name) {
                 let candidate = make_absolute(&directory.join(candidate_name));
                 match fs::symlink_metadata(&candidate) {
-                    Ok(_) => return self.inspect_candidate(tool, candidate),
+                    Ok(_) => match self.inspect_candidate(tool, candidate) {
+                        Err(failure) if failure.kind == IntegrityFailureKind::NonExecutable => {
+                            continue;
+                        }
+                        result => return result,
+                    },
                     Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
                     Err(error) => {
                         return Err(io_failure(
@@ -128,6 +133,17 @@ impl ToolResolver {
             ));
         }
 
+        if !is_executable(&canonical_path, &target_metadata) {
+            return Err(IntegrityFailure::new(
+                IntegrityFailureKind::NonExecutable,
+                format!(
+                    "resolved target for {} is not executable: {}",
+                    tool.name,
+                    canonical_path.display()
+                ),
+            ));
+        }
+
         Ok(ResolvedExecutable {
             requested_tool: tool.name.clone(),
             resolved_path,
@@ -135,6 +151,33 @@ impl ToolResolver {
             symlink_target,
         })
     }
+}
+
+#[cfg(unix)]
+fn is_executable(_path: &Path, metadata: &fs::Metadata) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+
+    metadata.permissions().mode() & 0o111 != 0
+}
+
+#[cfg(windows)]
+fn is_executable(path: &Path, _metadata: &fs::Metadata) -> bool {
+    let Some(extension) = path.extension().and_then(|extension| extension.to_str()) else {
+        return false;
+    };
+    let extension = format!(".{extension}");
+    let path_extensions =
+        env::var_os("PATHEXT").unwrap_or_else(|| OsString::from(".COM;.EXE;.BAT;.CMD"));
+
+    path_extensions
+        .to_string_lossy()
+        .split(';')
+        .any(|candidate| candidate.eq_ignore_ascii_case(&extension))
+}
+
+#[cfg(not(any(unix, windows)))]
+fn is_executable(_path: &Path, _metadata: &fs::Metadata) -> bool {
+    true
 }
 
 /// The selected PATH identity and the canonical regular file to hash.
