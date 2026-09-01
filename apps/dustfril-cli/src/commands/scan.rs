@@ -23,6 +23,13 @@ pub fn execute(args: PathArgs) {
         }
     };
 
+    let total_size_bytes = api::analyze(result.clone())
+        .map(|analysis| analysis.total_size_bytes)
+        .unwrap_or_default();
+    if let Err(error) = api::history::record_scan(&path, &result, total_size_bytes) {
+        eprintln!("Failed to record scan history: {error}");
+    }
+
     if result.artifacts.is_empty() {
         println!("No artifacts found.");
         return;

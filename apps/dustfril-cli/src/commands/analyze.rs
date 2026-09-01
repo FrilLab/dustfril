@@ -74,13 +74,19 @@ pub fn execute(args: PathArgs) {
         }
     };
 
-    let analysis_result = match api::analyze(scan_result) {
+    let analysis_result = match api::analyze(scan_result.clone()) {
         Ok(res) => res,
         Err(e) => {
             eprintln!("Analysis failed: {}", e);
             return;
         }
     };
+
+    if let Err(error) =
+        api::history::record_scan(&path, &scan_result, analysis_result.total_size_bytes)
+    {
+        eprintln!("Failed to record scan history: {error}");
+    }
 
     if analysis_result.artifacts.is_empty() {
         println!("No artifacts found.");

@@ -63,6 +63,13 @@ async fn scan(options: RunOptions) -> Result<ScanResponse, String> {
 
     tokio::task::spawn_blocking(move || {
         let result = api::scan(&root, &ecosystems).map_err(|error| error.to_string())?;
+        let total_size_bytes = api::analyze(result.clone())
+            .map_err(|error| error.to_string())?
+            .total_size_bytes;
+
+        if let Err(error) = history::record_scan(&root, &result, total_size_bytes) {
+            eprintln!("Failed to record scan history: {error}");
+        }
 
         Ok(ScanResponse {
             artifacts: result
@@ -115,7 +122,9 @@ async fn build_cleanup_plan(options: RunOptions) -> Result<CleanupPlanResponse, 
 
     tokio::task::spawn_blocking(move || {
         let scan_result = api::scan(&root, &ecosystems).map_err(|error| error.to_string())?;
-        let plan = api::clean::build_plan(scan_result).map_err(|error| error.to_string())?;
+        let analysis = api::analyze(scan_result).map_err(|error| error.to_string())?;
+        let plan =
+            api::clean::build_plan_from_analysis(analysis).map_err(|error| error.to_string())?;
 
         Ok(CleanupPlanResponse {
             reclaimable_size_bytes: plan.reclaimable_size_bytes(),
@@ -176,10 +185,19 @@ async fn execute_cleanup(request: ExecuteCleanupRequest) -> Result<CleanupResult
 }
 
 #[tauri::command]
-async fn load_cleanup_history() -> Result<Vec<CleanupHistoryEntryDto>, String> {
+async fn load_activity_history() -> Result<Vec<history::ActivityRecordDto>, String> {
     tokio::task::spawn_blocking(|| history::load_entries().map_err(|error| error.to_string()))
         .await
         .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn load_cleanup_history() -> Result<Vec<CleanupHistoryEntryDto>, String> {
+    tokio::task::spawn_blocking(|| {
+        history::load_cleanup_entries().map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -206,6 +224,7 @@ pub fn run() {
             analyze,
             build_cleanup_plan,
             execute_cleanup,
+            load_activity_history,
             load_cleanup_history,
             audit
         ])

@@ -45,7 +45,7 @@ boundary and matching Rust serialization tests and TypeScript updates.
 - Finder-like artifact explorer with category sidebar navigation
 - Scan, analyze, review, and cleanup workflow
 - Safe cleanup with Trash or permanent delete confirmation
-- Cleanup history viewer backed by shared core history storage
+- Activity history viewer backed by shared, versioned core history storage
 
 ## UI Components
 

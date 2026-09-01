@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type {
   AnalysisResponse,
   CleanupCandidate,
-  CleanupHistoryEntry,
+  ActivityRecord,
   CleanupPlanResponse,
   CleanupResultResponse,
   DeleteMode,
@@ -47,6 +47,6 @@ export function executeCleanup(candidates: CleanupCandidate[], mode: DeleteMode)
   });
 }
 
-export function loadCleanupHistory() {
-  return invoke<CleanupHistoryEntry[]>(commands.loadCleanupHistory);
+export function loadActivityHistory() {
+  return invoke<ActivityRecord[]>('load_activity_history');
 }

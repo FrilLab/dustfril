@@ -5,7 +5,7 @@ import {
   buildCleanupPlan,
   defaultRoot,
   executeCleanup,
-  loadCleanupHistory,
+  loadActivityHistory,
   scanArtifacts,
 } from '../../../lib/tauri';
 import {
@@ -18,7 +18,7 @@ import {
 import type { SidebarEntry } from '../../../components/Sidebar/Sidebar';
 import type {
   AnalysisResponse,
-  CleanupHistoryEntry,
+  ActivityRecord,
   CleanupPlanResponse,
   CleanupResultResponse,
   DeleteMode,
@@ -49,7 +49,7 @@ export function useAppState() {
   const [analysisResult, setAnalysisResult] = useState<AnalysisResponse | null>(null);
   const [cleanupPlan, setCleanupPlan] = useState<CleanupPlanResponse | null>(null);
   const [cleanupResult, setCleanupResult] = useState<CleanupResultResponse | null>(null);
-  const [historyEntries, setHistoryEntries] = useState<CleanupHistoryEntry[]>([]);
+  const [historyEntries, setHistoryEntries] = useState<ActivityRecord[]>([]);
   const [selectedCleanupPaths, setSelectedCleanupPaths] = useState<string[]>([]);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [lastScanAtMs, setLastScanAtMs] = useState<number | null>(null);
@@ -60,7 +60,7 @@ export function useAppState() {
       .then(setRoot)
       .catch((invokeError) => setError(String(invokeError)));
 
-    loadCleanupHistory()
+    loadActivityHistory()
       .then(setHistoryEntries)
       .catch((invokeError) => setError(String(invokeError)));
   }, []);
@@ -252,6 +252,7 @@ export function useAppState() {
     setCleanupPlan(plan);
     setSelectedCleanupPaths(plan.candidates.map((candidate) => candidate.path));
     setLastScanAtMs(Date.now());
+    setHistoryEntries(await loadActivityHistory());
   }
 
   function toggleCleanupPath(path: string) {
@@ -270,6 +271,7 @@ export function useAppState() {
   async function handleAnalyzeCategory() {
     await runAction('analyze', async () => {
       setAnalysisResult(await analyzeArtifacts(runOptions));
+      setHistoryEntries(await loadActivityHistory());
       setExplorerWorkflow('analysis');
     });
   }
@@ -279,6 +281,7 @@ export function useAppState() {
       const plan = await buildCleanupPlan(runOptions);
       setCleanupPlan(plan);
       setSelectedCleanupPaths(plan.candidates.map((candidate) => candidate.path));
+      setHistoryEntries(await loadActivityHistory());
       setExplorerWorkflow('cleanup');
     });
   }
@@ -321,7 +324,7 @@ export function useAppState() {
         current.filter((path) => !result.deletedPaths.includes(path)),
       );
       setConfirmDialogOpen(false);
-      setHistoryEntries(await loadCleanupHistory());
+      setHistoryEntries(await loadActivityHistory());
     });
   }
 

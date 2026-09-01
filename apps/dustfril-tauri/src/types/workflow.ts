@@ -65,12 +65,34 @@ export type LifecycleScript = {
   riskLevel: RiskLevel;
 };
 
-export type CleanupHistoryEntry = {
-  executedAtMs: number;
-  mode: DeleteMode;
-  freedSizeBytes: number;
-  deletedPaths: string[];
-  failedPaths: string[];
+export type ActivityKind = 'Scan' | 'Cleanup' | 'Security';
+
+export type ActivityFailure = {
+  path: string;
+  reason?: string;
+};
+
+export type ActivityDetails = {
+  path?: string;
+  artifacts?: number;
+  size?: number;
+  mode?: 'trash' | 'permanent';
+  deleted?: string[];
+  failed?: ActivityFailure[];
+  freed?: number;
+  [key: string]: unknown;
+};
+
+export type ActivityResult = {
+  success: boolean;
+  details: ActivityDetails;
+};
+
+export type ActivityRecord = {
+  id: string;
+  timestampMs: number;
+  kind: ActivityKind;
+  result: ActivityResult;
 };
 
 export type RunOptions = {
