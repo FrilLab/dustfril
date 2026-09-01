@@ -67,6 +67,7 @@ pub enum SignatureFailureKind {
     TargetMissing,
     TargetUnreadable,
     TargetNonRegularFile,
+    TargetChangedDuringVerification,
 }
 
 impl fmt::Display for SignatureFailureKind {
@@ -78,6 +79,7 @@ impl fmt::Display for SignatureFailureKind {
             Self::TargetMissing => "Target missing",
             Self::TargetUnreadable => "Target unreadable",
             Self::TargetNonRegularFile => "Target is not a regular file",
+            Self::TargetChangedDuringVerification => "Target changed during verification",
         };
 
         f.write_str(label)

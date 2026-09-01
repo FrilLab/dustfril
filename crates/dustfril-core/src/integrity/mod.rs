@@ -85,6 +85,7 @@ fn check_tool(
 
     match inspect_tool(tool, resolver) {
         Ok(observation) => {
+            let (observation, signature) = verify_and_reinspect(tool, resolver, observation);
             let status = previous_observation
                 .as_ref()
                 .map_or(IntegrityStatus::NewBaseline, |previous| {
@@ -98,15 +99,13 @@ fn check_tool(
                 .observations
                 .insert(tool.name.clone(), observation.clone());
 
-            let signature = Some(signature::verify(&observation.canonical_path));
-
             IntegrityCheck {
                 requested_tool: tool.name.clone(),
                 status,
                 observation: Some(observation),
                 previous_observation,
                 failure: None,
-                signature,
+                signature: Some(signature),
             }
         }
         Err(failure) => {
@@ -126,6 +125,53 @@ fn check_tool(
             }
         }
     }
+}
+
+/// Re-inspects the resolved target after signature verification so a path or
+/// content replacement during the verifier call cannot be reported with a
+/// signature belonging to a different file version.
+fn verify_and_reinspect(
+    tool: &ToolSpec,
+    resolver: &ToolResolver,
+    observation: ExecutableObservation,
+) -> (ExecutableObservation, crate::models::SignatureReport) {
+    let signature = signature::verify(&observation.canonical_path);
+
+    // Unsupported platforms do not invoke an external verifier, so another
+    // hash pass would add work without closing a verifier TOCTOU window.
+    if signature.status == crate::models::SignatureStatus::Unsupported {
+        return (observation, signature);
+    }
+
+    match inspect_tool(tool, resolver) {
+        Ok(current) if observations_match(&observation, &current) => (observation, signature),
+        Ok(current) => (
+            current,
+            signature::target_changed_report(
+                &signature,
+                "resolved path, symlink relationship, size, or SHA-256 changed during verification",
+            ),
+        ),
+        Err(failure) => (
+            observation,
+            signature::target_changed_report(
+                &signature,
+                format!(
+                    "target could not be re-inspected after verification: {} ({})",
+                    failure.kind, failure.message
+                ),
+            ),
+        ),
+    }
+}
+
+fn observations_match(previous: &ExecutableObservation, current: &ExecutableObservation) -> bool {
+    previous.requested_tool == current.requested_tool
+        && previous.resolved_path == current.resolved_path
+        && previous.canonical_path == current.canonical_path
+        && previous.symlink_target == current.symlink_target
+        && previous.size_bytes == current.size_bytes
+        && previous.sha256 == current.sha256
 }
 
 #[cfg(test)]

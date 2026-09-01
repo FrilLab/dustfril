@@ -33,6 +33,21 @@ pub fn verify(path: &Path) -> SignatureReport {
     }
 }
 
+pub(crate) fn target_changed_report(
+    previous: &SignatureReport,
+    message: impl Into<String>,
+) -> SignatureReport {
+    let mut report = SignatureReport::new(previous.platform, SignatureStatus::InspectionFailed);
+    report.verification_code = previous.verification_code;
+    report.verification_message =
+        Some("The executable changed while signature verification was in progress".to_owned());
+    report.failure = Some(SignatureFailure::new(
+        SignatureFailureKind::TargetChangedDuringVerification,
+        message,
+    ));
+    report
+}
+
 fn validate_target(path: &Path) -> Result<(), SignatureFailure> {
     let metadata = fs::metadata(path).map_err(|error| {
         let kind = if error.kind() == io::ErrorKind::NotFound {
@@ -167,5 +182,17 @@ mod tests {
         let _report = verify(&target);
 
         assert!(!marker.exists());
+    }
+
+    #[test]
+    fn a_changed_target_invalidates_signature_evidence() {
+        let previous = SignatureReport::new(SignaturePlatform::MacOs, SignatureStatus::Valid);
+        let report = target_changed_report(&previous, "hash changed after verification");
+
+        assert_eq!(report.status, SignatureStatus::InspectionFailed);
+        assert_eq!(
+            report.failure.unwrap().kind,
+            SignatureFailureKind::TargetChangedDuringVerification
+        );
     }
 }

@@ -16,12 +16,18 @@ pub fn verify(path: &Path) -> SignatureReport {
         .output();
 
     match output {
-        Ok(output) => report_from_output(output.status.code(), output.status.success(), &output),
+        Ok(output) => report_from_output(
+            path,
+            output.status.code(),
+            output.status.success(),
+            &output,
+        ),
         Err(error) => report_for_command_error(error),
     }
 }
 
 fn report_from_output(
+    path: &Path,
     exit_code: Option<i32>,
     successful: bool,
     output: &std::process::Output,
@@ -30,10 +36,17 @@ fn report_from_output(
 
     if successful {
         let mut report = SignatureReport::new(SignaturePlatform::MacOs, SignatureStatus::Valid);
-        report.signer = details.signer;
-        report.team_identifier = details.team_identifier;
         report.verification_code = exit_code;
         report.verification_message = Some("codesign accepted the executable signature".to_owned());
+        if let Some(metadata) = display_metadata(path) {
+            report.signer = metadata.signer;
+            report.team_identifier = metadata.team_identifier;
+        } else {
+            report.verification_message = Some(
+                "codesign accepted the executable signature; signer metadata is unavailable"
+                    .to_owned(),
+            );
+        }
         return report;
     }
 
@@ -61,6 +74,22 @@ fn report_from_output(
     }
 
     report
+}
+
+fn display_metadata(path: &Path) -> Option<CodesignDetails> {
+    let output = Command::new(CODESIGN_PATH)
+        .arg("-d")
+        .arg("--verbose=4")
+        // `path` is an argument to the verifier, never shell-interpolated.
+        .arg(path.as_os_str())
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    Some(parse_codesign_details(&combined_output(&output)))
 }
 
 fn report_for_command_error(error: io::Error) -> SignatureReport {
@@ -107,6 +136,7 @@ fn parse_codesign_details(output: &str) -> CodesignDetails {
         }
         if let Some(value) = line.strip_prefix("TeamIdentifier=")
             && !value.is_empty()
+            && !value.eq_ignore_ascii_case("not set")
         {
             team_identifier = Some(value.to_owned());
         }
@@ -213,6 +243,8 @@ mod tests {
         let report = verify(Path::new("/usr/bin/true"));
 
         assert_eq!(report.status, SignatureStatus::Valid);
+        assert_eq!(report.signer.as_deref(), Some("Software Signing"));
+        assert!(report.team_identifier.is_none());
         assert!(report.failure.is_none());
     }
 
