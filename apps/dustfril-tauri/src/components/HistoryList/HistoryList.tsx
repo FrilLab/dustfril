@@ -100,7 +100,16 @@ function SecurityDetails({ entry }: { entry: ActivityRecord }) {
     <>
       <div className="mt-4 grid gap-2 text-sm text-slate-300 sm:grid-cols-4">
         <Detail label="Target" value={details.path ?? 'Unknown'} />
-        <Detail label="Ecosystems" value={details.ecosystems?.join(', ') ?? 'All'} />
+        <Detail
+          label="Ecosystems"
+          value={
+            details.ecosystems
+              ? details.ecosystems.length
+                ? details.ecosystems.join(', ')
+                : 'None'
+              : 'All'
+          }
+        />
         <Detail label="Findings" value={String(details.findingCount ?? findings.length)} />
         <Detail label="Highest Risk" value={details.highestRisk ?? 'None'} />
       </div>

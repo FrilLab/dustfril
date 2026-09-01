@@ -4,7 +4,10 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::models::{CleanupResult, DeleteMode, Ecosystem, RiskLevel, ScanResult, SecurityReport};
+use crate::models::{
+    CleanupResult, DeleteMode, Ecosystem, RiskLevel, ScanResult, SecurityReport,
+    effective_security_ecosystems,
+};
 
 /// The kind of operation represented by an activity record.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -114,7 +117,7 @@ impl ActivityResult {
             true,
             json!({
                 "path": sanitize_path(target_path),
-                "ecosystems": ecosystem_labels(ecosystems),
+                "ecosystems": ecosystem_labels(&effective_security_ecosystems(ecosystems)),
                 "findingCount": report.findings.len(),
                 "highestRisk": highest_risk.to_string(),
                 "findings": findings,
@@ -134,7 +137,7 @@ impl ActivityResult {
             false,
             json!({
                 "path": sanitize_path(target_path),
-                "ecosystems": ecosystem_labels(ecosystems),
+                "ecosystems": ecosystem_labels(&effective_security_ecosystems(ecosystems)),
                 "findingCount": 0,
                 "highestRisk": RiskLevel::None.to_string(),
                 "findings": [],
