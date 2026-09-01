@@ -12,6 +12,9 @@ This crate contains the filesystem scanners, analyzers, cleanup planner and exec
 - `api::clean::execute`: execute cleanup in Trash or permanent mode
 - `api::audit`: inspect supported lifecycle scripts
 - `api::history`: record and load versioned activity history, including cleanup-history migration
+- `api::security_scan`: detect suspicious lifecycle commands without executing them
+- `api::check_lockfile_integrity`: check supported lockfile presence and Git status
+- `api::history`: record and load cleanup history
 
 ## Supported Coverage
 
@@ -19,6 +22,13 @@ This crate contains the filesystem scanners, analyzers, cleanup planner and exec
 - Node.js: `node_modules/`
 - Java: `build/`
 - Audit: Node lifecycle scripts for npm, pnpm, yarn, and bun
+- Security rules: remote script pipes, download-and-execute chains, PowerShell execution, and permission changes
+- Lockfile integrity: `package-lock.json`, `pnpm-lock.yaml`, `bun.lock`, and `Cargo.lock`
+
+Lockfile checks report `Missing`, `Modified`, `Untracked`, or `Clean`. Git
+worktrees use libgit2 status information equivalent to
+`git status --porcelain -- <lockfile>`; outside Git, only file existence is
+validated, so existing files are reported as `Clean`.
 
 ## Test
 

@@ -18,6 +18,27 @@ Scanner / Analyzer / Cleaner / History
 
 All business rules remain in `dustfril-core`. The desktop layer handles presentation, navigation, and user confirmation only.
 
+## Tauri API Contract
+
+The v0.0.1 frontend/backend boundary is defined by the Rust DTOs in
+`src-tauri/src/contract.rs` and mirrored by TypeScript types in
+`src/types/workflow.ts`. Payload fields use `camelCase`; enum values are
+case-sensitive.
+
+| Command | Request | Response |
+| --- | --- | --- |
+| `default_root` | none | path string |
+| `scan` | `{ options: RunOptions }` | `ScanResponse` |
+| `analyze` | `{ options: RunOptions }` | `AnalysisResponse` |
+| `build_cleanup_plan` | `{ options: RunOptions }` | `CleanupPlanResponse` |
+| `audit` | `{ options: RunOptions }` | `LifecycleScript[]` |
+| `execute_cleanup` | `{ request: { candidates, mode } }` | `CleanupResultResponse` |
+| `load_cleanup_history` | none | `CleanupHistoryEntry[]` |
+
+Contract changes must preserve existing command names, field names, nullability,
+and enum wire values for v0.0.1. Intentional breaking changes require a versioned
+boundary and matching Rust serialization tests and TypeScript updates.
+
 ## v0.0.1 Features
 
 - Dashboard with reclaimable storage, last scan time, and cleanup summary

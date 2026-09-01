@@ -19,6 +19,9 @@ The repository is split into a reusable Rust core crate, a CLI app, and a Tauri 
 - Clean artifacts with Trash or permanent deletion mode
 - Audit Node lifecycle scripts such as `preinstall` and `postinstall`
 - Persist versioned local activity history (including legacy cleanup history migration)
+- Detect suspicious lifecycle commands with rule-based security warnings
+- Check supported lockfile presence and Git status
+- Persist CLI cleanup history to the OS app data directory
 
 ## Detected Artifacts
 
@@ -27,6 +30,11 @@ The repository is split into a reusable Rust core crate, a CLI app, and a Tauri 
 | Rust      | `target/`          |
 | Node.js   | `node_modules/`    |
 | Java      | `build/`           |
+
+Supported lockfiles are `package-lock.json`, `pnpm-lock.yaml`, `bun.lock`,
+and `Cargo.lock`. The Core API reports `Missing`, `Modified`, `Untracked`, or
+`Clean`; Git worktrees use porcelain-equivalent status, while non-Git paths
+only validate existence.
 
 ## CLI Usage
 
@@ -45,6 +53,7 @@ cargo run -p dustfril-cli -- clean --dry-run
 cargo run -p dustfril-cli -- clean
 cargo run -p dustfril-cli -- clean --permanent
 cargo run -p dustfril-cli -- audit --node
+cargo run -p dustfril-cli -- security scan --node
 ```
 
 Filter by ecosystem or pass a target path:
@@ -60,6 +69,11 @@ Available commands:
 - `analyze [path] [--rust] [--node] [--java]`
 - `clean [path] [--dry-run] [--permanent] [--rust] [--node] [--java]`
 - `audit [path] [--node]`
+- `security scan [path] [--node]`
+
+`security scan` statically checks Node lifecycle scripts for suspicious remote
+script execution, PowerShell execution, permission changes, and download-then-
+execute chains. It never runs the detected commands or modifies project files.
 
 ## Desktop App
 

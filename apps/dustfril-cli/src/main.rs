@@ -31,5 +31,11 @@ fn main() {
         Commands::Audit(args) => {
             commands::audit::execute(&args);
         }
+
+        Commands::Security(args) => match args.command {
+            cli::SecurityCommands::Scan(args) => {
+                commands::security::scan(&args);
+            }
+        },
     }
 }
