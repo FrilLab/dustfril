@@ -28,12 +28,13 @@ case-sensitive.
 | Command | Request | Response |
 | --- | --- | --- |
 | `default_root` | none | path string |
-| `scan` | `{ options: RunOptions }` | `ScanResponse` |
+| `scan` | `{ options: RunOptions }` | `ScanResponse` (may include additive `historyWarning`) |
 | `analyze` | `{ options: RunOptions }` | `AnalysisResponse` |
 | `build_cleanup_plan` | `{ options: RunOptions }` | `CleanupPlanResponse` |
 | `audit` | `{ options: RunOptions }` | `LifecycleScript[]` |
-| `security_scan` | `{ options: RunOptions }` | `SecurityScanResponse` |
-| `execute_cleanup` | `{ request: { candidates, mode } }` | `CleanupResultResponse` |
+| `security_scan` | `{ options: RunOptions }` | `SecurityScanResponse` (may include additive `historyWarning`) |
+| `execute_cleanup` | `{ request: { candidates, mode } }` | `CleanupResultResponse` (may include additive `historyWarning`) |
+| `load_activity_history` | none | `ActivityRecord[]` |
 | `load_cleanup_history` | none | `CleanupHistoryEntry[]` |
 
 Contract changes must preserve existing command names, field names, nullability,
@@ -47,6 +48,10 @@ boundary and matching Rust serialization tests and TypeScript updates.
 - Scan, analyze, review, and cleanup workflow
 - Safe cleanup with Trash or permanent delete confirmation
 - Activity history viewer backed by shared, versioned core history storage
+
+Activity persistence is auxiliary to scan, cleanup, and security results. If a
+history write fails, the operation response remains available and includes an
+additive `historyWarning` for the desktop status surface.
 
 ## UI Components
 

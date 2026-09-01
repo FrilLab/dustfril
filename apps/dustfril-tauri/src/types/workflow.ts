@@ -18,6 +18,7 @@ export type Artifact = {
 
 export type ScanResponse = {
   artifacts: Artifact[];
+  historyWarning?: string;
 };
 
 export type ArtifactAnalysis = {
@@ -55,6 +56,7 @@ export type CleanupResultResponse = {
   deletedPaths: string[];
   failedPaths: CleanupFailure[];
   freedSizeBytes: number;
+  historyWarning?: string;
 };
 
 export type LifecycleScript = {
@@ -92,6 +94,7 @@ export type SecurityScanResponse = {
   lifecycleWarnings: SecurityWarning[];
   lockfiles: LockfileCheck[];
   manifests: string[];
+  historyWarning?: string;
 };
 
 export type ActivityKind = 'Scan' | 'Cleanup' | 'Security';

@@ -33,15 +33,27 @@ pub fn dry_run(args: &CleanArgs) -> bool {
 }
 
 pub fn execute(args: &CleanArgs) -> bool {
+    let mode = if args.permanent {
+        DeleteMode::Permanent
+    } else {
+        DeleteMode::default()
+    };
+
     let plan = match build_cleanup_plan(args) {
         Ok(plan) => plan,
         Err(e) => {
+            if let Err(history_error) = history::record_cleanup_failure(mode, &e.to_string()) {
+                eprintln!("Failed to record cleanup failure history: {history_error}");
+            }
             eprintln!("Cleanup preparation failed: {}", e);
             return false;
         }
     };
 
     if plan.candidates.is_empty() {
+        let result = CleanupResult::default();
+        history::record(mode, &result)
+            .unwrap_or_else(|e| eprintln!("Failed to record cleanup history: {e}"));
         println!("No cleanup candidates found.");
         return true;
     }
@@ -60,15 +72,12 @@ pub fn execute(args: &CleanArgs) -> bool {
         }
     }
 
-    let mode = if args.permanent {
-        DeleteMode::Permanent
-    } else {
-        DeleteMode::default()
-    };
-
     let result = match api::clean::execute(&plan, mode) {
         Ok(res) => res,
         Err(e) => {
+            if let Err(history_error) = history::record_cleanup_failure(mode, &e.to_string()) {
+                eprintln!("Failed to record cleanup failure history: {history_error}");
+            }
             eprintln!("Cleanup failed: {}", e);
             return false;
         }
@@ -95,10 +104,7 @@ fn build_cleanup_plan(args: &CleanArgs) -> Result<CleanupPlan, DustError> {
     let ecosystems = args.ecosystems();
 
     let scan = api::scan(&path, &ecosystems)?;
-    let analysis = api::analyze(scan.clone())?;
-    if let Err(error) = api::history::record_scan(&path, &scan, analysis.total_size_bytes) {
-        eprintln!("Failed to record scan history: {error}");
-    }
+    let analysis = api::analyze(scan)?;
     let plan = api::clean::build_plan_from_analysis(analysis)?;
 
     Ok(plan)

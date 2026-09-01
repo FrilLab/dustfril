@@ -35,6 +35,16 @@ pub fn record_scan(
         .map_err(|error| error.to_string())
 }
 
+/// Records a scan that failed before producing a scan result.
+pub fn record_scan_failure(target_path: &Path, reason: &str) -> Result<(), String> {
+    api::history::record_scan_failure(target_path, reason).map_err(|error| error.to_string())
+}
+
+/// Records a cleanup that failed before producing a cleanup result.
+pub fn record_cleanup_failure(mode: DeleteMode, reason: &str) -> Result<(), String> {
+    api::history::record_cleanup_failure(mode, reason).map_err(|error| error.to_string())
+}
+
 /// Records one explicit security scan for the desktop activity log.
 pub fn record_security_scan(
     target_path: &Path,

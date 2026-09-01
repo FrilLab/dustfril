@@ -33,6 +33,16 @@ pub fn record_scan(
     history::record_scan(target_path, result, total_size_bytes)
 }
 
+/// Records a scan that failed before producing a scan result.
+pub fn record_scan_failure(target_path: &Path, reason: &str) -> DustResult<()> {
+    history::record_scan_failure(target_path, reason)
+}
+
+/// Records a cleanup that failed before producing a cleanup result.
+pub fn record_cleanup_failure(mode: DeleteMode, reason: &str) -> DustResult<()> {
+    history::record_cleanup_failure(mode, reason)
+}
+
 /// Records one explicit security scan in the unified activity history.
 pub fn record_security_scan(
     target_path: &Path,

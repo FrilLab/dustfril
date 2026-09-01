@@ -2,8 +2,8 @@ use dustfril_core::api;
 use dustfril_core::models::{AnalysisResult, CleanupRecommendation};
 
 use crate::cli::PathArgs;
-use crate::format;
 use crate::shared::path::{resolve_path, validate_path};
+use crate::{format, history};
 
 fn print_summary(analysis: &AnalysisResult) {
     let mut keep = 0;
@@ -74,6 +74,9 @@ pub fn execute(args: PathArgs) -> bool {
     let scan_result = match api::scan(&path, &ecosystems) {
         Ok(res) => res,
         Err(e) => {
+            if let Err(history_error) = history::record_scan_failure(&path, &e.to_string()) {
+                eprintln!("Failed to record scan failure history: {history_error}");
+            }
             eprintln!("Scan failed: {}", e);
             return false;
         }

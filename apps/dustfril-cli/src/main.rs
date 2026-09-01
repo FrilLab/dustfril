@@ -25,6 +25,8 @@ fn main() -> ExitCode {
             }
         }
 
+        Commands::History => commands::history::execute(),
+
         Commands::Audit(args) => commands::audit::execute(&args),
 
         Commands::Security(args) => match args.command {

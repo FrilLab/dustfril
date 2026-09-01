@@ -239,6 +239,13 @@ export function useAppState() {
     } catch (invokeError) {
       if (requestId === actionRequestRef.current) {
         setError(String(invokeError));
+
+        // Failed operations can still leave an activity record behind. Refresh
+        // it without allowing a history-read failure to hide the primary error.
+        const refreshedHistory = await loadActivityHistory().catch(() => null);
+        if (requestId === actionRequestRef.current && refreshedHistory) {
+          setHistoryEntries(refreshedHistory);
+        }
       }
     } finally {
       if (requestId === actionRequestRef.current) {
@@ -264,6 +271,7 @@ export function useAppState() {
     setCleanupPlan(plan);
     setSelectedCleanupPaths(plan.candidates.map((candidate) => candidate.path));
     setLastScanAtMs(Date.now());
+    setError(scan.historyWarning ?? null);
     setHistoryEntries(await loadActivityHistory());
   }
 
@@ -339,7 +347,9 @@ export function useAppState() {
 
       setCleanupResult(result);
       if (result.failedPaths.length) {
-        setError(formatCleanupFailure(result));
+        setError(formatCleanupFailure(result, result.historyWarning));
+      } else {
+        setError(result.historyWarning ?? null);
       }
       setCleanupPlan((current) =>
         current
@@ -408,10 +418,11 @@ export function useAppState() {
   };
 }
 
-function formatCleanupFailure(result: CleanupResultResponse): string {
+function formatCleanupFailure(result: CleanupResultResponse, historyWarning?: string): string {
   const failures = result.failedPaths
     .map((failure) => `${failure.path} (${failure.reason})`)
     .join('; ');
+  const historyMessage = historyWarning ? ` ${historyWarning}` : '';
 
-  return `Cleanup completed with ${result.failedPaths.length} failure(s). Freed ${formatBytes(result.freedSizeBytes)}. Failed: ${failures}`;
+  return `Cleanup completed with ${result.failedPaths.length} failure(s). Freed ${formatBytes(result.freedSizeBytes)}. Failed: ${failures}.${historyMessage}`;
 }
