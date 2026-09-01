@@ -7,11 +7,11 @@
 use std::{fs, path::Path};
 
 use serde_json::Value;
+use url::Url;
 
 use crate::{
     audit_tool,
     error::{DustError, DustResult},
-    fs::walk_dirs,
     lockfile,
     models::{
         Ecosystem, LockfileCheck, LockfileKind, LockfileStatus, RiskLevel, SecurityFinding,
@@ -43,14 +43,14 @@ const KNOWN_COMPROMISED_PACKAGES: &[&str] = &[
 
 /// Runs the complete offline security scan for the selected ecosystems.
 pub fn scan(root: &Path, ecosystems: &[Ecosystem]) -> DustResult<SecurityReport> {
-    walk_dirs(root)?;
-
     let scan_node = ecosystems.is_empty() || ecosystems.contains(&Ecosystem::Node);
     let scan_rust = ecosystems.is_empty() || ecosystems.contains(&Ecosystem::Rust);
 
     if !scan_node && !scan_rust {
         return Ok(SecurityReport::default());
     }
+
+    validate_root(root)?;
 
     let mut report = SecurityReport::default();
 
@@ -118,6 +118,19 @@ fn check_relevant_lockfiles(
     };
 
     lockfile::check_lockfiles(root, &expected)
+}
+
+fn validate_root(root: &Path) -> DustResult<()> {
+    match fs::symlink_metadata(root) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            Err(DustError::InvalidPath(root.to_path_buf()))
+        }
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            Err(DustError::InvalidPath(root.to_path_buf()))
+        }
+        Err(error) => Err(DustError::Io(error)),
+    }
 }
 
 fn scan_package_manifest(path: &Path, report: &mut SecurityReport) -> DustResult<()> {
@@ -430,11 +443,7 @@ fn scan_pnpm_lock(path: &Path, report: &mut SecurityReport) -> DustResult<()> {
 
 fn scan_bun_lock(path: &Path, report: &mut SecurityReport) -> DustResult<()> {
     let content = fs::read_to_string(path)?;
-    let Ok(lockfile) = serde_json::from_str::<Value>(&content) else {
-        // Bun has used more than one lockfile representation. A non-JSON
-        // lockfile is still checked for presence and Git status above.
-        return Ok(());
-    };
+    let lockfile = parse_jsonc(&content).map_err(|error| manifest_error(path, error))?;
 
     if let Some(packages) = lockfile.get("packages") {
         inspect_bun_value(path, packages, None, report);
@@ -444,6 +453,129 @@ fn scan_bun_lock(path: &Path, report: &mut SecurityReport) -> DustResult<()> {
     }
 
     Ok(())
+}
+
+fn parse_jsonc(content: &str) -> Result<Value, String> {
+    let without_comments = strip_jsonc_comments(content)?;
+    let normalized = remove_jsonc_trailing_commas(&without_comments);
+
+    serde_json::from_str(&normalized).map_err(|error| error.to_string())
+}
+
+fn strip_jsonc_comments(content: &str) -> Result<String, String> {
+    let characters: Vec<char> = content.chars().collect();
+    let mut result = String::with_capacity(content.len());
+    let mut index = 0;
+    let mut in_string = false;
+    let mut escaped = false;
+
+    while index < characters.len() {
+        let character = characters[index];
+
+        if in_string {
+            result.push(character);
+            if escaped {
+                escaped = false;
+            } else if character == '\\' {
+                escaped = true;
+            } else if character == '"' {
+                in_string = false;
+            }
+            index += 1;
+            continue;
+        }
+
+        if character == '"' {
+            in_string = true;
+            result.push(character);
+            index += 1;
+            continue;
+        }
+
+        if character == '/' && characters.get(index + 1) == Some(&'/') {
+            index += 2;
+            while index < characters.len() && characters[index] != '\n' {
+                index += 1;
+            }
+            continue;
+        }
+
+        if character == '/' && characters.get(index + 1) == Some(&'*') {
+            index += 2;
+            let mut closed = false;
+            while index < characters.len() {
+                if characters[index] == '*' && characters.get(index + 1) == Some(&'/') {
+                    index += 2;
+                    closed = true;
+                    break;
+                }
+                if characters[index] == '\n' {
+                    result.push('\n');
+                }
+                index += 1;
+            }
+            if !closed {
+                return Err("unterminated JSONC block comment".to_owned());
+            }
+            continue;
+        }
+
+        result.push(character);
+        index += 1;
+    }
+
+    Ok(result)
+}
+
+fn remove_jsonc_trailing_commas(content: &str) -> String {
+    let characters: Vec<char> = content.chars().collect();
+    let mut result = String::with_capacity(content.len());
+    let mut index = 0;
+    let mut in_string = false;
+    let mut escaped = false;
+
+    while index < characters.len() {
+        let character = characters[index];
+
+        if in_string {
+            result.push(character);
+            if escaped {
+                escaped = false;
+            } else if character == '\\' {
+                escaped = true;
+            } else if character == '"' {
+                in_string = false;
+            }
+            index += 1;
+            continue;
+        }
+
+        if character == '"' {
+            in_string = true;
+            result.push(character);
+            index += 1;
+            continue;
+        }
+
+        if character == ',' {
+            let mut next = index + 1;
+            while characters
+                .get(next)
+                .is_some_and(|value| value.is_whitespace())
+            {
+                next += 1;
+            }
+            if matches!(characters.get(next), Some(']' | '}')) {
+                index += 1;
+                continue;
+            }
+        }
+
+        result.push(character);
+        index += 1;
+    }
+
+    result
 }
 
 fn inspect_bun_value(path: &Path, value: &Value, hint: Option<&str>, report: &mut SecurityReport) {
@@ -637,17 +769,40 @@ fn is_known_compromised_package(name: &str) -> bool {
 }
 
 fn is_trusted_node_registry(source: &str) -> bool {
-    let source = source.trim().to_ascii_lowercase();
-    source.starts_with("https://registry.npmjs.org/")
-        || source.starts_with("https://registry.yarnpkg.com/")
-        || source.starts_with("https://registry.npmjs.org")
-        || source.starts_with("https://registry.yarnpkg.com")
+    let Ok(url) = Url::parse(source.trim()) else {
+        return false;
+    };
+
+    url.scheme() == "https"
+        && url.port().is_none()
+        && matches!(
+            url.host_str(),
+            Some("registry.npmjs.org" | "registry.yarnpkg.com")
+        )
 }
 
 fn is_trusted_cargo_registry(source: &str) -> bool {
-    let source = source.to_ascii_lowercase();
-    source.starts_with("registry+") && source.contains("crates.io")
-        || source.starts_with("sparse+") && source.contains("crates.io")
+    let Some((kind, raw_url)) = source.split_once('+') else {
+        return false;
+    };
+    let Ok(url) = Url::parse(raw_url) else {
+        return false;
+    };
+
+    if url.scheme() != "https" || url.port().is_some() || url.query().is_some() {
+        return false;
+    }
+
+    match kind {
+        "registry" => {
+            url.host_str() == Some("github.com")
+                && url.path().trim_end_matches('/') == "/rust-lang/crates.io-index"
+        }
+        "sparse" => {
+            url.host_str() == Some("index.crates.io") && url.path().trim_matches('/').is_empty()
+        }
+        _ => false,
+    }
 }
 
 fn package_name_from_selector(selector: &str) -> Option<&str> {
@@ -814,13 +969,28 @@ mod tests {
         .unwrap();
         fs::write(
             bun_dir.path().join("bun.lock"),
-            r#"{"lockfileVersion":1,"packages":{"event-stream":["event-stream@3.3.6",{"integrity":"sha512-example"}]}}"#,
+            r#"{
+                // Bun writes JSONC, including comments and trailing commas.
+                "lockfileVersion": 1,
+                "packages": {
+                    "event-stream": [
+                        "event-stream@3.3.6",
+                        {
+                            "resolved": "https://evil.example/event-stream.tgz",
+                        },
+                    ],
+                },
+            }"#,
         )
         .unwrap();
 
         let bun_report = scan(bun_dir.path(), &[Ecosystem::Node]).unwrap();
         assert!(bun_report.findings.iter().any(|finding| {
             finding.kind == SecurityFindingKind::KnownMaliciousPackage
+                && finding.package.as_deref() == Some("event-stream")
+        }));
+        assert!(bun_report.findings.iter().any(|finding| {
+            finding.kind == SecurityFindingKind::UntrustedDependency
                 && finding.package.as_deref() == Some("event-stream")
         }));
     }
@@ -862,6 +1032,44 @@ mod tests {
         assert_eq!(
             package_name_from_selector("/event-stream@3.3.6"),
             Some("event-stream")
+        );
+    }
+
+    #[test]
+    fn registry_checks_reject_lookalike_hosts_and_accept_canonical_sources() {
+        assert!(is_trusted_node_registry(
+            "https://registry.npmjs.org/package/-/package-1.0.0.tgz"
+        ));
+        assert!(!is_trusted_node_registry(
+            "https://registry.npmjs.org.evil.example/package.tgz"
+        ));
+        assert!(!is_trusted_node_registry(
+            "https://registry.yarnpkg.com.evil.example/package.tgz"
+        ));
+
+        assert!(is_trusted_cargo_registry(
+            "registry+https://github.com/rust-lang/crates.io-index"
+        ));
+        assert!(is_trusted_cargo_registry("sparse+https://index.crates.io/"));
+        assert!(!is_trusted_cargo_registry(
+            "registry+https://evil.example/crates.io/index"
+        ));
+    }
+
+    #[test]
+    fn bun_jsonc_parse_errors_are_reported() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(
+            temp_dir.path().join("package.json"),
+            r#"{"name":"demo","packageManager":"bun@1.0.0"}"#,
+        )
+        .unwrap();
+        fs::write(temp_dir.path().join("bun.lock"), "{ /* unterminated").unwrap();
+
+        let result = scan(temp_dir.path(), &[Ecosystem::Node]);
+
+        assert!(
+            matches!(result, Err(DustError::Manifest(message)) if message.contains("bun.lock"))
         );
     }
 }
