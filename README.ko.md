@@ -21,6 +21,7 @@ DustFril은 개발 산출물을 스캔, 분석, 점검, 정리하기 위한 워�
 - 스캔·정리 활동 이력을 버전 형식으로 운영체제 앱 데이터 디렉터리에 저장
 - Node 및 Rust 프로젝트의 오프라인 공급망 보안 점검
 - 지원 lockfile의 존재 여부와 Git 상태 점검
+- 대상 개발 도구를 실행하지 않고 로컬 SHA-256 baseline과 실행 파일 무결성 비교
 - CLI 정리 이력을 운영체제 앱 데이터 디렉터리에 저장
 
 공급망 보안 스캐너는 v0.0.1 이후 작업입니다. v0.0.1 릴리스 범위는
@@ -59,6 +60,7 @@ cargo run -p dustfril-cli -- clean
 cargo run -p dustfril-cli -- clean --permanent
 cargo run -p dustfril-cli -- audit --node
 cargo run -p dustfril-cli -- security scan --node
+cargo run -p dustfril-cli -- integrity scan --tool node --tool git
 ```
 
 생태계 필터나 대상 경로를 함께 지정할 수 있습니다.
@@ -75,6 +77,7 @@ cargo run -p dustfril-cli -- analyze /path/to/workspace --node
 - `clean [path] [--dry-run] [--permanent] [--rust] [--node] [--java]`
 - `audit [path] [--node]`
 - `security scan [path] [--node]`
+- `integrity scan [--tool <name>]...`
 
 `security scan`은 `package.json`, `Cargo.toml`, `package-lock.json`,
 `pnpm-lock.yaml`, `bun.lock`, `Cargo.lock`을 읽기 전용으로 오프라인 점검합니다.
@@ -83,6 +86,13 @@ cargo run -p dustfril-cli -- analyze /path/to/workspace --node
 잘못되었거나 지원되지 않으면 해당 파일 경로를 포함한 오류를 반환합니다. 탐지된
 명령이나 패키지 매니저를 실행하지 않고, 네트워크 및 프로젝트 파일 변경도 사용하지
 않습니다.
+
+`integrity scan`은 PATH에서 요청한 개발 도구를 찾고 파일 메타데이터와 바이트를
+읽어 SHA-256을 스트리밍 계산합니다. 대상 실행 파일을 절대 실행하지 않으며,
+activity history와 분리된 버전 형식의 baseline을 저장합니다. 기본 대상은 `node`,
+`bun`, `cargo`, `rustc`, `git`, `java`, `gradle`이고, `--tool`을 반복해 일부만
+선택할 수 있습니다. 경로 또는 해시 변경은 무결성 변경으로 보고하며 악성 코드의
+증거라고 단정하지 않습니다.
 
 ## 데스크톱 앱
 

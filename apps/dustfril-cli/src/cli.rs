@@ -35,6 +35,9 @@ pub enum Commands {
 
     /// Scan lifecycle scripts for suspicious commands
     Security(SecurityArgs),
+
+    /// Compare selected development-tool executables with local baselines
+    Integrity(IntegrityArgs),
 }
 
 #[derive(Args)]
@@ -47,6 +50,35 @@ pub struct SecurityArgs {
 pub enum SecurityCommands {
     /// Scan Node lifecycle scripts for suspicious commands
     Scan(PathArgs),
+}
+
+#[derive(Args)]
+pub struct IntegrityArgs {
+    #[command(subcommand)]
+    pub command: IntegrityCommands,
+}
+
+#[derive(Subcommand)]
+pub enum IntegrityCommands {
+    /// Inspect development-tool executables without launching them
+    Scan(IntegrityScanArgs),
+}
+
+#[derive(Args)]
+pub struct IntegrityScanArgs {
+    /// Tool name to inspect; repeat for multiple tools. Defaults to the initial tool set.
+    #[arg(long = "tool", value_name = "NAME")]
+    pub tools: Vec<String>,
+}
+
+impl IntegrityScanArgs {
+    pub fn tools(&self) -> Vec<dustfril_core::models::ToolSpec> {
+        if self.tools.is_empty() {
+            return dustfril_core::api::integrity::default_tools();
+        }
+
+        self.tools.iter().cloned().map(Into::into).collect()
+    }
 }
 
 #[derive(Args)]
@@ -170,5 +202,32 @@ mod tests {
         let cli = Cli::try_parse_from(["dfr", "history"]).unwrap();
 
         assert!(matches!(cli.command, Commands::History));
+    }
+
+    #[test]
+    fn cli_parses_integrity_scan_and_selected_tools() {
+        let cli = Cli::try_parse_from([
+            "dfr",
+            "integrity",
+            "scan",
+            "--tool",
+            "node",
+            "--tool",
+            "git",
+        ])
+        .unwrap();
+
+        let Commands::Integrity(args) = cli.command else {
+            panic!("expected integrity command");
+        };
+        let IntegrityCommands::Scan(args) = args.command;
+        assert_eq!(args.tools(), vec!["node".into(), "git".into()]);
+    }
+
+    #[test]
+    fn integrity_scan_defaults_to_core_tool_selection() {
+        let args = IntegrityScanArgs { tools: Vec::new() };
+
+        assert_eq!(args.tools(), dustfril_core::api::integrity::default_tools());
     }
 }
