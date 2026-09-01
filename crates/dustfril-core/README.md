@@ -43,6 +43,13 @@ through `api::history`. The event stores finding counts, highest severity,
 stable rule IDs, relative source locations, and sanitised reasons; command or
 dependency-source evidence is not persisted.
 
+Top-level scan, cleanup, and security operations each record at most one
+activity. Internal analysis and cleanup-plan helpers do not write history.
+Completed operation results remain distinguishable from execution failures and
+partial cleanup failures. History writes use a process-wide append lock and
+atomic replacement; callers should report history errors without discarding a
+completed primary result.
+
 Malformed or unsupported manifests and lockfiles are returned as explicit
 errors. Lifecycle scanning honors an explicit `packageManager` declaration;
 otherwise it uses the nearest applicable lockfile. All security behavior is

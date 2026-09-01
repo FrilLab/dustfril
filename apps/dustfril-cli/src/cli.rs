@@ -27,6 +27,9 @@ pub enum Commands {
     /// Clean detected artifacts
     Clean(CleanArgs),
 
+    /// Show the unified local activity history
+    History,
+
     /// Audit lifecycle scripts
     Audit(PathArgs),
 
@@ -160,5 +163,12 @@ mod tests {
                 command: SecurityCommands::Scan(PathArgs { node: true, .. })
             })
         ));
+    }
+
+    #[test]
+    fn cli_parses_history_command() {
+        let cli = Cli::try_parse_from(["dfr", "history"]).unwrap();
+
+        assert!(matches!(cli.command, Commands::History));
     }
 }

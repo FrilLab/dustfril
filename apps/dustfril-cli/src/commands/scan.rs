@@ -2,6 +2,7 @@ use dustfril_core::api;
 
 use crate::{
     cli::PathArgs,
+    history,
     shared::path::{resolve_path, validate_path},
 };
 
@@ -23,6 +24,9 @@ pub fn execute(args: PathArgs) -> bool {
     let result = match api::scan(&path, &ecosystems) {
         Ok(res) => res,
         Err(e) => {
+            if let Err(history_error) = history::record_scan_failure(&path, &e.to_string()) {
+                eprintln!("Failed to record scan failure history: {history_error}");
+            }
             eprintln!("Scan failed: {}", e);
             return false;
         }

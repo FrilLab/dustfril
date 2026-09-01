@@ -8,7 +8,7 @@ type HistoryListProps = {
 
 export function HistoryList(props: HistoryListProps) {
   if (!props.entries.length) {
-    return <EmptyState message="No activity history yet. Completed operations will appear here." />;
+    return <EmptyState message="No activity history yet. Operations will appear here." />;
   }
 
   return (
@@ -51,11 +51,14 @@ function ScanDetails({ entry }: { entry: ActivityRecord }) {
   const details = entry.result.details;
 
   return (
-    <div className="mt-4 grid gap-2 text-sm text-slate-300 sm:grid-cols-3">
-      <Detail label="Target" value={details.path ?? 'Unknown'} />
-      <Detail label="Artifacts" value={String(details.artifacts ?? 0)} />
-      <Detail label="Total Size" value={formatBytes(details.size ?? 0)} />
-    </div>
+    <>
+      <div className="mt-4 grid gap-2 text-sm text-slate-300 sm:grid-cols-3">
+        <Detail label="Target" value={details.path ?? 'Unknown'} />
+        <Detail label="Artifacts" value={String(details.artifacts ?? 0)} />
+        <Detail label="Total Size" value={formatBytes(details.size ?? 0)} />
+      </div>
+      {details.reason ? <p className="mt-4 text-sm text-rose-200">{details.reason}</p> : null}
+    </>
   );
 }
 
@@ -88,6 +91,8 @@ function CleanupDetails({ entry }: { entry: ActivityRecord }) {
           </ul>
         </div>
       ) : null}
+
+      {details.reason ? <p className="mt-4 text-sm text-rose-200">{details.reason}</p> : null}
     </>
   );
 }

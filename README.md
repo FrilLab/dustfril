@@ -66,6 +66,7 @@ cargo run -p dustfril-cli -- clean
 cargo run -p dustfril-cli -- clean --permanent
 cargo run -p dustfril-cli -- audit --node
 cargo run -p dustfril-cli -- security scan --node
+cargo run -p dustfril-cli -- history
 ```
 
 Filter by ecosystem or pass a target path:
@@ -82,6 +83,7 @@ Available commands:
 - `clean [path] [--dry-run] [--permanent] [--rust] [--node] [--java]`
 - `audit [path] [--node]`
 - `security scan [path] [--node]`
+- `history`
 
 `security scan` is a read-only, offline check of `package.json`, `Cargo.toml`,
 `package-lock.json`, `pnpm-lock.yaml`, `bun.lock`, and `Cargo.lock`. It reports
@@ -100,6 +102,7 @@ The desktop app currently exposes the same core workflows in a workspace browser
 - cleanup plan
 - cleanup execution
 - lifecycle script audit
+- unified activity history
 
 Start the frontend app from `apps/dustfril-tauri`:
 

@@ -55,6 +55,16 @@ pub fn record_scan(
     record(ActivityRecord::scan(target_path, result, total_size_bytes))
 }
 
+/// Records a scan that failed before producing a scan result.
+pub fn record_scan_failure(target_path: &Path, reason: &str) -> DustResult<()> {
+    record(ActivityRecord::scan_failure(target_path, reason))
+}
+
+/// Records a cleanup that failed before producing a cleanup result.
+pub fn record_cleanup_failure(mode: DeleteMode, reason: &str) -> DustResult<()> {
+    record(ActivityRecord::cleanup_failure(mode, reason))
+}
+
 /// Records one explicit security scan in the unified activity history.
 pub fn record_security_scan(
     target_path: &Path,
@@ -155,7 +165,7 @@ fn save(path: &Path, records: &[ActivityRecord]) -> DustResult<()> {
             .open(&temporary_path)?;
         file.write_all(json.as_bytes())?;
         file.sync_all()?;
-        fs::rename(&temporary_path, path)
+        replace_file(&temporary_path, path)
     })();
 
     if let Err(error) = write_result {
@@ -167,6 +177,10 @@ fn save(path: &Path, records: &[ActivityRecord]) -> DustResult<()> {
     }
 
     Ok(())
+}
+
+fn replace_file(source: &Path, destination: &Path) -> io::Result<()> {
+    fs::rename(source, destination)
 }
 
 fn temporary_path(path: &Path) -> PathBuf {
@@ -248,6 +262,9 @@ mod tests {
         assert_eq!(history[0].kind, crate::models::ActivityKind::Cleanup);
         assert!(!history[0].result.success);
         assert_eq!(history[0].result.details["freed"], 2048);
+        assert_eq!(history[0].result.details["mode"], "permanent");
+        assert_eq!(history[0].result.details["deleted"][0], "build");
+        assert_eq!(history[0].result.details["failed"][0]["path"], "target");
 
         let migrated: Value =
             serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
@@ -346,6 +363,125 @@ mod tests {
         assert!(!activity.result.success);
         assert_eq!(activity.result.details["deleted"][0], "target");
         assert_eq!(activity.result.details["failed"][0]["path"], "node_modules");
+    }
+
+    #[test]
+    fn cleanup_activity_records_success_without_items() {
+        let activity = ActivityRecord::cleanup(DeleteMode::Trash, &CleanupResult::default());
+
+        assert!(activity.result.success);
+        assert!(
+            activity.result.details["deleted"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            activity.result.details["failed"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(activity.result.details["freed"], 0);
+    }
+
+    #[test]
+    fn failed_operations_are_reloadable_activity_records() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("history.json");
+
+        record_to(
+            &path,
+            ActivityRecord::scan_failure(Path::new("/workspace"), "scan failed"),
+        )
+        .unwrap();
+        record_to(
+            &path,
+            ActivityRecord::cleanup_failure(DeleteMode::Permanent, "cleanup failed"),
+        )
+        .unwrap();
+
+        let records = load_unlocked(&path).unwrap();
+
+        assert_eq!(records.len(), 2);
+        assert!(!records[0].result.success);
+        assert!(!records[1].result.success);
+        assert_eq!(records[0].kind, ActivityKind::Scan);
+        assert_eq!(records[1].kind, ActivityKind::Cleanup);
+    }
+
+    #[test]
+    fn replacement_failure_keeps_existing_valid_history() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("history.json");
+        let activity = ActivityRecord::new(
+            ActivityKind::Scan,
+            ActivityResult::new(true, json!({"artifacts": 0})),
+        );
+        record_to(&path, activity.clone()).unwrap();
+        let original = std::fs::read_to_string(&path).unwrap();
+
+        let replacement_source = temp.path().join("replacement-source");
+        std::fs::create_dir(&replacement_source).unwrap();
+        let result = replace_file(&replacement_source, &path);
+
+        assert!(result.is_err());
+        assert_eq!(std::fs::read_to_string(path).unwrap(), original);
+    }
+
+    #[test]
+    fn failed_save_cleans_temporary_file_without_touching_destination() {
+        let temp = TempDir::new().unwrap();
+        let destination = temp.path().join("history-directory");
+        std::fs::create_dir(&destination).unwrap();
+        let activity = ActivityRecord::new(
+            ActivityKind::Scan,
+            ActivityResult::new(true, json!({"artifacts": 0})),
+        );
+
+        let result = save(&destination, &[activity]);
+
+        assert!(result.is_err());
+        assert!(destination.is_dir());
+        assert_eq!(
+            std::fs::read_dir(temp.path())
+                .unwrap()
+                .filter_map(Result::ok)
+                .filter(|entry| entry.file_name().to_string_lossy().contains(".tmp"))
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn concurrent_appends_remain_parseable_and_lossless() {
+        let temp = TempDir::new().unwrap();
+        let path = std::sync::Arc::new(temp.path().join("history.json"));
+        let workers = 12;
+
+        let handles = (0..workers)
+            .map(|index| {
+                let path = std::sync::Arc::clone(&path);
+                std::thread::spawn(move || {
+                    record_to(
+                        &path,
+                        ActivityRecord::new(
+                            ActivityKind::Scan,
+                            ActivityResult::new(true, json!({"worker": index})),
+                        ),
+                    )
+                    .unwrap();
+                })
+            })
+            .collect::<Vec<_>>();
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        let records = load_unlocked(&path).unwrap();
+        assert_eq!(records.len(), workers);
+        assert!(records.iter().all(|record| record.result.success));
     }
 
     #[test]

@@ -34,6 +34,8 @@ pub(crate) struct CleanupCandidateInput {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ScanResponse {
     pub(crate) artifacts: Vec<ArtifactDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) history_warning: Option<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -83,6 +85,8 @@ pub(crate) struct CleanupResultResponse {
     pub(crate) deleted_paths: Vec<String>,
     pub(crate) failed_paths: Vec<CleanupFailureDto>,
     pub(crate) freed_size_bytes: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) history_warning: Option<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -119,6 +123,8 @@ pub(crate) struct SecurityScanResponse {
     pub(crate) lifecycle_warnings: Vec<SecurityWarningDto>,
     pub(crate) lockfiles: Vec<LockfileCheckDto>,
     pub(crate) manifests: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) history_warning: Option<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -341,6 +347,7 @@ impl From<SecurityReport> for SecurityScanResponse {
                 .into_iter()
                 .map(|path| path.display().to_string())
                 .collect(),
+            history_warning: None,
         }
     }
 }
@@ -532,6 +539,7 @@ mod tests {
                 reason: "PermissionDenied".to_string(),
             }],
             freed_size_bytes: 42,
+            history_warning: None,
         };
 
         assert_eq!(
@@ -566,6 +574,7 @@ mod tests {
                 path: "/workspace/node_modules".to_string(),
                 ecosystem: EcosystemDto::Node,
             }],
+            history_warning: None,
         };
         let history = CleanupHistoryEntryDto {
             executed_at_ms: 1_750_000_000_000,
@@ -620,6 +629,34 @@ mod tests {
                 "riskLevel": "High",
                 "evidence": "curl payload | bash",
                 "reason": "Remote script is piped to a shell."
+            })
+        );
+    }
+
+    #[test]
+    fn history_warning_is_additive_and_omitted_for_healthy_operations() {
+        let scan = ScanResponse {
+            artifacts: Vec::new(),
+            history_warning: None,
+        };
+        let cleanup = CleanupResultResponse {
+            deleted_paths: Vec::new(),
+            failed_paths: Vec::new(),
+            freed_size_bytes: 0,
+            history_warning: Some("history is unavailable".to_owned()),
+        };
+
+        assert_eq!(
+            serde_json::to_value(scan).unwrap(),
+            json!({"artifacts": []})
+        );
+        assert_eq!(
+            serde_json::to_value(cleanup).unwrap(),
+            json!({
+                "deletedPaths": [],
+                "failedPaths": [],
+                "freedSizeBytes": 0,
+                "historyWarning": "history is unavailable"
             })
         );
     }

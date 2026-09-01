@@ -59,6 +59,19 @@ impl ActivityResult {
         )
     }
 
+    /// Builds the result payload for a scan that could not execute.
+    pub fn from_scan_failure(target_path: &Path, reason: &str) -> Self {
+        Self::new(
+            false,
+            json!({
+                "path": target_path.display().to_string(),
+                "artifacts": 0,
+                "size": 0,
+                "reason": sanitize_text(reason),
+            }),
+        )
+    }
+
     /// Builds the result payload for a cleanup attempt, including partial failures.
     pub fn from_cleanup(mode: DeleteMode, result: &CleanupResult) -> Self {
         let failed_paths: Vec<Value> = result
@@ -79,6 +92,21 @@ impl ActivityResult {
                 "deleted": paths_to_values(&result.deleted_paths),
                 "failed": failed_paths,
                 "freed": result.freed_size_bytes,
+            }),
+        )
+    }
+
+    /// Builds the result payload for a cleanup that failed before a result
+    /// could be produced.
+    pub fn from_cleanup_failure(mode: DeleteMode, reason: &str) -> Self {
+        Self::new(
+            false,
+            json!({
+                "mode": delete_mode_label(mode),
+                "deleted": [],
+                "failed": [],
+                "freed": 0,
+                "reason": sanitize_text(reason),
             }),
         )
     }
@@ -173,10 +201,24 @@ impl ActivityRecord {
         )
     }
 
+    pub fn scan_failure(target_path: &Path, reason: &str) -> Self {
+        Self::new(
+            ActivityKind::Scan,
+            ActivityResult::from_scan_failure(target_path, reason),
+        )
+    }
+
     pub fn cleanup(mode: DeleteMode, result: &CleanupResult) -> Self {
         Self::new(
             ActivityKind::Cleanup,
             ActivityResult::from_cleanup(mode, result),
+        )
+    }
+
+    pub fn cleanup_failure(mode: DeleteMode, reason: &str) -> Self {
+        Self::new(
+            ActivityKind::Cleanup,
+            ActivityResult::from_cleanup_failure(mode, reason),
         )
     }
 
@@ -488,5 +530,25 @@ mod tests {
         assert_eq!(result.details["findingCount"], 0);
         assert_eq!(result.details["highestRisk"], "None");
         assert_eq!(result.details["reason"], "Manifest error: token=[REDACTED]");
+    }
+
+    #[test]
+    fn operation_failures_are_distinguishable_from_completed_results() {
+        let scan = ActivityRecord::scan_failure(Path::new("/workspace"), "Scan failed");
+        let cleanup = ActivityRecord::cleanup_failure(DeleteMode::Trash, "Cleanup failed");
+
+        assert_eq!(scan.kind, ActivityKind::Scan);
+        assert!(!scan.result.success);
+        assert_eq!(scan.result.details["reason"], "Scan failed");
+
+        assert_eq!(cleanup.kind, ActivityKind::Cleanup);
+        assert!(!cleanup.result.success);
+        assert_eq!(cleanup.result.details["reason"], "Cleanup failed");
+        assert!(
+            cleanup.result.details["failed"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
     }
 }
