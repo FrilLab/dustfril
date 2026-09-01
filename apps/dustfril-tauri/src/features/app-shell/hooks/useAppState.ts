@@ -338,6 +338,9 @@ export function useAppState() {
       const result = await executeCleanup(candidates, deleteMode);
 
       setCleanupResult(result);
+      if (result.failedPaths.length) {
+        setError(formatCleanupFailure(result));
+      }
       setCleanupPlan((current) =>
         current
           ? {
@@ -403,4 +406,12 @@ export function useAppState() {
     handleRequestCleanup,
     handleConfirmCleanup,
   };
+}
+
+function formatCleanupFailure(result: CleanupResultResponse): string {
+  const failures = result.failedPaths
+    .map((failure) => `${failure.path} (${failure.reason})`)
+    .join('; ');
+
+  return `Cleanup completed with ${result.failedPaths.length} failure(s). Freed ${formatBytes(result.freedSizeBytes)}. Failed: ${failures}`;
 }

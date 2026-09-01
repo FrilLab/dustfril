@@ -78,7 +78,11 @@ pub fn execute(args: &CleanArgs) -> bool {
 
     print_cleanup_result(&result);
 
-    true
+    cleanup_succeeded(&result)
+}
+
+fn cleanup_succeeded(result: &CleanupResult) -> bool {
+    result.failed_paths.is_empty()
 }
 
 fn build_cleanup_plan(args: &CleanArgs) -> Result<CleanupPlan, DustError> {
@@ -150,5 +154,29 @@ fn print_cleanup_result(result: &CleanupResult) {
         for failure in &result.failed_paths {
             println!("  {} ({})", failure.path.display(), failure.reason);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dustfril_core::models::{CleanupFailure, CleanupFailureReason};
+
+    #[test]
+    fn incomplete_cleanup_is_reported_as_a_command_failure() {
+        let result = CleanupResult {
+            failed_paths: vec![CleanupFailure {
+                path: "target".into(),
+                reason: CleanupFailureReason::PermissionDenied,
+            }],
+            ..CleanupResult::default()
+        };
+
+        assert!(!cleanup_succeeded(&result));
+    }
+
+    #[test]
+    fn complete_cleanup_is_reported_as_a_command_success() {
+        assert!(cleanup_succeeded(&CleanupResult::default()));
     }
 }
