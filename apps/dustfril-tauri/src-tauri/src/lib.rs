@@ -12,6 +12,7 @@ use contract::{
     artifact_path, cleanup_failure_reason, AnalysisResponse, ArtifactAnalysisDto, ArtifactDto,
     CleanupCandidateDto, CleanupFailureDto, CleanupHistoryEntryDto, CleanupPlanResponse,
     CleanupResultResponse, ExecuteCleanupRequest, LifecycleScriptDto, RunOptions, ScanResponse,
+    SecurityScanResponse,
 };
 use dustfril_core::{
     api,
@@ -223,6 +224,36 @@ async fn audit(options: RunOptions) -> Result<Vec<LifecycleScriptDto>, String> {
     .map_err(|error| error.to_string())?
 }
 
+#[tauri::command]
+async fn security_scan(options: RunOptions) -> Result<SecurityScanResponse, String> {
+    let root = resolve_root(options.root)?;
+    let ecosystems: Vec<_> = options.ecosystems.into_iter().map(Into::into).collect();
+
+    tokio::task::spawn_blocking(move || {
+        let report = match api::security_scan_report(&root, &ecosystems) {
+            Ok(report) => {
+                if let Err(error) = history::record_security_scan(&root, &ecosystems, &report) {
+                    eprintln!("Failed to record security scan history: {error}");
+                }
+
+                report
+            }
+            Err(error) => {
+                if let Err(history_error) =
+                    history::record_security_failure(&root, &ecosystems, &error.to_string())
+                {
+                    eprintln!("Failed to record security scan history: {history_error}");
+                }
+                return Err(error.to_string());
+            }
+        };
+
+        Ok(report.into())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -235,7 +266,8 @@ pub fn run() {
             execute_cleanup,
             load_activity_history,
             load_cleanup_history,
-            audit
+            audit,
+            security_scan
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -3,7 +3,10 @@ use std::path::Path;
 use crate::{
     error::DustResult,
     history,
-    models::{ActivityRecord, CleanupHistoryEntry, CleanupResult, DeleteMode, ScanResult},
+    models::{
+        ActivityRecord, CleanupHistoryEntry, CleanupResult, DeleteMode, Ecosystem, ScanResult,
+        SecurityReport,
+    },
 };
 
 /// Backwards-compatible cleanup history entry point.
@@ -28,6 +31,24 @@ pub fn record_scan(
     total_size_bytes: u64,
 ) -> DustResult<()> {
     history::record_scan(target_path, result, total_size_bytes)
+}
+
+/// Records one explicit security scan in the unified activity history.
+pub fn record_security_scan(
+    target_path: &Path,
+    ecosystems: &[Ecosystem],
+    report: &SecurityReport,
+) -> DustResult<()> {
+    history::record_security_scan(target_path, ecosystems, report)
+}
+
+/// Records a failed explicit security scan in the unified activity history.
+pub fn record_security_failure(
+    target_path: &Path,
+    ecosystems: &[Ecosystem],
+    reason: &str,
+) -> DustResult<()> {
+    history::record_security_failure(target_path, ecosystems, reason)
 }
 
 pub fn load_all() -> DustResult<Vec<ActivityRecord>> {

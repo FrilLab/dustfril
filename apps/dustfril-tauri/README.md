@@ -32,6 +32,7 @@ case-sensitive.
 | `analyze` | `{ options: RunOptions }` | `AnalysisResponse` |
 | `build_cleanup_plan` | `{ options: RunOptions }` | `CleanupPlanResponse` |
 | `audit` | `{ options: RunOptions }` | `LifecycleScript[]` |
+| `security_scan` | `{ options: RunOptions }` | `SecurityScanResponse` |
 | `execute_cleanup` | `{ request: { candidates, mode } }` | `CleanupResultResponse` |
 | `load_cleanup_history` | none | `CleanupHistoryEntry[]` |
 

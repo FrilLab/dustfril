@@ -2,7 +2,10 @@ use std::path::Path;
 
 use dustfril_core::{
     api,
-    models::{ActivityKind, ActivityRecord, CleanupResult, DeleteMode, ScanResult},
+    models::{
+        ActivityKind, ActivityRecord, CleanupResult, DeleteMode, Ecosystem, ScanResult,
+        SecurityReport,
+    },
 };
 use serde::Serialize;
 
@@ -29,6 +32,26 @@ pub fn record_scan(
     total_size_bytes: u64,
 ) -> Result<(), String> {
     api::history::record_scan(target_path, result, total_size_bytes)
+        .map_err(|error| error.to_string())
+}
+
+/// Records one explicit security scan for the desktop activity log.
+pub fn record_security_scan(
+    target_path: &Path,
+    ecosystems: &[Ecosystem],
+    report: &SecurityReport,
+) -> Result<(), String> {
+    api::history::record_security_scan(target_path, ecosystems, report)
+        .map_err(|error| error.to_string())
+}
+
+/// Records a failed explicit security scan for the desktop activity log.
+pub fn record_security_failure(
+    target_path: &Path,
+    ecosystems: &[Ecosystem],
+    reason: &str,
+) -> Result<(), String> {
+    api::history::record_security_failure(target_path, ecosystems, reason)
         .map_err(|error| error.to_string())
 }
 

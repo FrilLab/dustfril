@@ -11,7 +11,10 @@ use serde_json::Value;
 
 use crate::{
     error::{DustError, DustResult},
-    models::{ActivityRecord, CleanupHistoryEntry, CleanupResult, DeleteMode, ScanResult},
+    models::{
+        ActivityRecord, CleanupHistoryEntry, CleanupResult, DeleteMode, Ecosystem, ScanResult,
+        SecurityReport,
+    },
 };
 
 const HISTORY_VERSION: u32 = 1;
@@ -50,6 +53,28 @@ pub fn record_scan(
     total_size_bytes: u64,
 ) -> DustResult<()> {
     record(ActivityRecord::scan(target_path, result, total_size_bytes))
+}
+
+/// Records one explicit security scan in the unified activity history.
+pub fn record_security_scan(
+    target_path: &Path,
+    ecosystems: &[Ecosystem],
+    report: &SecurityReport,
+) -> DustResult<()> {
+    record(ActivityRecord::security(target_path, ecosystems, report))
+}
+
+/// Records a failed explicit security scan in the unified activity history.
+pub fn record_security_failure(
+    target_path: &Path,
+    ecosystems: &[Ecosystem],
+    reason: &str,
+) -> DustResult<()> {
+    record(ActivityRecord::security_failure(
+        target_path,
+        ecosystems,
+        reason,
+    ))
 }
 
 /// Loads all activity records, migrating a legacy cleanup history when needed.
@@ -171,6 +196,7 @@ mod tests {
     use super::*;
     use crate::models::{
         ActivityKind, ActivityResult, Artifact, CleanupFailure, CleanupFailureReason, Ecosystem,
+        RiskLevel, SecurityFinding, SecurityFindingKind, SecurityReport,
     };
 
     fn cleanup_result() -> CleanupResult {
@@ -320,6 +346,40 @@ mod tests {
         assert!(!activity.result.success);
         assert_eq!(activity.result.details["deleted"][0], "target");
         assert_eq!(activity.result.details["failed"][0]["path"], "node_modules");
+    }
+
+    #[test]
+    fn security_activity_is_persisted_as_one_reloadable_unified_record() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("history.json");
+        let report = SecurityReport {
+            findings: vec![SecurityFinding::new(
+                temp.path().join("package.json"),
+                SecurityFindingKind::MissingLockfile,
+                None,
+                RiskLevel::High,
+                None,
+                "Expected lockfile is missing.",
+            )],
+            ..SecurityReport::default()
+        };
+
+        record_to(
+            &path,
+            ActivityRecord::security(temp.path(), &[Ecosystem::Node], &report),
+        )
+        .unwrap();
+
+        let records = load_unlocked(&path).unwrap();
+
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].kind, ActivityKind::Security);
+        assert_eq!(records[0].result.details["findingCount"], 1);
+        assert_eq!(records[0].result.details["highestRisk"], "High");
+        assert_eq!(
+            records[0].result.details["findings"][0]["source"],
+            "package.json"
+        );
     }
 
     fn record_to(path: &Path, activity: ActivityRecord) -> DustResult<()> {
