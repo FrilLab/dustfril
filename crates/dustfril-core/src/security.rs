@@ -16,7 +16,7 @@ use crate::{
     lockfile,
     models::{
         Ecosystem, LockfileCheck, LockfileKind, LockfileStatus, RiskLevel, SecurityFinding,
-        SecurityFindingKind, SecurityReport,
+        SecurityFindingKind, SecurityReport, effective_security_ecosystems,
     },
 };
 
@@ -44,8 +44,9 @@ const KNOWN_COMPROMISED_PACKAGES: &[&str] = &[
 
 /// Runs the complete offline security scan for the selected ecosystems.
 pub fn scan(root: &Path, ecosystems: &[Ecosystem]) -> DustResult<SecurityReport> {
-    let scan_node = ecosystems.is_empty() || ecosystems.contains(&Ecosystem::Node);
-    let scan_rust = ecosystems.is_empty() || ecosystems.contains(&Ecosystem::Rust);
+    let effective_ecosystems = effective_security_ecosystems(ecosystems);
+    let scan_node = effective_ecosystems.contains(&Ecosystem::Node);
+    let scan_rust = effective_ecosystems.contains(&Ecosystem::Rust);
 
     if !scan_node && !scan_rust {
         validate_root(root)?;

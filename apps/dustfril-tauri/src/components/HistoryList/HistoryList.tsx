@@ -40,14 +40,7 @@ export function HistoryList(props: HistoryListProps) {
 
           {entry.kind === 'Scan' ? <ScanDetails entry={entry} /> : null}
           {entry.kind === 'Cleanup' ? <CleanupDetails entry={entry} /> : null}
-          {entry.kind === 'Security' ? (
-            <div className="mt-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Details</p>
-              <pre className="mt-2 overflow-x-auto text-xs text-slate-300">
-                {JSON.stringify(entry.result.details, null, 2)}
-              </pre>
-            </div>
-          ) : null}
+          {entry.kind === 'Security' ? <SecurityDetails entry={entry} /> : null}
         </article>
       ))}
     </div>
@@ -90,6 +83,55 @@ function CleanupDetails({ entry }: { entry: ActivityRecord }) {
               <li key={`${failure.path}-${failure.reason ?? ''}`} className="truncate">
                 - {failure.path}
                 {failure.reason ? ` (${failure.reason})` : ''}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function SecurityDetails({ entry }: { entry: ActivityRecord }) {
+  const details = entry.result.details;
+  const findings = details.findings ?? [];
+
+  return (
+    <>
+      <div className="mt-4 grid gap-2 text-sm text-slate-300 sm:grid-cols-4">
+        <Detail label="Target" value={details.path ?? 'Unknown'} />
+        <Detail
+          label="Ecosystems"
+          value={
+            details.ecosystems
+              ? details.ecosystems.length
+                ? details.ecosystems.join(', ')
+                : 'None'
+              : 'All'
+          }
+        />
+        <Detail label="Findings" value={String(details.findingCount ?? findings.length)} />
+        <Detail label="Highest Risk" value={details.highestRisk ?? 'None'} />
+      </div>
+
+      {details.reason ? (
+        <p className="mt-4 text-sm text-rose-200">{details.reason}</p>
+      ) : null}
+
+      {findings.length ? (
+        <div className="mt-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Findings</p>
+          <ul className="mt-2 space-y-2 text-sm text-slate-300">
+            {findings.map((finding, index) => (
+              <li
+                key={`${finding.rule}-${finding.source}-${index}`}
+                className="rounded-2xl border border-white/6 bg-white/4 px-3 py-2"
+              >
+                <p className="font-medium text-slate-200">
+                  {finding.rule} · {finding.risk}
+                </p>
+                <p className="mt-1 truncate text-xs text-slate-400">{finding.source}</p>
+                <p className="mt-1 text-xs text-slate-300">{finding.reason}</p>
               </li>
             ))}
           </ul>

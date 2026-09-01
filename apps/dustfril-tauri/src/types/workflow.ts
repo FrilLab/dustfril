@@ -65,6 +65,35 @@ export type LifecycleScript = {
   riskLevel: RiskLevel;
 };
 
+export type SecurityFinding = {
+  path: string;
+  rule: string;
+  package: string | null;
+  riskLevel: RiskLevel;
+  evidence: string | null;
+  reason: string;
+};
+
+export type SecurityWarning = {
+  package: string;
+  scriptType: string;
+  command: string;
+  riskLevel: RiskLevel;
+};
+
+export type LockfileCheck = {
+  path: string;
+  kind: 'PackageLockJson' | 'PnpmLockYaml' | 'BunLock' | 'CargoLock';
+  status: 'Missing' | 'Modified' | 'Untracked' | 'Clean';
+};
+
+export type SecurityScanResponse = {
+  findings: SecurityFinding[];
+  lifecycleWarnings: SecurityWarning[];
+  lockfiles: LockfileCheck[];
+  manifests: string[];
+};
+
 export type ActivityKind = 'Scan' | 'Cleanup' | 'Security';
 
 export type ActivityFailure = {
@@ -80,7 +109,22 @@ export type ActivityDetails = {
   deleted?: string[];
   failed?: ActivityFailure[];
   freed?: number;
+  ecosystems?: Ecosystem[];
+  findingCount?: number;
+  highestRisk?: RiskLevel;
+  findings?: SecurityActivityFinding[];
+  manifests?: number;
+  lockfiles?: number;
+  reason?: string;
   [key: string]: unknown;
+};
+
+export type SecurityActivityFinding = {
+  rule: string;
+  risk: RiskLevel;
+  source: string;
+  package?: string | null;
+  reason: string;
 };
 
 export type ActivityResult = {

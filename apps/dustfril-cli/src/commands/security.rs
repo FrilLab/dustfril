@@ -22,8 +22,19 @@ pub fn scan(args: &PathArgs) -> bool {
     let ecosystems = args.ecosystems();
 
     let report = match api::security_scan_report(&path, &ecosystems) {
-        Ok(report) => report,
+        Ok(report) => {
+            if let Err(error) = api::history::record_security_scan(&path, &ecosystems, &report) {
+                eprintln!("Failed to record security scan history: {error}");
+            }
+
+            report
+        }
         Err(error) => {
+            if let Err(history_error) =
+                api::history::record_security_failure(&path, &ecosystems, &error.to_string())
+            {
+                eprintln!("Failed to record security scan history: {history_error}");
+            }
             eprintln!("Security scan failed: {error}");
             return false;
         }

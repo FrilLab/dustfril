@@ -9,6 +9,7 @@ import type {
   LifecycleScript,
   RunOptions,
   ScanResponse,
+  SecurityScanResponse,
 } from '../types/workflow';
 
 const commands = {
@@ -17,6 +18,7 @@ const commands = {
   analyze: 'analyze',
   buildCleanupPlan: 'build_cleanup_plan',
   audit: 'audit',
+  securityScan: 'security_scan',
   executeCleanup: 'execute_cleanup',
   loadActivityHistory: 'load_activity_history',
   loadCleanupHistory: 'load_cleanup_history',
@@ -40,6 +42,10 @@ export function buildCleanupPlan(options: RunOptions) {
 
 export function auditScripts(options: RunOptions) {
   return invoke<LifecycleScript[]>(commands.audit, { options });
+}
+
+export function securityScan(options: RunOptions) {
+  return invoke<SecurityScanResponse>(commands.securityScan, { options });
 }
 
 export function executeCleanup(candidates: CleanupCandidate[], mode: DeleteMode) {

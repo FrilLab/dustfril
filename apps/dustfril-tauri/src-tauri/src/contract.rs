@@ -2,7 +2,8 @@ use std::path::Path;
 
 use dustfril_core::models::{
     CleanupFailureReason, CleanupRecommendation, DeleteMode, Ecosystem, LifecycleScript,
-    PackageManager, RiskLevel, ScriptType,
+    LockfileCheck, LockfileKind, LockfileStatus, PackageManager, RiskLevel, ScriptType,
+    SecurityFinding, SecurityReport, SecurityWarning,
 };
 use serde::{Deserialize, Serialize};
 
@@ -109,6 +110,59 @@ pub(crate) struct LifecycleScriptDto {
     pub(crate) script_type: ScriptTypeDto,
     pub(crate) command: String,
     pub(crate) risk_level: RiskLevelDto,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SecurityScanResponse {
+    pub(crate) findings: Vec<SecurityFindingDto>,
+    pub(crate) lifecycle_warnings: Vec<SecurityWarningDto>,
+    pub(crate) lockfiles: Vec<LockfileCheckDto>,
+    pub(crate) manifests: Vec<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SecurityFindingDto {
+    pub(crate) path: String,
+    pub(crate) rule: String,
+    pub(crate) package: Option<String>,
+    pub(crate) risk_level: RiskLevelDto,
+    pub(crate) evidence: Option<String>,
+    pub(crate) reason: String,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SecurityWarningDto {
+    pub(crate) package: String,
+    pub(crate) script_type: String,
+    pub(crate) command: String,
+    pub(crate) risk_level: RiskLevelDto,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LockfileCheckDto {
+    pub(crate) path: String,
+    pub(crate) kind: LockfileKindDto,
+    pub(crate) status: LockfileStatusDto,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub(crate) enum LockfileKindDto {
+    PackageLockJson,
+    PnpmLockYaml,
+    BunLock,
+    CargoLock,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub(crate) enum LockfileStatusDto {
+    Missing,
+    Modified,
+    Untracked,
+    Clean,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
@@ -268,6 +322,81 @@ impl From<LifecycleScript> for LifecycleScriptDto {
             script_type: script.script_type.into(),
             command: script.command,
             risk_level: script.risk_level.into(),
+        }
+    }
+}
+
+impl From<SecurityReport> for SecurityScanResponse {
+    fn from(report: SecurityReport) -> Self {
+        Self {
+            findings: report.findings.into_iter().map(Into::into).collect(),
+            lifecycle_warnings: report
+                .lifecycle_warnings
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            lockfiles: report.lockfiles.into_iter().map(Into::into).collect(),
+            manifests: report
+                .manifests
+                .into_iter()
+                .map(|path| path.display().to_string())
+                .collect(),
+        }
+    }
+}
+
+impl From<SecurityFinding> for SecurityFindingDto {
+    fn from(finding: SecurityFinding) -> Self {
+        Self {
+            path: finding.path.display().to_string(),
+            rule: finding.kind.rule_id().to_owned(),
+            package: finding.package,
+            risk_level: finding.risk_level.into(),
+            evidence: finding.evidence,
+            reason: finding.reason,
+        }
+    }
+}
+
+impl From<SecurityWarning> for SecurityWarningDto {
+    fn from(warning: SecurityWarning) -> Self {
+        Self {
+            package: warning.package,
+            script_type: warning.script_type,
+            command: warning.command,
+            risk_level: warning.risk_level.into(),
+        }
+    }
+}
+
+impl From<LockfileCheck> for LockfileCheckDto {
+    fn from(check: LockfileCheck) -> Self {
+        Self {
+            path: check.path.display().to_string(),
+            kind: check.kind.into(),
+            status: check.status.into(),
+        }
+    }
+}
+
+impl From<LockfileKind> for LockfileKindDto {
+    fn from(kind: LockfileKind) -> Self {
+        match kind {
+            LockfileKind::PackageLockJson => Self::PackageLockJson,
+            LockfileKind::PnpmLockYaml => Self::PnpmLockYaml,
+            LockfileKind::BunLock => Self::BunLock,
+            LockfileKind::CargoLock => Self::CargoLock,
+        }
+    }
+}
+
+impl From<LockfileStatus> for LockfileStatusDto {
+    fn from(status: LockfileStatus) -> Self {
+        match status {
+            LockfileStatus::Missing => Self::Missing,
+            LockfileStatus::Modified => Self::Modified,
+            LockfileStatus::Untracked => Self::Untracked,
+            LockfileStatus::Clean => Self::Clean,
         }
     }
 }
@@ -463,6 +592,34 @@ mod tests {
                 "freedSizeBytes": 42,
                 "deletedPaths": ["/workspace/target"],
                 "failedPaths": []
+            })
+        );
+    }
+
+    #[test]
+    fn security_scan_wire_format_preserves_structured_findings() {
+        let report = SecurityReport {
+            findings: vec![SecurityFinding::new(
+                "/workspace/package.json".into(),
+                dustfril_core::models::SecurityFindingKind::SuspiciousScript,
+                Some("demo".to_owned()),
+                RiskLevel::High,
+                Some("curl payload | bash".to_owned()),
+                "Remote script is piped to a shell.",
+            )],
+            ..SecurityReport::default()
+        };
+        let response: SecurityScanResponse = report.into();
+
+        assert_eq!(
+            serde_json::to_value(response).unwrap()["findings"][0],
+            json!({
+                "path": "/workspace/package.json",
+                "rule": "suspicious-script",
+                "package": "demo",
+                "riskLevel": "High",
+                "evidence": "curl payload | bash",
+                "reason": "Remote script is piped to a shell."
             })
         );
     }

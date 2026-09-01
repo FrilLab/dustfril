@@ -38,3 +38,6 @@ cargo build -p dustfril-cli
 - security scans are read-only and use deterministic offline checks
 - Activity history is stored in the OS app data directory as a versioned `history.json`.
   Existing cleanup-history arrays are migrated when the file is read or appended to.
+- Each explicit `security scan` appends one Security activity with its result
+  summary. Finding evidence and credential-shaped values are excluded or
+  sanitised before persistence.

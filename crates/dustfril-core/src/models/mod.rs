@@ -11,4 +11,5 @@ pub use audit::*;
 pub use cleanup::*;
 pub use history::*;
 pub use lockfile::*;
+pub(crate) use scan::effective_security_ecosystems;
 pub use scan::*;

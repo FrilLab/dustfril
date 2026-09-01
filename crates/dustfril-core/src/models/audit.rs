@@ -48,6 +48,20 @@ impl fmt::Display for SecurityFindingKind {
     }
 }
 
+impl SecurityFindingKind {
+    /// Returns the stable identifier persisted in activity history.
+    pub fn rule_id(self) -> &'static str {
+        match self {
+            Self::SuspiciousScript => "suspicious-script",
+            Self::UntrustedDependency => "untrusted-dependency",
+            Self::KnownMaliciousPackage => "known-malicious-package",
+            Self::MissingLockfile => "missing-lockfile",
+            Self::ModifiedLockfile => "modified-lockfile",
+            Self::UntrackedLockfile => "untracked-lockfile",
+        }
+    }
+}
+
 /// A normalized supply-chain security finding.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SecurityFinding {
@@ -181,5 +195,26 @@ impl fmt::Display for RiskLevel {
         };
 
         write!(f, "{value}")
+    }
+}
+
+impl RiskLevel {
+    /// Returns the severity ordering used when summarising a security scan.
+    pub fn highest(self, other: Self) -> Self {
+        if self.rank() >= other.rank() {
+            self
+        } else {
+            other
+        }
+    }
+
+    fn rank(self) -> u8 {
+        match self {
+            Self::None => 0,
+            Self::Low => 1,
+            Self::Medium => 2,
+            Self::High => 3,
+            Self::Critical => 4,
+        }
     }
 }
