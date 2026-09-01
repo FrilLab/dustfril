@@ -32,6 +32,10 @@ fn main() -> ExitCode {
         Commands::Security(args) => match args.command {
             cli::SecurityCommands::Scan(args) => commands::security::scan(&args),
         },
+
+        Commands::Integrity(args) => match args.command {
+            cli::IntegrityCommands::Scan(args) => commands::integrity::scan(&args),
+        },
     };
 
     if succeeded {

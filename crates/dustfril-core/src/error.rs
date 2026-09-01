@@ -17,6 +17,8 @@ pub enum DustError {
     Git(String),
     /// Indicates that a project manifest could not be parsed for an integrity check.
     Manifest(String),
+    /// Indicates that the persisted executable-integrity state is invalid.
+    IntegrityState(String),
 }
 
 /// Standard result type used by the core crate.
@@ -45,6 +47,9 @@ impl fmt::Display for DustError {
             }
             DustError::Manifest(message) => {
                 write!(f, "Manifest error: {message}")
+            }
+            DustError::IntegrityState(message) => {
+                write!(f, "Executable integrity state error: {message}")
             }
         }
     }

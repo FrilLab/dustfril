@@ -15,6 +15,7 @@ This crate contains the filesystem scanners, analyzers, cleanup planner and exec
 - `api::history`: record and load versioned activity history, including cleanup-history migration and security scan summaries
 - `api::security_scan`: preserve the lifecycle-only security warnings API
 - `api::security_scan_report`: run the complete offline supply-chain scan
+- `api::integrity`: resolve selected development tools without executing them, hash their bytes, and compare local baselines
 - `api::check_lockfile_integrity`: check supported lockfile presence and Git status
 - `api::history`: record and load cleanup history using atomic replacement;
   corrupted or unsupported history files are returned as errors
@@ -30,6 +31,12 @@ symbolic links, and never falls back from Trash mode to permanent deletion.
 - Audit: Node lifecycle scripts for npm, pnpm, yarn, and bun
 - Security rules: suspicious lifecycle commands, non-registry dependency sources, historically compromised package names, and lockfile issues
 - Lockfile integrity: `package-lock.json`, `pnpm-lock.yaml`, `bun.lock`, and `Cargo.lock`
+
+Executable-integrity scans support `node`, `bun`, `cargo`, `rustc`, `git`,
+`java`, and `gradle` by default. They resolve PATH entries, canonicalize
+symlinks, stream SHA-256 hashing, and persist a separate versioned
+`integrity-baseline.json`. Missing or unreadable tools are returned as
+structured results; a changed hash is an observation, not a malware claim.
 
 The supply-chain report reads `package.json` and `Cargo.toml` plus supported
 lockfiles without executing scripts or contacting an external advisory service.

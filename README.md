@@ -21,6 +21,7 @@ The repository is split into a reusable Rust core crate, a CLI app, and a Tauri 
 - Persist versioned local activity history for scans, cleanup, and explicit security scans (including legacy cleanup history migration)
 - Run an offline supply-chain security scan for Node and Rust projects
 - Check supported lockfile presence and Git status
+- Compare selected development-tool executables with local SHA-256 baselines without launching them
 - Persist CLI cleanup history to the OS app data directory
 
 The supply-chain scanner is post-v0.0.1 work. The v0.0.1 release remains
@@ -66,6 +67,7 @@ cargo run -p dustfril-cli -- clean
 cargo run -p dustfril-cli -- clean --permanent
 cargo run -p dustfril-cli -- audit --node
 cargo run -p dustfril-cli -- security scan --node
+cargo run -p dustfril-cli -- integrity scan --tool node --tool git
 cargo run -p dustfril-cli -- history
 ```
 
@@ -83,6 +85,7 @@ Available commands:
 - `clean [path] [--dry-run] [--permanent] [--rust] [--node] [--java]`
 - `audit [path] [--node]`
 - `security scan [path] [--node]`
+- `integrity scan [--tool <name>]...`
 - `history`
 
 `security scan` is a read-only, offline check of `package.json`, `Cargo.toml`,
@@ -92,6 +95,13 @@ package names on a built-in list of historically compromised packages, and
 missing or changed lockfiles. Parse and read failures identify the relevant
 manifest or lockfile and fail the scan. It never runs detected commands,
 invokes a package manager, contacts the network, or modifies project files.
+
+`integrity scan` resolves the requested development tools through PATH, reads
+filesystem metadata, streams each target through SHA-256, and stores its
+versioned baseline separately from activity history. It never launches the
+target executable. Default tools are `node`, `bun`, `cargo`, `rustc`, `git`,
+`java`, and `gradle`; use repeated `--tool` flags to select a subset. A changed
+path or hash is reported as an integrity change, not as proof of malware.
 
 ## Desktop App
 
