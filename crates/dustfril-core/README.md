@@ -16,6 +16,7 @@ This crate contains the filesystem scanners, analyzers, cleanup planner and exec
 - `api::security_scan`: preserve the lifecycle-only security warnings API
 - `api::security_scan_report`: run the complete offline supply-chain scan
 - `api::integrity`: resolve selected development tools without executing them, hash their bytes, and compare local baselines
+- `api::integrity::verify_signature`: inspect an already resolved executable with the supported platform verifier
 - `api::check_lockfile_integrity`: check supported lockfile presence and Git status
 - `api::history`: record and load cleanup history using atomic replacement;
   corrupted or unsupported history files are returned as errors
@@ -37,6 +38,10 @@ Executable-integrity scans support `node`, `bun`, `cargo`, `rustc`, `git`,
 symlinks, stream SHA-256 hashing, and persist a separate versioned
 `integrity-baseline.json`. Missing or unreadable tools are returned as
 structured results; a changed hash is an observation, not a malware claim.
+Signature evidence is kept separate from baseline comparison: macOS uses the
+system `codesign` verifier, while Linux and Windows return `Unsupported` until
+dedicated platform verifiers are implemented. Unsigned or invalid signatures
+are evidence about the verifier result, not malware claims.
 
 The supply-chain report reads `package.json` and `Cargo.toml` plus supported
 lockfiles without executing scripts or contacting an external advisory service.

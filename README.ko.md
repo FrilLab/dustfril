@@ -89,10 +89,12 @@ cargo run -p dustfril-cli -- analyze /path/to/workspace --node
 
 `integrity scan`은 PATH에서 요청한 개발 도구를 찾고 파일 메타데이터와 바이트를
 읽어 SHA-256을 스트리밍 계산합니다. 대상 실행 파일을 절대 실행하지 않으며,
-activity history와 분리된 버전 형식의 baseline을 저장합니다. 기본 대상은 `node`,
-`bun`, `cargo`, `rustc`, `git`, `java`, `gradle`이고, `--tool`을 반복해 일부만
-선택할 수 있습니다. 경로 또는 해시 변경은 무결성 변경으로 보고하며 악성 코드의
-증거라고 단정하지 않습니다.
+activity history와 분리된 버전 형식의 baseline을 저장합니다. macOS에서는 시스템
+`codesign`으로 읽기 전용 서명 정보도 확인하고, Linux와 Windows에서는 서명 검증을
+명시적으로 `Unsupported`로 보고합니다. 기본 대상은 `node`, `bun`, `cargo`,
+`rustc`, `git`, `java`, `gradle`이고, `--tool`을 반복해 일부만 선택할 수 있습니다.
+경로 또는 해시 변경은 무결성 변경으로 보고하며 악성 코드의 증거라고 단정하지
+않습니다. 서명 결과도 소프트웨어 전체의 신뢰성 판정이 아닙니다.
 
 ## 데스크톱 앱
 

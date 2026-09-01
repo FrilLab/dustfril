@@ -6,7 +6,7 @@ use std::{
 use crate::{
     error::DustResult,
     integrity,
-    models::{ExecutableObservation, IntegrityFailure, IntegrityReport, ToolSpec},
+    models::{ExecutableObservation, IntegrityFailure, IntegrityReport, SignatureReport, ToolSpec},
 };
 
 pub use crate::integrity::{BaselineStore, ResolvedExecutable, ToolResolver};
@@ -53,4 +53,9 @@ pub fn inspect_tool(
 ) -> Result<ExecutableObservation, IntegrityFailure> {
     let resolver = integrity::ToolResolver::from_paths(paths);
     integrity::inspect_tool(tool, &resolver)
+}
+
+/// Verifies the OS-supported signature for an already resolved executable.
+pub fn verify_signature(path: &Path) -> SignatureReport {
+    integrity::verify_signature(path)
 }

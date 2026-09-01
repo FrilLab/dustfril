@@ -8,6 +8,7 @@ mod baseline;
 mod comparator;
 mod hasher;
 mod resolver;
+mod signature;
 
 pub use baseline::BaselineStore;
 pub use resolver::{ResolvedExecutable, ToolResolver};
@@ -44,6 +45,13 @@ pub fn inspect_tool(
     hasher::observe(resolved)
 }
 
+/// Verifies the platform-supported code signature for an already resolved
+/// executable without launching the target. The caller should pass the
+/// canonical path returned by executable inspection.
+pub fn verify_signature(path: &Path) -> crate::models::SignatureReport {
+    signature::verify(path)
+}
+
 /// Resolves and compares selected tools using the process environment's PATH.
 pub fn scan(tools: &[ToolSpec], baseline_path: &Path) -> DustResult<IntegrityReport> {
     let resolver = ToolResolver::from_environment().map_err(DustError::Io)?;
@@ -77,6 +85,7 @@ fn check_tool(
 
     match inspect_tool(tool, resolver) {
         Ok(observation) => {
+            let (observation, signature) = verify_and_reinspect(tool, resolver, observation);
             let status = previous_observation
                 .as_ref()
                 .map_or(IntegrityStatus::NewBaseline, |previous| {
@@ -96,6 +105,7 @@ fn check_tool(
                 observation: Some(observation),
                 previous_observation,
                 failure: None,
+                signature: Some(signature),
             }
         }
         Err(failure) => {
@@ -111,9 +121,57 @@ fn check_tool(
                 observation: None,
                 previous_observation,
                 failure: Some(failure),
+                signature: None,
             }
         }
     }
+}
+
+/// Re-inspects the resolved target after signature verification so a path or
+/// content replacement during the verifier call cannot be reported with a
+/// signature belonging to a different file version.
+fn verify_and_reinspect(
+    tool: &ToolSpec,
+    resolver: &ToolResolver,
+    observation: ExecutableObservation,
+) -> (ExecutableObservation, crate::models::SignatureReport) {
+    let signature = signature::verify(&observation.canonical_path);
+
+    // Unsupported platforms do not invoke an external verifier, so another
+    // hash pass would add work without closing a verifier TOCTOU window.
+    if signature.status == crate::models::SignatureStatus::Unsupported {
+        return (observation, signature);
+    }
+
+    match inspect_tool(tool, resolver) {
+        Ok(current) if observations_match(&observation, &current) => (observation, signature),
+        Ok(current) => (
+            current,
+            signature::target_changed_report(
+                &signature,
+                "resolved path, symlink relationship, size, or SHA-256 changed during verification",
+            ),
+        ),
+        Err(failure) => (
+            observation,
+            signature::target_changed_report(
+                &signature,
+                format!(
+                    "target could not be re-inspected after verification: {} ({})",
+                    failure.kind, failure.message
+                ),
+            ),
+        ),
+    }
+}
+
+fn observations_match(previous: &ExecutableObservation, current: &ExecutableObservation) -> bool {
+    previous.requested_tool == current.requested_tool
+        && previous.resolved_path == current.resolved_path
+        && previous.canonical_path == current.canonical_path
+        && previous.symlink_target == current.symlink_target
+        && previous.size_bytes == current.size_bytes
+        && previous.sha256 == current.sha256
 }
 
 #[cfg(test)]
@@ -184,6 +242,7 @@ mod tests {
         assert!(!first_report.has_changes());
         let first = first_report.checks.into_iter().next().unwrap();
         assert_eq!(first.status, IntegrityStatus::NewBaseline);
+        assert!(first.signature.is_some());
         assert_eq!(first.observation.as_ref().unwrap().size_bytes, 13);
         assert_eq!(
             first.observation.as_ref().unwrap().sha256,

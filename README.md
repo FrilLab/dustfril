@@ -99,9 +99,13 @@ invokes a package manager, contacts the network, or modifies project files.
 `integrity scan` resolves the requested development tools through PATH, reads
 filesystem metadata, streams each target through SHA-256, and stores its
 versioned baseline separately from activity history. It never launches the
-target executable. Default tools are `node`, `bun`, `cargo`, `rustc`, `git`,
-`java`, and `gradle`; use repeated `--tool` flags to select a subset. A changed
-path or hash is reported as an integrity change, not as proof of malware.
+target executable. On macOS it also asks the system `codesign` verifier for
+read-only signature evidence; Linux and Windows report signature verification
+as explicitly unsupported until platform-specific verifiers are added. Default
+tools are `node`, `bun`, `cargo`, `rustc`, `git`, `java`, and `gradle`; use
+repeated `--tool` flags to select a subset. A changed path or hash is reported
+as an integrity change, not as proof of malware, and a signature result is not
+a general software-trust verdict.
 
 ## Desktop App
 
