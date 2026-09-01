@@ -5,6 +5,8 @@ use std::{collections::BTreeMap, fmt, path::PathBuf};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use super::SignatureReport;
+
 /// Version of the on-disk executable-integrity baseline format.
 pub const INTEGRITY_STATE_VERSION: u32 = 1;
 
@@ -150,6 +152,10 @@ pub struct IntegrityCheck {
     pub observation: Option<ExecutableObservation>,
     pub previous_observation: Option<ExecutableObservation>,
     pub failure: Option<IntegrityFailure>,
+    /// Signature evidence for the current canonical target, when the target
+    /// was resolved successfully. Signature verification is deliberately not
+    /// part of the hash baseline comparison.
+    pub signature: Option<SignatureReport>,
 }
 
 /// Structured results for an executable-integrity scan.

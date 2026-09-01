@@ -8,6 +8,7 @@ mod baseline;
 mod comparator;
 mod hasher;
 mod resolver;
+mod signature;
 
 pub use baseline::BaselineStore;
 pub use resolver::{ResolvedExecutable, ToolResolver};
@@ -42,6 +43,13 @@ pub fn inspect_tool(
 ) -> Result<ExecutableObservation, crate::models::IntegrityFailure> {
     let resolved = resolver.resolve(tool)?;
     hasher::observe(resolved)
+}
+
+/// Verifies the platform-supported code signature for an already resolved
+/// executable without launching the target. The caller should pass the
+/// canonical path returned by executable inspection.
+pub fn verify_signature(path: &Path) -> crate::models::SignatureReport {
+    signature::verify(path)
 }
 
 /// Resolves and compares selected tools using the process environment's PATH.
@@ -90,12 +98,15 @@ fn check_tool(
                 .observations
                 .insert(tool.name.clone(), observation.clone());
 
+            let signature = Some(signature::verify(&observation.canonical_path));
+
             IntegrityCheck {
                 requested_tool: tool.name.clone(),
                 status,
                 observation: Some(observation),
                 previous_observation,
                 failure: None,
+                signature,
             }
         }
         Err(failure) => {
@@ -111,6 +122,7 @@ fn check_tool(
                 observation: None,
                 previous_observation,
                 failure: Some(failure),
+                signature: None,
             }
         }
     }
@@ -184,6 +196,7 @@ mod tests {
         assert!(!first_report.has_changes());
         let first = first_report.checks.into_iter().next().unwrap();
         assert_eq!(first.status, IntegrityStatus::NewBaseline);
+        assert!(first.signature.is_some());
         assert_eq!(first.observation.as_ref().unwrap().size_bytes, 13);
         assert_eq!(
             first.observation.as_ref().unwrap().sha256,

@@ -1,4 +1,4 @@
-use dustfril_core::models::{IntegrityReport, IntegrityStatus};
+use dustfril_core::models::{IntegrityReport, IntegrityStatus, SignatureStatus};
 
 /// Prints non-executing executable-integrity facts and comparison states.
 pub fn print_integrity_report(report: &IntegrityReport) {
@@ -29,6 +29,26 @@ pub fn print_integrity_report(report: &IntegrityReport) {
 
         if let Some(failure) = &check.failure {
             println!("  Reason:         {} ({})", failure.kind, failure.message);
+        }
+
+        if let Some(signature) = &check.signature {
+            if signature.status == SignatureStatus::Unsupported {
+                println!("  Signature:      Unsupported on this platform");
+            } else {
+                println!("  Signature:      {}", signature.status);
+            }
+            if let Some(signer) = &signature.signer {
+                println!("  Signer:         {signer}");
+            }
+            if let Some(team_identifier) = &signature.team_identifier {
+                println!("  Team:           {team_identifier}");
+            }
+            if let Some(message) = &signature.verification_message {
+                println!("  Signature info: {message}");
+            }
+            if let Some(failure) = &signature.failure {
+                println!("  Signature reason: {} ({})", failure.kind, failure.message);
+            }
         }
 
         if matches!(
