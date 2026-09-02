@@ -1,6 +1,6 @@
 use std::{
     cmp::Ordering,
-    fmt,
+    fmt, fs,
     path::{Path, PathBuf},
 };
 
@@ -256,8 +256,26 @@ pub(crate) fn is_scanner_owned_artifact(ecosystem: Ecosystem, path: &Path) -> bo
 }
 
 fn relative_artifact_path(workspace_path: &Path, artifact_path: &Path) -> PathBuf {
-    let workspace = lexical_normalize(workspace_path);
-    let artifact = lexical_normalize(artifact_path);
+    // Existing scanner callers pass real paths, but canonicalizing here keeps
+    // the public model stable when a caller supplies a symlinked workspace.
+    // Missing paths still use lexical normalization so pure model callers do
+    // not need to create the artifact tree just to build a snapshot.
+    let lexical_workspace = lexical_normalize(workspace_path);
+    let lexical_artifact = lexical_normalize(artifact_path);
+
+    if let Ok(relative) = lexical_artifact.strip_prefix(&lexical_workspace)
+        && !relative.as_os_str().is_empty()
+    {
+        return relative.to_path_buf();
+    }
+
+    let (workspace, artifact) = match (
+        fs::canonicalize(workspace_path),
+        fs::canonicalize(artifact_path),
+    ) {
+        (Ok(workspace), Ok(artifact)) => (workspace, artifact),
+        _ => (lexical_workspace, lexical_artifact),
+    };
 
     artifact
         .strip_prefix(&workspace)
@@ -294,6 +312,7 @@ fn lexical_normalize(path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use chrono::TimeZone;
+    use tempfile::TempDir;
 
     use super::*;
     use crate::models::{Artifact, ArtifactAnalysis, CleanupRecommendation};
@@ -416,5 +435,33 @@ mod tests {
             }
             .has_changes()
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_workspace_uses_canonical_relative_artifact_identity() {
+        use std::os::unix::fs::symlink;
+
+        let root = TempDir::new().unwrap();
+        let workspace = root.path().join("workspace");
+        let link = root.path().join("workspace-link");
+        std::fs::create_dir_all(workspace.join("target")).unwrap();
+        symlink(&workspace, &link).unwrap();
+
+        let analysis = AnalysisResult {
+            artifacts: vec![artifact(
+                &workspace.join("target").display().to_string(),
+                Ecosystem::Rust,
+                10,
+            )],
+            total_size_bytes: 10,
+        };
+        let snapshot = ArtifactSnapshot::from_analysis(&link, &analysis);
+
+        assert_eq!(
+            snapshot.workspace_id,
+            fs::canonicalize(&workspace).unwrap().display().to_string()
+        );
+        assert_eq!(snapshot.artifacts[0].path, Path::new("target"));
     }
 }

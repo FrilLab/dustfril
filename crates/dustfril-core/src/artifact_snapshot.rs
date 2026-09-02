@@ -418,10 +418,18 @@ mod tests {
     }
 
     fn snapshot(workspace: &Path, path: &str, size_bytes: u64, timestamp: i64) -> ArtifactSnapshot {
+        let artifact_path = workspace.join(path);
         ArtifactSnapshot::from_analysis_at(
             fs::canonicalize(workspace).unwrap().display().to_string(),
             workspace,
-            &analysis(path, size_bytes),
+            &AnalysisResult {
+                artifacts: vec![analyzed_artifact(
+                    artifact_path,
+                    Ecosystem::Rust,
+                    size_bytes,
+                )],
+                total_size_bytes: size_bytes,
+            },
             Utc.timestamp_opt(timestamp, 0).single().unwrap(),
         )
     }
@@ -574,6 +582,73 @@ mod tests {
         assert_eq!(reloaded.len(), 2);
         assert_eq!(reloaded[0].artifacts[0].size_bytes, 10);
         assert_eq!(reloaded[1].artifacts[0].size_bytes, 20);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn canonical_and_symlink_workspace_access_share_snapshot_history() {
+        use std::os::unix::fs::symlink;
+
+        let root = TempDir::new().unwrap();
+        let workspace = root.path().join("workspace");
+        let link = root.path().join("workspace-link");
+        fs::create_dir_all(workspace.join("target")).unwrap();
+        symlink(&workspace, &link).unwrap();
+        let store = ArtifactSnapshotStore::new(root.path().join("snapshots.json"));
+
+        store
+            .record_snapshot(snapshot(&workspace, "target", 10, 1))
+            .unwrap();
+        let result = store
+            .record_snapshot(snapshot(&link, "target", 15, 2))
+            .unwrap();
+
+        assert_eq!(result.status, ArtifactSnapshotStatus::Compared);
+        assert_eq!(result.changes.len(), 1);
+        assert_eq!(result.changes[0].kind, ArtifactChangeKind::SizeIncreased);
+        assert_eq!(store.load_workspace(&link).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn moved_workspace_starts_a_new_history_instead_of_guessing_identity() {
+        let root = TempDir::new().unwrap();
+        let original = root.path().join("original");
+        let moved = root.path().join("moved");
+        fs::create_dir_all(original.join("target")).unwrap();
+        fs::create_dir_all(moved.join("target")).unwrap();
+        let store = ArtifactSnapshotStore::new(root.path().join("snapshots.json"));
+
+        store
+            .record_snapshot(snapshot(&original, "target", 10, 1))
+            .unwrap();
+        let moved_result = store
+            .record_snapshot(snapshot(&moved, "target", 10, 2))
+            .unwrap();
+
+        assert_eq!(moved_result.status, ArtifactSnapshotStatus::BaselineCreated);
+        assert_eq!(store.load_workspace(&original).unwrap().len(), 1);
+        assert_eq!(store.load_workspace(&moved).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn snapshot_reuses_analysis_metadata_without_rewalking_artifact_paths() {
+        let workspace = TempDir::new().unwrap();
+        let target = workspace.path().join("target");
+        fs::create_dir(&target).unwrap();
+        fs::write(target.join("artifact.bin"), b"saved analysis").unwrap();
+        fs::write(workspace.path().join("Cargo.toml"), "[package]").unwrap();
+
+        let scan = crate::api::scan(workspace.path(), &[Ecosystem::Rust]).unwrap();
+        let analysis = crate::api::analyze(scan).unwrap();
+        assert_eq!(analysis.artifacts[0].size_bytes, 14);
+
+        fs::remove_file(target.join("artifact.bin")).unwrap();
+
+        let store = ArtifactSnapshotStore::new(workspace.path().join("snapshots.json"));
+        let result = store.record(workspace.path(), &analysis).unwrap();
+
+        assert_eq!(result.snapshot.artifacts[0].size_bytes, 14);
+        assert_eq!(result.snapshot.artifacts[0].path, Path::new("target"));
     }
 
     #[test]
