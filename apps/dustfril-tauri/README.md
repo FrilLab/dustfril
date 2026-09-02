@@ -30,6 +30,7 @@ case-sensitive.
 | `default_root` | none | path string |
 | `scan` | `{ options: RunOptions }` | `ScanResponse` (may include additive `historyWarning`, `artifactSnapshot`, or `artifactSnapshotWarning`) |
 | `analyze` | `{ options: RunOptions }` | `AnalysisResponse` |
+| `analyze_workspace` | `{ options: RunOptions }` | `WorkspaceAnalysisResponse` (analysis and cleanup plan from one scan) |
 | `build_cleanup_plan` | `{ options: RunOptions }` | `CleanupPlanResponse` |
 | `audit` | `{ options: RunOptions }` | `LifecycleScript[]` |
 | `security_scan` | `{ options: RunOptions }` | `SecurityScanResponse` (may include additive `historyWarning`) |
@@ -43,9 +44,9 @@ boundary and matching Rust serialization tests and TypeScript updates.
 
 ## v0.0.1 Features
 
-- Dashboard with reclaimable storage, last scan time, and cleanup summary
-- Finder-like artifact explorer with category sidebar navigation
-- Scan, analyze, review, and cleanup workflow
+- Workspace-first Finder-like shell with native folder selection
+- One explicit Analyze Workspace action that discovers Rust, Node.js, and Java artifacts together
+- Unified recommendations list with reclaimable storage, selection, review, and cleanup summary
 - Safe cleanup with Trash or permanent delete confirmation
 - Activity history viewer backed by shared, versioned core history storage
 - Explicit scans return the generated-artifact snapshot comparison produced by Core
@@ -57,11 +58,8 @@ additive `historyWarning` for the desktop status surface.
 ## UI Components
 
 - `Sidebar`
-- `Dashboard`
-- `ArtifactExplorer`
-- `ArtifactList`
-- `ArtifactCard`
-- `StorageSummary`
+- `OverviewView`
+- `WorkspaceView`
 - `CleanupDialog`
 - `HistoryList`
 

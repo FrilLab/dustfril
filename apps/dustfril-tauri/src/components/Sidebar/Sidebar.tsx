@@ -1,7 +1,7 @@
 import type { CategoryConfig, SidebarCategory } from '../../model/categories';
 
 export type SidebarEntry = CategoryConfig & {
-  count: number;
+  count: number | null;
 };
 
 type SidebarProps = {
@@ -11,48 +11,10 @@ type SidebarProps = {
 };
 
 export function Sidebar(props: SidebarProps) {
-  const primaryEntries = props.entries.filter((entry) => entry.section === 'primary');
-  const languageEntries = props.entries.filter((entry) => entry.section === 'language');
-  const futureEntries = props.entries.filter((entry) => entry.section === 'future');
-
   return (
-    <aside className="border-r border-white/8 bg-[linear-gradient(180deg,#242426,#1d1d20)] px-4 py-4">
-      <div className="space-y-5">
-        <SidebarSection
-          title="Overview"
-          entries={primaryEntries}
-          activeCategory={props.activeCategory}
-          onCategoryChange={props.onCategoryChange}
-        />
-        <SidebarSection
-          title="Languages"
-          entries={languageEntries}
-          activeCategory={props.activeCategory}
-          onCategoryChange={props.onCategoryChange}
-        />
-        <SidebarSection
-          title="Future"
-          entries={futureEntries}
-          activeCategory={props.activeCategory}
-          onCategoryChange={props.onCategoryChange}
-        />
-      </div>
-    </aside>
-  );
-}
-
-function SidebarSection(props: {
-  title: string;
-  entries: SidebarEntry[];
-  activeCategory: SidebarCategory;
-  onCategoryChange: (category: SidebarCategory) => void;
-}) {
-  return (
-    <div>
-      <p className="mb-3 text-xs font-medium uppercase tracking-[0.24em] text-slate-500">
-        {props.title}
-      </p>
-      <div className="space-y-1.5">
+    <aside className="app-sidebar">
+      <p className="sidebar-heading">Favorites</p>
+      <nav className="sidebar-nav" aria-label="Primary navigation">
         {props.entries.map((entry) => {
           const active = entry.key === props.activeCategory;
 
@@ -61,23 +23,24 @@ function SidebarSection(props: {
               key={entry.key}
               type="button"
               onClick={() => props.onCategoryChange(entry.key)}
-              className={`flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left transition ${
-                active
-                  ? 'bg-[#3a3a3c] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]'
-                  : 'text-slate-300 hover:bg-white/6'
-              }`}
+              className={`sidebar-item${active ? ' sidebar-item-active' : ''}`}
+              aria-current={active ? 'page' : undefined}
+              title={entry.description}
             >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-white">{entry.title}</p>
-                <p className="mt-1 truncate text-xs text-slate-500">{entry.description}</p>
-              </div>
-              <span className="ml-3 rounded-full bg-black/20 px-2.5 py-1 text-xs text-slate-300">
-                {entry.count}
+              <span className={`sidebar-item-icon sidebar-icon-${entry.key}`} aria-hidden="true">
+                {entry.key === 'overview' ? '◌' : entry.key === 'workspace' ? '▣' : '◷'}
               </span>
+              <span className="sidebar-item-label">{entry.title}</span>
+              {entry.count !== null ? <span className="sidebar-count">{entry.count}</span> : null}
             </button>
           );
         })}
+      </nav>
+
+      <div className="sidebar-note">
+        <span className="sidebar-note-dot" aria-hidden="true" />
+        <span>Trash is the default cleanup mode.</span>
       </div>
-    </div>
+    </aside>
   );
 }

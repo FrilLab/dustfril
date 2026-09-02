@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-dialog';
 import type {
   AnalysisResponse,
   CleanupCandidate,
@@ -10,6 +11,7 @@ import type {
   RunOptions,
   ScanResponse,
   SecurityScanResponse,
+  WorkspaceAnalysisResponse,
 } from '../types/workflow';
 
 const commands = {
@@ -17,6 +19,7 @@ const commands = {
   scan: 'scan',
   analyze: 'analyze',
   buildCleanupPlan: 'build_cleanup_plan',
+  analyzeWorkspace: 'analyze_workspace',
   audit: 'audit',
   securityScan: 'security_scan',
   executeCleanup: 'execute_cleanup',
@@ -38,6 +41,21 @@ export function analyzeArtifacts(options: RunOptions) {
 
 export function buildCleanupPlan(options: RunOptions) {
   return invoke<CleanupPlanResponse>(commands.buildCleanupPlan, { options });
+}
+
+export function analyzeWorkspace(options: RunOptions) {
+  return invoke<WorkspaceAnalysisResponse>(commands.analyzeWorkspace, { options });
+}
+
+export async function chooseWorkspaceFolder(defaultPath?: string) {
+  const selected = await open({
+    directory: true,
+    multiple: false,
+    defaultPath,
+    title: 'Choose Workspace',
+  });
+
+  return typeof selected === 'string' ? selected : null;
 }
 
 export function auditScripts(options: RunOptions) {

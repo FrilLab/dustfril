@@ -159,6 +159,20 @@ pub(crate) struct AnalysisResponse {
     pub(crate) history_warning: Option<String>,
 }
 
+/// Result of the single user-facing Workspace analysis workflow. It carries
+/// both the analyzed artifacts and the cleanup plan derived from that same
+/// scan, so the desktop does not need to repeat filesystem traversal.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkspaceAnalysisResponse {
+    pub(crate) analysis: AnalysisResponse,
+    pub(crate) cleanup_plan: CleanupPlanResponse,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) artifact_snapshot: Option<ArtifactSnapshotResultDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) artifact_snapshot_warning: Option<String>,
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ArtifactAnalysisDto {
@@ -591,6 +605,47 @@ mod tests {
                     "recommendation": "SafeToClean"
                 }],
                 "totalSizeBytes": 42
+            })
+        );
+    }
+
+    #[test]
+    fn workspace_analysis_response_wire_format_keeps_analysis_and_plan_together() {
+        let response = WorkspaceAnalysisResponse {
+            analysis: AnalysisResponse {
+                artifacts: Vec::new(),
+                total_size_bytes: 42,
+                history_warning: None,
+            },
+            cleanup_plan: CleanupPlanResponse {
+                candidates: vec![CleanupCandidateDto {
+                    path: "/workspace/target".to_string(),
+                    ecosystem: EcosystemDto::Rust,
+                    size_bytes: 42,
+                    age_days: Some(120),
+                }],
+                reclaimable_size_bytes: 42,
+            },
+            artifact_snapshot: None,
+            artifact_snapshot_warning: None,
+        };
+
+        assert_eq!(
+            serde_json::to_value(response).unwrap(),
+            json!({
+                "analysis": {
+                    "artifacts": [],
+                    "totalSizeBytes": 42
+                },
+                "cleanupPlan": {
+                    "candidates": [{
+                        "path": "/workspace/target",
+                        "ecosystem": "Rust",
+                        "sizeBytes": 42,
+                        "ageDays": 120
+                    }],
+                    "reclaimableSizeBytes": 42
+                }
             })
         );
     }
