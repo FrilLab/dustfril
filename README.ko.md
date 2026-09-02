@@ -112,6 +112,8 @@ inventory로 교체됩니다. baseline 키는 canonical workspace 경로이므�
 심볼릭 링크와 canonical 경로는 같은 프로젝트로 처리하고, workspace를
 이동하면 새 프로젝트로 처리합니다. 불완전하거나 지원되지 않는 결과는
 경고로 남기며 기존 baseline을 지우지 않습니다.
+완전한 inventory가 하나도 없으면 비교 상태를 `Unavailable`로 표시하고
+해당 경고를 그대로 반환합니다.
 
 `integrity scan`은 PATH에서 요청한 개발 도구를 찾고 파일 메타데이터와 바이트를
 읽어 SHA-256을 스트리밍 계산합니다. 대상 실행 파일을 절대 실행하지 않으며,

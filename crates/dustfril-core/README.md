@@ -97,7 +97,8 @@ workspace path, so symlink access resolves to the same project and moved
 directories are treated as new projects. Direct/transitive scope is retained
 only where the inventory parser can classify it; otherwise entries are
 `Unknown`. Source changes are emitted only when both observations contain
-source identifiers.
+source identifiers. If no complete inventory is available, comparison returns
+an `Unavailable` result with warnings and leaves the stored baseline untouched.
 
 ## Test
 

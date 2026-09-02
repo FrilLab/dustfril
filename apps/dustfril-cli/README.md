@@ -45,6 +45,8 @@ cargo build -p dustfril-cli
   later comparisons preserve it until `--accept-baseline` is explicitly passed
 - dependency baselines are local, versioned, canonical-workspace keyed, and
   stored separately from activity history
+- incomplete comparison inventories remain visible as warnings and produce an
+  `Unavailable` comparison without changing the stored baseline
 - `clean` asks for confirmation before deletion
 - `clean --dry-run` previews without appending a cleanup activity
 - command failures return a non-zero process exit status

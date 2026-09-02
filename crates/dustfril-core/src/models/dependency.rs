@@ -186,6 +186,9 @@ pub enum DependencyBaselineStatus {
     /// A prior baseline was compared and remains unchanged until explicitly
     /// accepted by the caller.
     Compared,
+    /// No complete inventory was available, so no baseline was read or
+    /// modified.
+    Unavailable,
 }
 
 impl fmt::Display for DependencyBaselineStatus {
@@ -193,6 +196,7 @@ impl fmt::Display for DependencyBaselineStatus {
         let value = match self {
             Self::BaselineCreated => "Baseline created",
             Self::Compared => "Compared",
+            Self::Unavailable => "Unavailable",
         };
 
         f.write_str(value)

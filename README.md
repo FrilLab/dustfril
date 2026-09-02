@@ -121,7 +121,8 @@ comparison; pass `--accept-baseline` only after reviewing the diff. Baselines
 are keyed by the canonical workspace path, so symlink and canonical access share
 state while a moved workspace is treated as a new project. Unsupported or
 missing inventories are reported as warnings and are not used to erase a
-baseline.
+baseline; when no complete inventory is available, the comparison is marked
+unavailable and the warning is still returned.
 
 `integrity scan` resolves the requested development tools through PATH, reads
 filesystem metadata, streams each target through SHA-256, and stores its

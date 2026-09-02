@@ -76,6 +76,13 @@ impl DependencyBaselineStore {
             .unwrap_or_else(|error| error.into_inner());
         let mut state = load_unlocked(&self.path)?;
 
+        if current.is_empty() {
+            let mut diff =
+                DependencyDiff::empty(workspace_id, DependencyBaselineStatus::Unavailable);
+            diff.warnings = warnings;
+            return Ok(diff);
+        }
+
         let Some(previous) = state.projects.get(&workspace_id).cloned() else {
             state
                 .projects
@@ -120,6 +127,12 @@ impl DependencyBaselineStore {
     pub fn accept(&self, workspace_root: &Path, reports: &[DependencyReport]) -> DustResult<()> {
         let workspace_id = workspace_id(workspace_root)?;
         let (current, _) = current_inventories(reports)?;
+        if current.is_empty() {
+            return Err(DustError::DependencyState(
+                "at least one complete dependency inventory is required to accept a baseline"
+                    .to_owned(),
+            ));
+        }
         let _guard = baseline_lock()
             .lock()
             .unwrap_or_else(|error| error.into_inner());
@@ -183,13 +196,6 @@ fn current_inventories(reports: &[DependencyReport]) -> DustResult<(Inventories,
                 .or_insert_with(|| entry.clone());
         }
         inventories.insert(report.ecosystem, entries.into_values().collect());
-    }
-
-    if inventories.is_empty() {
-        return Err(DustError::DependencyState(
-            "at least one complete dependency inventory is required to compare or accept a baseline"
-                .to_owned(),
-        ));
     }
 
     warnings.sort();
@@ -437,7 +443,7 @@ fn save_unlocked(path: &Path, state: &DependencyBaselineState) -> DustResult<()>
             .open(&temporary_path)?;
         file.write_all(json.as_bytes())?;
         file.sync_all()?;
-        fs::rename(&temporary_path, path)
+        replace_file(&temporary_path, path)
     })();
 
     if let Err(error) = write_result {
@@ -446,6 +452,46 @@ fn save_unlocked(path: &Path, state: &DependencyBaselineState) -> DustResult<()>
     }
 
     Ok(())
+}
+
+#[cfg(not(windows))]
+fn replace_file(source: &Path, destination: &Path) -> io::Result<()> {
+    fs::rename(source, destination)
+}
+
+#[cfg(windows)]
+fn replace_file(source: &Path, destination: &Path) -> io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+    };
+
+    let source = source
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let destination = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+
+    // SAFETY: both buffers are null-terminated UTF-16 paths that remain alive
+    // for the duration of the call, and the flags request replacement with a
+    // write-through move so an existing destination is replaced atomically.
+    let result = unsafe {
+        MoveFileExW(
+            source.as_ptr(),
+            destination.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if result == 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
 }
 
 fn temporary_path(path: &Path) -> PathBuf {
@@ -552,6 +598,29 @@ mod tests {
     }
 
     #[test]
+    fn saving_replaces_an_existing_baseline_file() {
+        let project = TempDir::new().unwrap();
+        let state = project.path().join("state.json");
+        let store = DependencyBaselineStore::new(&state);
+        let first = DependencyBaselineState::default();
+        store.save(&first).unwrap();
+
+        let workspace_id = "v1:test-workspace".to_owned();
+        let mut second = first;
+        second.projects.insert(
+            workspace_id.clone(),
+            DependencyBaseline {
+                workspace_id,
+                inventories: BTreeMap::new(),
+            },
+        );
+        store.save(&second).unwrap();
+
+        assert_eq!(store.load().unwrap(), second);
+        assert_eq!(fs::read_dir(project.path()).unwrap().count(), 1);
+    }
+
+    #[test]
     fn added_removed_and_version_changes_are_distinguished() {
         let project = TempDir::new().unwrap();
         let state = project.path().join("state.json");
@@ -614,6 +683,47 @@ mod tests {
         assert!(store.compare(project.path(), &new).unwrap().has_changes());
         store.accept(project.path(), &new).unwrap();
         assert!(!store.compare(project.path(), &new).unwrap().has_changes());
+    }
+
+    #[test]
+    fn incomplete_inventory_returns_warnings_without_changing_the_baseline() {
+        let project = TempDir::new().unwrap();
+        let state = project.path().join("state.json");
+        let store = DependencyBaselineStore::new(&state);
+        let mut missing = report(Vec::new());
+        missing.status = DependencyReportStatus::MissingLockfile;
+        missing.warnings = vec!["package-lock.json is missing".to_owned()];
+
+        let first = store.compare(project.path(), &[missing.clone()]).unwrap();
+        assert_eq!(first.baseline_status, DependencyBaselineStatus::Unavailable);
+        assert_eq!(
+            first.warnings,
+            vec!["Node dependency baseline comparison skipped: package-lock.json is missing"]
+        );
+        assert!(!state.exists());
+
+        store
+            .compare(
+                project.path(),
+                &[report(vec![entry(
+                    "existing",
+                    "1.0.0",
+                    DependencyScope::Direct,
+                )])],
+            )
+            .unwrap();
+        let original = fs::read_to_string(&state).unwrap();
+
+        let second = store.compare(project.path(), &[missing]).unwrap();
+        assert_eq!(
+            second.baseline_status,
+            DependencyBaselineStatus::Unavailable
+        );
+        assert_eq!(
+            second.warnings,
+            vec!["Node dependency baseline comparison skipped: package-lock.json is missing"]
+        );
+        assert_eq!(fs::read_to_string(state).unwrap(), original);
     }
 
     #[test]
