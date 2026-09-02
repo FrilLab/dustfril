@@ -99,7 +99,11 @@ async fn scan(options: RunOptions) -> Result<ScanResponse, String> {
         let mut artifact_snapshot_warning = None;
         let total_size_bytes = match api::analyze(result.clone()) {
             Ok(analysis) => {
-                match api::artifact_snapshot::record_artifact_snapshot(&root, &analysis) {
+                match api::artifact_snapshot::record_artifact_snapshot_with_ecosystems(
+                    &root,
+                    &analysis,
+                    &ecosystems,
+                ) {
                     Ok(snapshot) => artifact_snapshot = Some(artifact_snapshot_to_dto(snapshot)),
                     Err(error) => {
                         let warning = format!("Failed to record artifact snapshot: {error}");

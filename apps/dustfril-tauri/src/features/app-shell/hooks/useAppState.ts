@@ -271,7 +271,7 @@ export function useAppState() {
     setCleanupPlan(plan);
     setSelectedCleanupPaths(plan.candidates.map((candidate) => candidate.path));
     setLastScanAtMs(Date.now());
-    setError(scan.historyWarning ?? scan.artifactSnapshotWarning ?? null);
+    setError(formatScanWarnings(scan));
     setHistoryEntries(await loadActivityHistory());
   }
 
@@ -425,4 +425,14 @@ function formatCleanupFailure(result: CleanupResultResponse, historyWarning?: st
   const historyMessage = historyWarning ? ` ${historyWarning}` : '';
 
   return `Cleanup completed with ${result.failedPaths.length} failure(s). Freed ${formatBytes(result.freedSizeBytes)}. Failed: ${failures}.${historyMessage}`;
+}
+
+function formatScanWarnings(
+  scan: Pick<ScanResponse, 'historyWarning' | 'artifactSnapshotWarning'>,
+): string | null {
+  const warnings = [scan.historyWarning, scan.artifactSnapshotWarning].filter(
+    (warning): warning is string => Boolean(warning),
+  );
+
+  return warnings.length ? warnings.join(' ') : null;
 }

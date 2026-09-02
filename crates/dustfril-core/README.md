@@ -38,6 +38,9 @@ returns malformed or unsupported state errors explicitly. A persistence error
 does not mutate the caller's completed analysis result. Symlink and canonical
 access share a workspace history; a moved workspace is treated as a new
 workspace because the implementation does not guess across path moves.
+When a snapshot is created from a filtered scan, the latest state for
+unselected ecosystems is carried forward so omitted artifacts are not treated
+as removed or spuriously new by later snapshots.
 
 Cleanup execution validates artifact type and protected paths, refuses
 symbolic links, and never falls back from Trash mode to permanent deletion.

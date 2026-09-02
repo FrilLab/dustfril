@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use crate::{
     artifact_snapshot,
     error::DustResult,
-    models::{AnalysisResult, ArtifactSnapshot, ArtifactSnapshotResult},
+    models::{AnalysisResult, ArtifactSnapshot, ArtifactSnapshotResult, Ecosystem},
 };
 
 pub use crate::artifact_snapshot::ArtifactSnapshotStore;
@@ -28,6 +28,20 @@ pub fn record_artifact_snapshot(
 ) -> DustResult<ArtifactSnapshotResult> {
     let path = artifact_snapshot_path()?;
     ArtifactSnapshotStore::new(path).record(workspace_path, analysis)
+}
+
+/// Persists one snapshot while preserving artifacts outside the selected scan scope.
+pub fn record_artifact_snapshot_with_ecosystems(
+    workspace_path: &Path,
+    analysis: &AnalysisResult,
+    selected_ecosystems: &[Ecosystem],
+) -> DustResult<ArtifactSnapshotResult> {
+    let path = artifact_snapshot_path()?;
+    ArtifactSnapshotStore::new(path).record_with_ecosystems(
+        workspace_path,
+        analysis,
+        selected_ecosystems,
+    )
 }
 
 /// Loads all retained generated-artifact snapshots.

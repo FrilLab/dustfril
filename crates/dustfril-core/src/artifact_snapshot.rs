@@ -14,8 +14,9 @@ use serde_json::Value;
 use crate::{
     error::{DustError, DustResult},
     models::{
-        ARTIFACT_SNAPSHOT_STATE_VERSION, AnalysisResult, ArtifactSnapshot, ArtifactSnapshotResult,
-        ArtifactSnapshotStatus, MAX_ARTIFACT_SNAPSHOTS_PER_WORKSPACE, compare_artifact_snapshots,
+        ARTIFACT_SNAPSHOT_STATE_VERSION, AnalysisResult, ArtifactSnapshot,
+        ArtifactSnapshotArtifact, ArtifactSnapshotResult, ArtifactSnapshotStatus, Ecosystem,
+        MAX_ARTIFACT_SNAPSHOTS_PER_WORKSPACE, compare_artifact_snapshots,
         is_scanner_owned_artifact,
     },
 };
@@ -88,16 +89,40 @@ impl ArtifactSnapshotStore {
         workspace_path: &Path,
         analysis: &AnalysisResult,
     ) -> DustResult<ArtifactSnapshotResult> {
+        self.record_with_ecosystems(workspace_path, analysis, &[])
+    }
+
+    /// Creates and persists one snapshot while preserving artifacts from
+    /// ecosystems not included in the selected scan.
+    pub fn record_with_ecosystems(
+        &self,
+        workspace_path: &Path,
+        analysis: &AnalysisResult,
+        selected_ecosystems: &[Ecosystem],
+    ) -> DustResult<ArtifactSnapshotResult> {
         let workspace_id = workspace_id(workspace_path)?;
         let snapshot =
             ArtifactSnapshot::from_analysis_at(workspace_id, workspace_path, analysis, Utc::now());
-        self.record_snapshot(snapshot)
+        self.record_snapshot_with_ecosystems(snapshot, selected_ecosystems)
     }
 
     /// Persists a caller-constructed snapshot and compares it with its previous state.
     pub fn record_snapshot(
         &self,
         snapshot: ArtifactSnapshot,
+    ) -> DustResult<ArtifactSnapshotResult> {
+        self.record_snapshot_with_ecosystems(snapshot, &[])
+    }
+
+    /// Persists a snapshot while treating omitted ecosystems as unobserved.
+    ///
+    /// The latest state from omitted ecosystems is carried forward so a
+    /// filtered scan cannot turn an unobserved artifact into `Removed`, nor
+    /// cause a later full scan to report it as spuriously `New`.
+    pub fn record_snapshot_with_ecosystems(
+        &self,
+        snapshot: ArtifactSnapshot,
+        selected_ecosystems: &[Ecosystem],
     ) -> DustResult<ArtifactSnapshotResult> {
         validate_snapshot(&snapshot)?;
 
@@ -110,6 +135,9 @@ impl ArtifactSnapshotStore {
             .get(&snapshot.workspace_id)
             .and_then(|snapshots| snapshots.last())
             .cloned();
+        let snapshot =
+            merge_unselected_artifacts(previous_snapshot.as_ref(), snapshot, selected_ecosystems);
+        validate_snapshot(&snapshot)?;
         let status = if previous_snapshot.is_some() {
             ArtifactSnapshotStatus::Compared
         } else {
@@ -140,6 +168,40 @@ impl ArtifactSnapshotStore {
             changes,
         })
     }
+}
+
+fn merge_unselected_artifacts(
+    previous: Option<&ArtifactSnapshot>,
+    mut current: ArtifactSnapshot,
+    selected_ecosystems: &[Ecosystem],
+) -> ArtifactSnapshot {
+    if selected_ecosystems.is_empty() {
+        return current;
+    }
+
+    let mut current_identities = current
+        .artifacts
+        .iter()
+        .map(ArtifactSnapshotArtifact::identity_key)
+        .collect::<BTreeSet<_>>();
+
+    if let Some(previous) = previous {
+        current.artifacts.extend(
+            previous
+                .artifacts
+                .iter()
+                .filter(|artifact| {
+                    !selected_ecosystems.contains(&artifact.ecosystem)
+                        && current_identities.insert(artifact.identity_key())
+                })
+                .cloned(),
+        );
+        current
+            .artifacts
+            .sort_by(ArtifactSnapshotArtifact::compare_identity);
+    }
+
+    current
 }
 
 /// Returns the OS-specific local path used for artifact snapshots.
@@ -330,17 +392,27 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
-    use crate::models::{Artifact, ArtifactAnalysis, ArtifactChangeKind, CleanupRecommendation};
+    use crate::models::{
+        Artifact, ArtifactAnalysis, ArtifactChangeKind, CleanupRecommendation, Ecosystem,
+    };
+
+    fn analyzed_artifact(
+        path: impl Into<PathBuf>,
+        ecosystem: Ecosystem,
+        size_bytes: u64,
+    ) -> ArtifactAnalysis {
+        ArtifactAnalysis {
+            artifact: Artifact::new(path.into(), ecosystem),
+            size_bytes,
+            last_modified: None,
+            age_days: None,
+            recommendation: CleanupRecommendation::Keep,
+        }
+    }
 
     fn analysis(path: &str, size_bytes: u64) -> AnalysisResult {
         AnalysisResult {
-            artifacts: vec![ArtifactAnalysis {
-                artifact: Artifact::new(PathBuf::from(path), crate::models::Ecosystem::Rust),
-                size_bytes,
-                last_modified: None,
-                age_days: None,
-                recommendation: CleanupRecommendation::Keep,
-            }],
+            artifacts: vec![analyzed_artifact(path, Ecosystem::Rust, size_bytes)],
             total_size_bytes: size_bytes,
         }
     }
@@ -387,6 +459,73 @@ mod tests {
         assert_eq!(result.changes[0].current_size_bytes, Some(15));
         assert_eq!(result.changes[0].delta_bytes, 5);
         assert_eq!(store.load_all().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn filtered_snapshot_preserves_unselected_ecosystems() {
+        let workspace = TempDir::new().unwrap();
+        let store = ArtifactSnapshotStore::new(workspace.path().join("snapshots.json"));
+        let workspace_id = fs::canonicalize(workspace.path())
+            .unwrap()
+            .display()
+            .to_string();
+        let complete_analysis = AnalysisResult {
+            artifacts: vec![
+                analyzed_artifact(workspace.path().join("target"), Ecosystem::Rust, 10),
+                analyzed_artifact(workspace.path().join("node_modules"), Ecosystem::Node, 20),
+                analyzed_artifact(workspace.path().join("build"), Ecosystem::Java, 30),
+            ],
+            total_size_bytes: 60,
+        };
+        store
+            .record_snapshot(ArtifactSnapshot::from_analysis_at(
+                workspace_id,
+                workspace.path(),
+                &complete_analysis,
+                Utc.timestamp_opt(1, 0).single().unwrap(),
+            ))
+            .unwrap();
+
+        let filtered_analysis = AnalysisResult {
+            artifacts: vec![analyzed_artifact(
+                workspace.path().join("target"),
+                Ecosystem::Rust,
+                15,
+            )],
+            total_size_bytes: 15,
+        };
+        let filtered_result = store
+            .record_with_ecosystems(workspace.path(), &filtered_analysis, &[Ecosystem::Rust])
+            .unwrap();
+
+        assert_eq!(filtered_result.snapshot.artifacts.len(), 3);
+        assert!(filtered_result.changes.iter().all(|change| !matches!(
+            change.kind,
+            ArtifactChangeKind::New | ArtifactChangeKind::Removed
+        )));
+        assert!(
+            filtered_result
+                .changes
+                .iter()
+                .any(|change| change.kind == ArtifactChangeKind::SizeIncreased)
+        );
+
+        let full_analysis = AnalysisResult {
+            artifacts: vec![
+                analyzed_artifact(workspace.path().join("target"), Ecosystem::Rust, 15),
+                analyzed_artifact(workspace.path().join("node_modules"), Ecosystem::Node, 20),
+                analyzed_artifact(workspace.path().join("build"), Ecosystem::Java, 30),
+            ],
+            total_size_bytes: 65,
+        };
+        let full_result = store
+            .record_with_ecosystems(workspace.path(), &full_analysis, &[])
+            .unwrap();
+
+        assert!(full_result.changes.iter().all(|change| !matches!(
+            change.kind,
+            ArtifactChangeKind::New | ArtifactChangeKind::Removed
+        )));
     }
 
     #[test]

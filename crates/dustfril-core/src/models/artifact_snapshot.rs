@@ -131,7 +131,7 @@ impl ArtifactSnapshotArtifact {
         format!("{}:{}", self.ecosystem, self.path.display())
     }
 
-    fn compare_identity(left: &Self, right: &Self) -> Ordering {
+    pub(crate) fn compare_identity(left: &Self, right: &Self) -> Ordering {
         left.path
             .cmp(&right.path)
             .then_with(|| left.ecosystem.cmp(&right.ecosystem))

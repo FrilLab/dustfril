@@ -53,7 +53,8 @@ cargo build -p dustfril-cli
   deltas and deterministic new/removed/increased/decreased/unchanged states
 - Snapshot state is local, versioned, canonical-workspace keyed, atomically
   replaced, and bounded to the latest 32 snapshots per workspace; moved
-  workspaces intentionally start a new history
+  workspaces intentionally start a new history. A filtered snapshot carries
+  forward the latest state for ecosystems outside its selected scope.
 - `dependencies --compare` creates the first baseline without Added findings;
   later comparisons preserve it until `--accept-baseline` is explicitly passed
 - dependency baselines are local, versioned, canonical-workspace keyed, and

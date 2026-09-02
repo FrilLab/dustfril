@@ -35,7 +35,11 @@ pub fn execute(args: PathArgs) -> bool {
     let snapshot_result = match api::analyze(result.clone()) {
         Ok(analysis) => {
             let snapshot_result =
-                match api::artifact_snapshot::record_artifact_snapshot(&path, &analysis) {
+                match api::artifact_snapshot::record_artifact_snapshot_with_ecosystems(
+                    &path,
+                    &analysis,
+                    &ecosystems,
+                ) {
                     Ok(snapshot) => Some(snapshot),
                     Err(error) => {
                         eprintln!("Failed to record artifact snapshot: {error}");

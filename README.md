@@ -161,7 +161,9 @@ second time. State is keyed by canonical workspace path and retains the latest
 32 snapshots per workspace. Access through a symlink resolves to the same
 canonical workspace; moving a workspace creates a new history rather than
 guessing that it is the old one. Snapshot persistence warnings do not discard
-a completed scan/analyze result.
+a completed scan/analyze result. Filtered snapshots carry forward the latest
+state for ecosystems that were not selected, so a later full scan does not
+report unobserved artifacts as newly created.
 
 ## Desktop App
 

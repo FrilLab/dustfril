@@ -20,7 +20,8 @@ pub fn execute(args: PathArgs) -> bool {
         return false;
     }
 
-    let scan = match api::scan(&path, &args.ecosystems()) {
+    let ecosystems = args.ecosystems();
+    let scan = match api::scan(&path, &ecosystems) {
         Ok(scan) => scan,
         Err(error) => {
             eprintln!("Snapshot scan failed: {error}");
@@ -35,7 +36,11 @@ pub fn execute(args: PathArgs) -> bool {
         }
     };
 
-    let result = match api::artifact_snapshot::record_artifact_snapshot(&path, &analysis) {
+    let result = match api::artifact_snapshot::record_artifact_snapshot_with_ecosystems(
+        &path,
+        &analysis,
+        &ecosystems,
+    ) {
         Ok(result) => result,
         Err(error) => {
             eprintln!("Failed to persist artifact snapshot: {error}");
