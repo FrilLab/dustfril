@@ -1,5 +1,7 @@
 use std::fmt;
 
+use crate::models::ScanAccessSummary;
+
 /// Errors returned by the core scanning, analysis, and cleanup APIs.
 #[derive(Debug)]
 pub enum DustError {
@@ -9,6 +11,12 @@ pub enum DustError {
     InvalidPath(std::path::PathBuf),
     /// Indicates an unrecoverable scan failure.
     ScanFailed,
+    /// Indicates a scan failure with the partial access summary collected
+    /// before traversal stopped.
+    ScanAccess {
+        source: Box<Self>,
+        access_summary: ScanAccessSummary,
+    },
     /// Indicates an unrecoverable analysis failure.
     AnalysisFailed,
     /// Indicates an unrecoverable cleanup failure.
@@ -42,6 +50,7 @@ impl fmt::Display for DustError {
             DustError::ScanFailed => {
                 write!(f, "Scan failed")
             }
+            DustError::ScanAccess { source, .. } => source.fmt(f),
             DustError::AnalysisFailed => {
                 write!(f, "Analysis failed")
             }
@@ -74,6 +83,17 @@ impl std::error::Error for DustError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Io(error) => Some(error),
+            Self::ScanAccess { source, .. } => Some(source),
+            _ => None,
+        }
+    }
+}
+
+impl DustError {
+    /// Returns the partial access summary attached to a failed scan, if any.
+    pub fn scan_access_summary(&self) -> Option<&ScanAccessSummary> {
+        match self {
+            Self::ScanAccess { access_summary, .. } => Some(access_summary),
             _ => None,
         }
     }
@@ -123,5 +143,18 @@ mod tests {
         let error = DustError::Manifest("package.json is invalid".to_owned());
 
         assert_eq!(error.to_string(), "Manifest error: package.json is invalid");
+    }
+
+    #[test]
+    fn scan_access_error_preserves_source_and_summary() {
+        let summary = ScanAccessSummary::new("/workspace");
+        let error = DustError::ScanAccess {
+            source: Box::new(DustError::Io(io::Error::other("permission denied"))),
+            access_summary: summary.clone(),
+        };
+
+        assert_eq!(error.to_string(), "I/O error: permission denied");
+        assert!(std::error::Error::source(&error).is_some());
+        assert_eq!(error.scan_access_summary(), Some(&summary));
     }
 }

@@ -16,6 +16,8 @@ use serde::{Deserialize, Serialize};
 pub(crate) struct RunOptions {
     pub(crate) root: Option<String>,
     pub(crate) ecosystems: Vec<EcosystemDto>,
+    #[serde(default)]
+    pub(crate) record_history: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq)]
@@ -153,6 +155,8 @@ pub(crate) struct ArtifactDto {
 pub(crate) struct AnalysisResponse {
     pub(crate) artifacts: Vec<ArtifactAnalysisDto>,
     pub(crate) total_size_bytes: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) history_warning: Option<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -531,6 +535,15 @@ mod tests {
             options.ecosystems,
             vec![EcosystemDto::Rust, EcosystemDto::Node, EcosystemDto::Java]
         );
+        assert_eq!(options.record_history, None);
+
+        let explicit_analysis_options: RunOptions = serde_json::from_value(json!({
+            "root": "/workspace",
+            "ecosystems": ["Rust"],
+            "recordHistory": true
+        }))
+        .unwrap();
+        assert_eq!(explicit_analysis_options.record_history, Some(true));
     }
 
     #[test]
@@ -563,6 +576,7 @@ mod tests {
                 recommendation: RecommendationDto::SafeToClean,
             }],
             total_size_bytes: 42,
+            history_warning: None,
         };
 
         assert_eq!(
@@ -791,6 +805,11 @@ mod tests {
             freed_size_bytes: 0,
             history_warning: Some("history is unavailable".to_owned()),
         };
+        let analysis = AnalysisResponse {
+            artifacts: Vec::new(),
+            total_size_bytes: 0,
+            history_warning: Some("history is unavailable".to_owned()),
+        };
 
         assert_eq!(
             serde_json::to_value(scan).unwrap(),
@@ -802,6 +821,14 @@ mod tests {
                 "deletedPaths": [],
                 "failedPaths": [],
                 "freedSizeBytes": 0,
+                "historyWarning": "history is unavailable"
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(analysis).unwrap(),
+            json!({
+                "artifacts": [],
+                "totalSizeBytes": 0,
                 "historyWarning": "history is unavailable"
             })
         );

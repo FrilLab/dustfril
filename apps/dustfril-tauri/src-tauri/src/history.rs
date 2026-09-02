@@ -40,6 +40,16 @@ pub fn record_scan_failure(target_path: &Path, reason: &str) -> Result<(), Strin
     api::history::record_scan_failure(target_path, reason).map_err(|error| error.to_string())
 }
 
+/// Records a failed scan together with its bounded partial access summary.
+pub fn record_scan_failure_with_summary(
+    target_path: &Path,
+    reason: &str,
+    access_summary: &dustfril_core::models::ScanAccessSummary,
+) -> Result<(), String> {
+    api::history::record_scan_failure_with_summary(target_path, reason, access_summary)
+        .map_err(|error| error.to_string())
+}
+
 /// Records a cleanup that failed before producing a cleanup result.
 pub fn record_cleanup_failure(mode: DeleteMode, reason: &str) -> Result<(), String> {
     api::history::record_cleanup_failure(mode, reason).map_err(|error| error.to_string())

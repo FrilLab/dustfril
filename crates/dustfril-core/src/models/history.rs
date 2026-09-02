@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::models::{
-    CleanupResult, DeleteMode, Ecosystem, RiskLevel, ScanResult, SecurityReport,
+    CleanupResult, DeleteMode, Ecosystem, RiskLevel, ScanAccessSummary, ScanResult, SecurityReport,
     effective_security_ecosystems,
 };
 
@@ -49,12 +49,15 @@ impl ActivityResult {
         scan: &ScanResult,
         total_size_bytes: u64,
     ) -> Self {
+        let access_summary = scan_access_summary_details(target_path, &scan.access_summary);
+
         Self::new(
             true,
             json!({
-                "path": target_path.display().to_string(),
+                "path": sanitize_path(target_path),
                 "artifacts": scan.artifacts.len(),
                 "size": total_size_bytes,
+                "accessSummary": access_summary,
             }),
         )
     }
@@ -64,10 +67,29 @@ impl ActivityResult {
         Self::new(
             false,
             json!({
-                "path": target_path.display().to_string(),
+                "path": sanitize_path(target_path),
                 "artifacts": 0,
                 "size": 0,
                 "reason": sanitize_text(reason),
+            }),
+        )
+    }
+
+    /// Builds the result payload for a failed scan with its partial access
+    /// summary retained.
+    pub fn from_scan_failure_with_summary(
+        target_path: &Path,
+        reason: &str,
+        access_summary: &ScanAccessSummary,
+    ) -> Self {
+        Self::new(
+            false,
+            json!({
+                "path": sanitize_path(target_path),
+                "artifacts": 0,
+                "size": 0,
+                "reason": sanitize_text(reason),
+                "accessSummary": scan_access_summary_details(target_path, access_summary),
             }),
         )
     }
@@ -208,6 +230,17 @@ impl ActivityRecord {
         )
     }
 
+    pub fn scan_failure_with_summary(
+        target_path: &Path,
+        reason: &str,
+        access_summary: &ScanAccessSummary,
+    ) -> Self {
+        Self::new(
+            ActivityKind::Scan,
+            ActivityResult::from_scan_failure_with_summary(target_path, reason, access_summary),
+        )
+    }
+
     pub fn cleanup(mode: DeleteMode, result: &CleanupResult) -> Self {
         Self::new(
             ActivityKind::Cleanup,
@@ -313,6 +346,36 @@ fn source_path(root: &Path, finding_path: &Path) -> String {
 
 fn sanitize_path(path: &Path) -> String {
     sanitize_text(&path.display().to_string())
+}
+
+fn scan_access_summary_details(target_path: &Path, summary: &ScanAccessSummary) -> Value {
+    let summary = summary.bounded();
+    let root = if summary.root.as_os_str().is_empty() {
+        target_path
+    } else {
+        &summary.root
+    };
+    let failure_samples = summary
+        .failure_samples
+        .iter()
+        .map(|failure| {
+            json!({
+                "path": sanitize_path(&failure.path),
+                "reason": sanitize_text(&failure.reason),
+            })
+        })
+        .collect::<Vec<_>>();
+
+    json!({
+        "root": sanitize_path(root),
+        "directoriesVisited": summary.directories_visited,
+        "filesInspected": summary.files_inspected,
+        "metadataFilesInspected": summary.metadata_files_inspected,
+        "artifactCandidates": summary.artifact_candidates,
+        "symlinksSkipped": summary.symlinks_skipped,
+        "failures": summary.failures,
+        "failureSamples": failure_samples,
+    })
 }
 
 /// Redacts common credential-shaped values while retaining useful context.
@@ -530,6 +593,57 @@ mod tests {
         assert_eq!(result.details["findingCount"], 0);
         assert_eq!(result.details["highestRisk"], "None");
         assert_eq!(result.details["reason"], "Manifest error: token=[REDACTED]");
+    }
+
+    #[test]
+    fn scan_activity_persists_bounded_access_summary_without_contents() {
+        let root = Path::new("/workspace");
+        let mut access_summary = ScanAccessSummary::new(root);
+        access_summary.directories_visited = 4;
+        access_summary.files_inspected = 2;
+        access_summary.metadata_files_inspected = 2;
+        access_summary.artifact_candidates = 1;
+        access_summary.symlinks_skipped = 3;
+
+        for index in 0..(crate::models::MAX_SCAN_FAILURE_SAMPLES + 2) {
+            access_summary.record_failure(
+                &root.join(format!("diagnostics/failure-{index}")),
+                "permission denied",
+            );
+        }
+
+        let scan = ScanResult {
+            artifacts: vec![],
+            access_summary,
+        };
+        let activity = ActivityRecord::scan(root, &scan, 0);
+        let serialized = serde_json::to_string(&activity).unwrap();
+
+        assert_eq!(
+            activity.result.details["accessSummary"]["root"],
+            "/workspace"
+        );
+        assert_eq!(
+            activity.result.details["accessSummary"]["directoriesVisited"],
+            4
+        );
+        assert_eq!(
+            activity.result.details["accessSummary"]["metadataFilesInspected"],
+            2
+        );
+        assert_eq!(
+            activity.result.details["accessSummary"]["failures"],
+            (crate::models::MAX_SCAN_FAILURE_SAMPLES + 2) as u64
+        );
+        assert_eq!(
+            activity.result.details["accessSummary"]["failureSamples"]
+                .as_array()
+                .unwrap()
+                .len(),
+            crate::models::MAX_SCAN_FAILURE_SAMPLES
+        );
+        assert!(serialized.contains("failure-0"));
+        assert!(!serialized.contains("source contents"));
     }
 
     #[test]

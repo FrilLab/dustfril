@@ -20,6 +20,7 @@ The repository is split into a reusable Rust core crate, a CLI app, and a Tauri 
 - Clean artifacts with Trash or permanent deletion mode
 - Audit Node lifecycle scripts such as `preinstall` and `postinstall`
 - Persist versioned local activity history for scans, cleanup, and explicit security scans (including legacy cleanup history migration)
+- Record a bounded access summary for each explicit artifact scan
 - Run an offline supply-chain security scan for Node and Rust projects
 - Report deterministic Node and Rust dependency inventory from manifests and lockfiles
 - Compare dependency inventories with explicit local baselines and report added, removed, version, and supported source changes
@@ -35,6 +36,13 @@ Scans reject missing, symbolic-link, or non-directory roots and report
 filesystem traversal errors. Cleanup only accepts real artifact directories,
 refuses symbolic links and protected paths, and reports Trash failures without
 permanently deleting the candidate as a fallback.
+
+Each explicit artifact scan collects its access summary during the existing
+traversal and stores it in the corresponding local Scan activity record. The
+summary includes visited directories, supported metadata files actually
+inspected, discovered artifact candidates, skipped symbolic links, and a total
+failure count with at most eight representative failure samples. Unrelated
+source files are not read or listed, and no per-file access log is created.
 
 ## Detected Artifacts
 

@@ -309,7 +309,9 @@ export function useAppState() {
 
   async function handleAnalyzeCategory() {
     await runAction('analyze', async () => {
-      setAnalysisResult(await analyzeArtifacts(runOptions));
+      const analysis = await analyzeArtifacts({ ...runOptions, recordHistory: true });
+      setAnalysisResult(analysis);
+      setError(analysis.historyWarning ?? null);
       setHistoryEntries(await loadActivityHistory());
       setExplorerWorkflow('analysis');
     });

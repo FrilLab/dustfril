@@ -24,8 +24,17 @@ pub fn execute(args: PathArgs) -> bool {
     let result = match api::scan(&path, &ecosystems) {
         Ok(res) => res,
         Err(e) => {
-            if let Err(history_error) = history::record_scan_failure(&path, &e.to_string()) {
+            let history_result = match e.scan_access_summary() {
+                Some(summary) => {
+                    history::record_scan_failure_with_summary(&path, &e.to_string(), summary)
+                }
+                None => history::record_scan_failure(&path, &e.to_string()),
+            };
+            if let Err(history_error) = history_result {
                 eprintln!("Failed to record scan failure history: {history_error}");
+            }
+            if let Some(summary) = e.scan_access_summary() {
+                format::print_scan_access_summary(summary);
             }
             eprintln!("Scan failed: {}", e);
             return false;
@@ -61,6 +70,8 @@ pub fn execute(args: PathArgs) -> bool {
     if let Some(snapshot) = &snapshot_result {
         format::print_artifact_snapshot_result(snapshot);
     }
+
+    format::print_scan_access_summary(&result.access_summary);
 
     if result.artifacts.is_empty() {
         println!("No artifacts found.");

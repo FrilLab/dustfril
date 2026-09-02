@@ -36,6 +36,7 @@ mod tests {
                 temp_dir.path().to_path_buf(),
                 Ecosystem::Rust,
             )],
+            ..ScanResult::default()
         };
 
         let plan = build_plan(scan).unwrap();
@@ -52,6 +53,7 @@ mod tests {
                 temp_dir.path().to_path_buf(),
                 Ecosystem::Rust,
             )],
+            ..ScanResult::default()
         };
 
         let analysis = crate::api::analyze(scan).unwrap();
