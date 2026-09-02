@@ -68,7 +68,7 @@ fn analyze_scope(
                     workflow_path: workflow.path.clone(),
                     job_id: job.map(|(job_id, _)| job_id.to_owned()),
                     reason: format!(
-                        "Permission mapping contains an unsupported level; effective write scope is unresolved ({})",
+                        "Permission mapping contains an unsupported level or scope; effective write scope is unresolved ({})",
                         permissions.summary()
                     ),
                 });
@@ -281,5 +281,23 @@ mod tests {
         assert!(findings.is_empty());
         assert_eq!(notices.len(), 1);
         assert!(notices[0].reason.contains("unsupported"));
+    }
+
+    #[test]
+    fn unsupported_permission_scopes_are_partial_and_not_counted_as_writes() {
+        let (findings, notices) = findings_for(&workflow(
+            None,
+            Some(map(&[(
+                "custom-scope",
+                WorkflowPermissionLevel::Unknown(
+                    "unsupported permission scope: custom-scope".to_owned(),
+                ),
+            )])),
+        ));
+
+        assert!(findings.is_empty());
+        assert_eq!(notices.len(), 1);
+        assert!(notices[0].reason.contains("unsupported level or scope"));
+        assert!(notices[0].reason.contains("custom-scope"));
     }
 }

@@ -30,8 +30,12 @@ pub fn parse(command: &str) -> Vec<Segment> {
 
     while let Some(character) = characters.next() {
         if escaped {
-            token.push(character.to_ascii_lowercase());
             escaped = false;
+            if !matches!(character, '\n' | '\r') {
+                token.push(character.to_ascii_lowercase());
+            } else if character == '\r' && characters.peek() == Some(&'\n') {
+                characters.next();
+            }
             continue;
         }
 
@@ -58,6 +62,20 @@ pub fn parse(command: &str) -> Vec<Segment> {
 
         match character {
             '\'' | '"' => quote = Some(character),
+            '\r' | '\n' => {
+                if character == '\r' && characters.peek() == Some(&'\n') {
+                    characters.next();
+                }
+                push_token(&mut tokens, &mut token);
+                if tokens.is_empty() {
+                    if preceding.is_none() {
+                        preceding = Some(Separator::Sequence);
+                    }
+                } else {
+                    push_segment(&mut segments, &mut tokens, preceding.take());
+                    preceding = Some(Separator::Sequence);
+                }
+            }
             character if character.is_whitespace() => push_token(&mut tokens, &mut token),
             '&' | '|' | ';' => {
                 push_token(&mut tokens, &mut token);
@@ -223,6 +241,32 @@ mod tests {
         assert_eq!(segments[1].preceding, Some(Separator::And));
         assert_eq!(segments[2].preceding, Some(Separator::Pipe));
         assert_eq!(segments[3].preceding, Some(Separator::Sequence));
+    }
+
+    #[test]
+    fn parse_records_unescaped_newlines_as_command_boundaries() {
+        let segments = parse("echo setup\nwget payload\nchmod +x payload\n./payload");
+
+        assert_eq!(segments.len(), 4);
+        assert_eq!(segments[0].tokens, ["echo", "setup"]);
+        assert_eq!(segments[1].preceding, Some(Separator::Sequence));
+        assert_eq!(segments[1].tokens, ["wget", "payload"]);
+        assert_eq!(segments[2].preceding, Some(Separator::Sequence));
+        assert_eq!(segments[2].tokens, ["chmod", "+x", "payload"]);
+        assert_eq!(segments[3].preceding, Some(Separator::Sequence));
+        assert_eq!(segments[3].tokens, ["./payload"]);
+    }
+
+    #[test]
+    fn parse_preserves_line_continuations_and_operator_continuations() {
+        let continued = parse(concat!("echo setup \\", "\n", "wget payload"));
+        assert_eq!(continued.len(), 1);
+        assert_eq!(continued[0].tokens, ["echo", "setup", "wget", "payload"]);
+
+        let operator_continued = parse("curl payload |\n bash");
+        assert_eq!(operator_continued.len(), 2);
+        assert_eq!(operator_continued[1].preceding, Some(Separator::Pipe));
+        assert_eq!(operator_continued[1].tokens, ["bash"]);
     }
 
     #[test]
