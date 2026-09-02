@@ -47,9 +47,11 @@ are evidence about the verifier result, not malware claims.
 The supply-chain report reads `package.json` and `Cargo.toml` plus supported
 lockfiles without executing scripts or contacting an external advisory service.
 It parses npm lockfile versions 1–3, pnpm YAML, Bun JSONC lockfile versions
-1–2, and Cargo.lock versions 1–4. Yarn lockfiles and legacy binary `bun.lockb`
-are intentionally opaque; no npm-missing result is inferred from either when
-it is the only Node lockfile present.
+1–2, and Cargo.lock versions 1–4. Cargo workspace roots are explicitly
+unsupported because member manifest aggregation requires a separate design.
+Yarn lockfiles and legacy binary `bun.lockb` are intentionally opaque; no
+npm-missing result is inferred from either when it is the only Node lockfile
+present.
 
 Explicit security scans can be recorded as one `ActivityKind::Security` event
 through `api::history`. The event stores finding counts, highest severity,

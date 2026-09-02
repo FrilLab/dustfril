@@ -38,6 +38,7 @@ struct ParsedManifest {
     direct_counts: BTreeMap<String, usize>,
     direct_names: BTreeSet<String>,
     node_manager: Option<NodeManager>,
+    is_cargo_workspace: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -145,6 +146,15 @@ fn report_rust(root: &Path) -> DustResult<DependencyReport> {
     }
 
     let manifest = parse_cargo_manifest(&path)?;
+    if manifest.is_cargo_workspace {
+        return Ok(unsupported_format_report(
+            manifest,
+            None,
+            None,
+            "Cargo workspace dependency reporting is not supported yet; member manifests require a separate workspace-aware design."
+                .to_owned(),
+        ));
+    }
     let lockfile_path = root.join(LockfileKind::CargoLock.filename());
 
     if !lockfile_path.is_file() {
@@ -426,6 +436,7 @@ fn parse_node_manifest(path: &Path) -> DustResult<ParsedManifest> {
         direct_counts,
         direct_names,
         node_manager,
+        is_cargo_workspace: false,
     })
 }
 
@@ -447,6 +458,18 @@ fn parse_cargo_manifest(path: &Path) -> DustResult<ParsedManifest> {
     let table = value
         .as_table()
         .ok_or_else(|| manifest_error(path, "Cargo.toml must contain a TOML table".to_owned()))?;
+
+    if table.contains_key("workspace") {
+        return Ok(ParsedManifest {
+            path: path.to_path_buf(),
+            format: "Cargo.toml".to_owned(),
+            project_names: BTreeSet::new(),
+            direct_counts: BTreeMap::new(),
+            direct_names: BTreeSet::new(),
+            node_manager: None,
+            is_cargo_workspace: true,
+        });
+    }
 
     let mut direct_counts = BTreeMap::new();
     let mut direct_names = BTreeSet::new();
@@ -474,6 +497,7 @@ fn parse_cargo_manifest(path: &Path) -> DustResult<ParsedManifest> {
         direct_counts,
         direct_names,
         node_manager: None,
+        is_cargo_workspace: false,
     })
 }
 
@@ -625,6 +649,12 @@ fn parse_package_lock_packages(
         if key.is_empty() {
             continue;
         }
+        if package_lock_path_is_workspace(key) {
+            // npm workspace package records use project-relative paths such
+            // as packages/app. The corresponding node_modules entry is a
+            // link, so neither record is a resolved external package node.
+            continue;
+        }
 
         let selector_name = package_name_from_selector(key);
         let name = optional_json_string(object, "name", path)?
@@ -694,6 +724,10 @@ fn parse_npm_dependency_tree(
 
 fn package_lock_path_is_direct(path: &str) -> bool {
     path.starts_with("node_modules/") && path.matches("node_modules/").count() == 1
+}
+
+fn package_lock_path_is_workspace(path: &str) -> bool {
+    !path.is_empty() && !path.starts_with("node_modules/") && !path.contains("/node_modules/")
 }
 
 fn parse_pnpm_lock(path: &Path, manifest: &ParsedManifest) -> DustResult<Vec<ResolvedDependency>> {
@@ -1530,6 +1564,43 @@ mod tests {
     }
 
     #[test]
+    fn npm_workspace_records_are_not_resolved_nodes() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(
+            temp_dir.path().join("package.json"),
+            r#"{
+                "name":"root",
+                "workspaces":["packages/*"],
+                "dependencies":{"external":"1.0.0"}
+            }"#,
+        )
+        .unwrap();
+        fs::write(
+            temp_dir.path().join("package-lock.json"),
+            r#"{
+                "lockfileVersion":3,
+                "packages":{
+                    "":{"name":"root"},
+                    "packages/a":{},
+                    "packages/versioned":{"name":"versioned","version":"1.0.0"},
+                    "node_modules/a":{"resolved":"packages/a","link":true},
+                    "node_modules/versioned":{"resolved":"packages/versioned","link":true},
+                    "node_modules/external":{"version":"1.0.0"}
+                }
+            }"#,
+        )
+        .unwrap();
+
+        let report = report(temp_dir.path(), &[Ecosystem::Node])
+            .unwrap()
+            .remove(0);
+
+        assert_eq!(report.resolved_dependency_count.value, Some(1));
+        assert_eq!(report.transitive_dependency_count.value, Some(0));
+        assert!(report.duplicate_versions.is_empty());
+    }
+
+    #[test]
     fn package_lock_v1_uses_tree_depth_for_transitive_count() {
         let temp_dir = TempDir::new().unwrap();
         fs::write(
@@ -1719,6 +1790,43 @@ version = "1.0.0"
         assert_eq!(report.resolved_dependency_count.value, Some(5));
         assert_eq!(report.transitive_dependency_count.value, Some(1));
         assert_eq!(report.duplicate_versions[0].name, "serde");
+    }
+
+    #[test]
+    fn cargo_workspaces_are_explicitly_unsupported() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(
+            temp_dir.path().join("Cargo.toml"),
+            r#"[workspace]
+members = ["crates/*"]
+
+[workspace.dependencies]
+serde = "1"
+"#,
+        )
+        .unwrap();
+        fs::write(
+            temp_dir.path().join("Cargo.lock"),
+            r#"version = 4
+
+[[package]]
+name = "workspace-member"
+version = "0.1.0"
+"#,
+        )
+        .unwrap();
+
+        let report = report(temp_dir.path(), &[Ecosystem::Rust])
+            .unwrap()
+            .remove(0);
+
+        assert_eq!(report.status, DependencyReportStatus::Unsupported);
+        assert!(report.direct_dependency_counts.is_empty());
+        assert_eq!(
+            report.resolved_dependency_count.status,
+            crate::models::DependencyMetricStatus::Unsupported
+        );
+        assert!(report.warnings[0].contains("workspace"));
     }
 
     #[test]

@@ -94,9 +94,11 @@ cargo run -p dustfril-cli -- analyze /path/to/workspace --node
 해결된 lockfile 노드 수, 형식이 보존하는 경우의 전이 의존성 수, 여러 버전으로
 해결된 패키지를 출력합니다. `package.json`은 npm `package-lock.json`(1–3),
 `pnpm-lock.yaml`(5–9), Bun JSONC `bun.lock`(1–2)을 지원하고, Rust는
-`Cargo.toml`과 `Cargo.lock`(1–4)을 지원합니다. lockfile 누락과 Yarn, 레거시
-`bun.lockb`, Java 및 지원하지 않는 package manager는 명시적인 상태로
-출력합니다. 설치된 의존성의 디스크 크기나 취약점 점수는 계산하지 않습니다.
+`Cargo.toml`과 `Cargo.lock`(1–4)을 지원합니다. Cargo workspace 루트는 member
+매니페스트를 집계하는 별도 설계가 마련될 때까지 명시적으로 지원하지 않습니다.
+lockfile 누락과 Yarn, 레거시 `bun.lockb`, Java 및 지원하지 않는 package manager는
+명시적인 상태로 출력합니다. 설치된 의존성의 디스크 크기나 취약점 점수는 계산하지
+않습니다.
 
 `integrity scan`은 PATH에서 요청한 개발 도구를 찾고 파일 메타데이터와 바이트를
 읽어 SHA-256을 스트리밍 계산합니다. 대상 실행 파일을 절대 실행하지 않으며,

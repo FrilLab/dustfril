@@ -104,9 +104,11 @@ transitive nodes where the format preserves that distinction, and packages
 resolved at multiple versions. It reads `package.json` with npm
 `package-lock.json` (versions 1–3), `pnpm-lock.yaml` (versions 5–9), or Bun
 JSONC `bun.lock` (versions 1–2), and reads `Cargo.toml` with `Cargo.lock`
-(versions 1–4). Missing lockfiles and unsupported Yarn, legacy `bun.lockb`,
-Java, or package-manager formats are explicit report states. It does not
-measure installed dependency size or claim vulnerability risk.
+(versions 1–4). Cargo workspace roots are explicitly unsupported until
+workspace member manifests have a dedicated aggregation design. Missing
+lockfiles and unsupported Yarn, legacy `bun.lockb`, Java, or package-manager
+formats are explicit report states. It does not measure installed dependency
+size or claim vulnerability risk.
 
 `integrity scan` resolves the requested development tools through PATH, reads
 filesystem metadata, streams each target through SHA-256, and stores its
