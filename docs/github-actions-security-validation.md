@@ -8,7 +8,7 @@ upstream `main` containing #68 and #69.
 | Area | Result | Evidence |
 | --- | --- | --- |
 | Workflow YAML discovery/parsing | PASS | Direct `.github/workflows/*.yml` and `*.yaml` discovery; structural `serde_yaml` parsing; multiple jobs/steps, multiline `run`, quoted values, env, action `uses`/`with`, and YAML anchors/aliases are covered. |
-| Malformed YAML handling | PASS | Malformed YAML, missing `jobs`, unsupported permission values, unreadable files, and symbolic workflow paths fail explicitly with path context. |
+| Malformed YAML handling | PASS | Malformed YAML, missing `jobs`, malformed permission mappings, unreadable files, and symbolic workflow paths fail explicitly with path context. Valid but unsupported permission declarations produce explicit partial-analysis notices instead of being treated as failures or clean input. |
 | Multiline `run` parsing | PASS | Newline-separated commands and multiline secret sinks retain step context. |
 | Command-rule context | PASS | Workflow `run` content reuses the shared command-rule engine; quoted data, comments, and ordinary build commands do not become executed commands. |
 | Workflow permission semantics | PASS | `read-all`, `write-all`, `{}`, explicit maps, narrow writes, broad writes, and `id-token: write` are covered. |
