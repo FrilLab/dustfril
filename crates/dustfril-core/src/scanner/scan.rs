@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::{
-    error::DustResult,
+    error::{DustError, DustResult},
     fs::walk_dirs_with_summary,
     models::{Ecosystem, ScanAccessSummary, ScanResult},
     scanner::detector::{self},
@@ -15,7 +15,18 @@ pub fn scan(root: &Path, ecosystems: &[Ecosystem]) -> DustResult<ScanResult> {
         ..ScanResult::default()
     };
 
-    for dir in walk_dirs_with_summary(root, &mut result.access_summary)? {
+    let directories = match walk_dirs_with_summary(root, &mut result.access_summary) {
+        Ok(directories) => directories,
+        Err(source @ DustError::InvalidPath(_)) => return Err(source),
+        Err(source) => {
+            return Err(DustError::ScanAccess {
+                source: Box::new(source),
+                access_summary: result.access_summary,
+            });
+        }
+    };
+
+    for dir in directories {
         for detector in &detectors {
             if !detector.matches_with_summary(&dir, &mut result.access_summary) {
                 continue;

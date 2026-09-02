@@ -25,8 +25,7 @@ pub trait Detector: Sync {
     fn matches_with_summary(&self, root: &Path, summary: &mut ScanAccessSummary) -> bool {
         self.metadata_paths().iter().any(|name| {
             let path = root.join(name);
-            match fs::symlink_metadata(&path) {
-                Ok(metadata) if metadata.file_type().is_symlink() => false,
+            match fs::metadata(&path) {
                 Ok(metadata) if metadata.is_file() => {
                     summary.record_metadata_file();
                     true

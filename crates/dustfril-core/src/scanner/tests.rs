@@ -258,3 +258,25 @@ fn scanner_does_not_return_symbolic_link_artifacts() {
     assert_eq!(result.access_summary.symlinks_skipped, 1);
     assert_eq!(result.access_summary.artifact_candidates, 0);
 }
+
+#[cfg(unix)]
+#[test]
+fn scanner_follows_symbolic_linked_project_manifests() {
+    use std::os::unix::fs::symlink;
+
+    let root = TempDir::new().unwrap();
+    let manifest_root = TempDir::new().unwrap();
+    let manifest = manifest_root.path().join("Cargo.toml");
+    std::fs::write(&manifest, "[package]").unwrap();
+    let target = root.path().join("target");
+    std::fs::create_dir(&target).unwrap();
+    symlink(&manifest, root.path().join("Cargo.toml")).unwrap();
+
+    let result = scan(root.path(), &[Ecosystem::Rust]).unwrap();
+
+    assert_eq!(result.artifacts.len(), 1);
+    assert_eq!(result.artifacts[0].path, target);
+    assert_eq!(result.access_summary.files_inspected, 1);
+    assert_eq!(result.access_summary.metadata_files_inspected, 1);
+    assert_eq!(result.access_summary.symlinks_skipped, 1);
+}

@@ -12,8 +12,8 @@ use serde_json::Value;
 use crate::{
     error::{DustError, DustResult},
     models::{
-        ActivityRecord, CleanupHistoryEntry, CleanupResult, DeleteMode, Ecosystem, ScanResult,
-        SecurityReport,
+        ActivityRecord, CleanupHistoryEntry, CleanupResult, DeleteMode, Ecosystem,
+        ScanAccessSummary, ScanResult, SecurityReport,
     },
 };
 
@@ -58,6 +58,20 @@ pub fn record_scan(
 /// Records a scan that failed before producing a scan result.
 pub fn record_scan_failure(target_path: &Path, reason: &str) -> DustResult<()> {
     record(ActivityRecord::scan_failure(target_path, reason))
+}
+
+/// Records a failed scan together with the bounded summary collected before
+/// traversal stopped.
+pub fn record_scan_failure_with_summary(
+    target_path: &Path,
+    reason: &str,
+    access_summary: &ScanAccessSummary,
+) -> DustResult<()> {
+    record(ActivityRecord::scan_failure_with_summary(
+        target_path,
+        reason,
+        access_summary,
+    ))
 }
 
 /// Records a cleanup that failed before producing a cleanup result.
@@ -387,6 +401,34 @@ mod tests {
         assert_eq!(
             records[0].result.details["accessSummary"]["artifactCandidates"],
             1
+        );
+    }
+
+    #[test]
+    fn failed_scan_access_summary_survives_history_reload() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("history.json");
+        let mut access_summary = ScanAccessSummary::new("/workspace");
+        access_summary.record_failure(Path::new("/workspace/restricted"), "permission denied");
+
+        record_to(
+            &path,
+            ActivityRecord::scan_failure_with_summary(
+                Path::new("/workspace"),
+                "I/O error: permission denied",
+                &access_summary,
+            ),
+        )
+        .unwrap();
+
+        let records = load_unlocked(&path).unwrap();
+
+        assert_eq!(records.len(), 1);
+        assert!(!records[0].result.success);
+        assert_eq!(records[0].result.details["accessSummary"]["failures"], 1);
+        assert_eq!(
+            records[0].result.details["accessSummary"]["failureSamples"][0]["path"],
+            "restricted"
         );
     }
 

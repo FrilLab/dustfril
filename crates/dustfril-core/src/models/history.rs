@@ -75,6 +75,25 @@ impl ActivityResult {
         )
     }
 
+    /// Builds the result payload for a failed scan with its partial access
+    /// summary retained.
+    pub fn from_scan_failure_with_summary(
+        target_path: &Path,
+        reason: &str,
+        access_summary: &ScanAccessSummary,
+    ) -> Self {
+        Self::new(
+            false,
+            json!({
+                "path": sanitize_path(target_path),
+                "artifacts": 0,
+                "size": 0,
+                "reason": sanitize_text(reason),
+                "accessSummary": scan_access_summary_details(target_path, access_summary),
+            }),
+        )
+    }
+
     /// Builds the result payload for a cleanup attempt, including partial failures.
     pub fn from_cleanup(mode: DeleteMode, result: &CleanupResult) -> Self {
         let failed_paths: Vec<Value> = result
@@ -208,6 +227,17 @@ impl ActivityRecord {
         Self::new(
             ActivityKind::Scan,
             ActivityResult::from_scan_failure(target_path, reason),
+        )
+    }
+
+    pub fn scan_failure_with_summary(
+        target_path: &Path,
+        reason: &str,
+        access_summary: &ScanAccessSummary,
+    ) -> Self {
+        Self::new(
+            ActivityKind::Scan,
+            ActivityResult::from_scan_failure_with_summary(target_path, reason, access_summary),
         )
     }
 

@@ -33,6 +33,7 @@ export type ArtifactAnalysis = {
 export type AnalysisResponse = {
   artifacts: ArtifactAnalysis[];
   totalSizeBytes: number;
+  historyWarning?: string;
 };
 
 export type CleanupCandidate = {
@@ -162,6 +163,7 @@ export type ActivityRecord = {
 export type RunOptions = {
   root: string;
   ecosystems: Ecosystem[];
+  recordHistory?: boolean;
 };
 
 export const ecosystems: Ecosystem[] = ['Rust', 'Node', 'Java'];
