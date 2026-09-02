@@ -5,6 +5,7 @@ pub mod models;
 mod analyzer;
 mod audit_tool;
 mod cleaner;
+mod dependency;
 mod fs;
 mod history;
 mod integrity;

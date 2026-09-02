@@ -2,6 +2,7 @@
 mod analysis;
 mod audit;
 mod cleanup;
+mod dependency;
 mod history;
 mod integrity;
 mod lockfile;
@@ -11,6 +12,7 @@ mod signature;
 pub use analysis::*;
 pub use audit::*;
 pub use cleanup::*;
+pub use dependency::*;
 pub use history::*;
 pub use integrity::*;
 pub use lockfile::*;

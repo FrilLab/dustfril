@@ -20,6 +20,7 @@ The repository is split into a reusable Rust core crate, a CLI app, and a Tauri 
 - Audit Node lifecycle scripts such as `preinstall` and `postinstall`
 - Persist versioned local activity history for scans, cleanup, and explicit security scans (including legacy cleanup history migration)
 - Run an offline supply-chain security scan for Node and Rust projects
+- Report deterministic Node and Rust dependency inventory from manifests and lockfiles
 - Check supported lockfile presence and Git status
 - Compare selected development-tool executables with local SHA-256 baselines without launching them
 - Persist CLI cleanup history to the OS app data directory
@@ -66,6 +67,7 @@ cargo run -p dustfril-cli -- clean --dry-run
 cargo run -p dustfril-cli -- clean
 cargo run -p dustfril-cli -- clean --permanent
 cargo run -p dustfril-cli -- audit --node
+cargo run -p dustfril-cli -- dependencies --node
 cargo run -p dustfril-cli -- security scan --node
 cargo run -p dustfril-cli -- integrity scan --tool node --tool git
 cargo run -p dustfril-cli -- history
@@ -84,6 +86,7 @@ Available commands:
 - `analyze [path] [--rust] [--node] [--java]`
 - `clean [path] [--dry-run] [--permanent] [--rust] [--node] [--java]`
 - `audit [path] [--node]`
+- `dependencies [path] [--rust] [--node] [--java]`
 - `security scan [path] [--node]`
 - `integrity scan [--tool <name>]...`
 - `history`
@@ -95,6 +98,17 @@ package names on a built-in list of historically compromised packages, and
 missing or changed lockfiles. Parse and read failures identify the relevant
 manifest or lockfile and fail the scan. It never runs detected commands,
 invokes a package manager, contacts the network, or modifies project files.
+
+`dependencies` reports direct dependency categories, resolved lockfile nodes,
+transitive nodes where the format preserves that distinction, and packages
+resolved at multiple versions. It reads `package.json` with npm
+`package-lock.json` (versions 1–3), `pnpm-lock.yaml` (versions 5–9), or Bun
+JSONC `bun.lock` (versions 1–2), and reads `Cargo.toml` with `Cargo.lock`
+(versions 1–4). Cargo workspace roots are explicitly unsupported until
+workspace member manifests have a dedicated aggregation design. Missing
+lockfiles and unsupported Yarn, legacy `bun.lockb`, Java, or package-manager
+formats are explicit report states. It does not measure installed dependency
+size or claim vulnerability risk.
 
 `integrity scan` resolves the requested development tools through PATH, reads
 filesystem metadata, streams each target through SHA-256, and stores its
