@@ -1,7 +1,7 @@
 use dustfril_core::api;
 
 use crate::{
-    cli::PathArgs,
+    cli::{PathArgs, WorkflowPathArgs},
     format,
     shared::path::{resolve_path, validate_path},
 };
@@ -42,5 +42,31 @@ pub fn scan(args: &PathArgs) -> bool {
 
     format::print_security_scan_report(&report);
 
+    true
+}
+
+/// Runs the local, read-only GitHub Actions workflow security scan.
+pub fn workflows(args: &WorkflowPathArgs) -> bool {
+    let path = match resolve_path(&args.path) {
+        Ok(path) => path,
+        Err(error) => {
+            eprintln!("Failed to resolve path: {error}");
+            return false;
+        }
+    };
+
+    if !validate_path(&path) {
+        return false;
+    }
+
+    let report = match api::workflow_scan(&path) {
+        Ok(report) => report,
+        Err(error) => {
+            eprintln!("Workflow security scan failed: {error}");
+            return false;
+        }
+    };
+
+    format::print_workflow_security_scan_report(&report);
     true
 }

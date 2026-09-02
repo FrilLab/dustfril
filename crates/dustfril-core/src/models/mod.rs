@@ -8,6 +8,7 @@ mod integrity;
 mod lockfile;
 mod scan;
 mod signature;
+mod workflow;
 
 pub use analysis::*;
 pub use audit::*;
@@ -19,3 +20,4 @@ pub use lockfile::*;
 pub(crate) use scan::effective_security_ecosystems;
 pub use scan::*;
 pub use signature::*;
+pub use workflow::*;

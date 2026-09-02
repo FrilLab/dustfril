@@ -13,3 +13,4 @@ mod integrity;
 mod lockfile;
 mod scanner;
 mod security;
+mod workflow;

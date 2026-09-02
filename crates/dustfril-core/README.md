@@ -100,6 +100,16 @@ only where the inventory parser can classify it; otherwise entries are
 source identifiers. If no complete inventory is available, comparison returns
 an `Unavailable` result with warnings and leaves the stored baseline untouched.
 
+The workflow scanner is exposed through the public parse_workflows and
+workflow_scan APIs. It reads only direct files below
+.github/workflows/ with yml or yaml extensions, retains workflow/job/step
+environment and action-input metadata, and applies the shared shell rules to
+run content only. Workflow and job permission overrides are modeled for
+read-all, write-all, empty, and individual none/read/write scopes. Unknown or
+undeclared effective permissions become partial-analysis notices. Malformed or
+unreadable files fail with a path-specific error. The scanner is offline,
+read-only, and never executes a workflow or action.
+
 ## Test
 
 From the workspace root:

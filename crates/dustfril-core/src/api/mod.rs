@@ -6,6 +6,7 @@ pub mod history;
 pub mod integrity;
 pub mod lockfile;
 pub mod scan;
+pub mod workflow;
 
 pub use analyze::*;
 pub use audit::*;
@@ -14,3 +15,4 @@ pub use dependency::*;
 pub use history::*;
 pub use lockfile::*;
 pub use scan::*;
+pub use workflow::*;
