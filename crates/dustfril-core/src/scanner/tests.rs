@@ -100,6 +100,28 @@ fn scan_detects_java_project() {
 }
 
 #[test]
+fn scan_detects_mixed_ecosystems_in_one_project() {
+    let temp_dir = TempDir::new().unwrap();
+
+    let rust_target = create_rust_artifact(temp_dir.path());
+    let node_modules = create_node_artifact(temp_dir.path());
+
+    let result = scan(temp_dir.path(), &[]).unwrap();
+
+    assert_eq!(result.artifacts.len(), 2);
+    assert!(
+        result
+            .artifacts
+            .iter()
+            .any(|artifact| artifact.ecosystem == Ecosystem::Rust && artifact.path == rust_target)
+    );
+    assert!(result.artifacts.iter().any(|artifact| {
+        artifact.ecosystem == Ecosystem::Node && artifact.path == node_modules
+    }));
+    assert_eq!(result.access_summary.artifact_candidates, 2);
+}
+
+#[test]
 fn scan_detects_multiple_projects() {
     let temp_dir = TempDir::new().unwrap();
 

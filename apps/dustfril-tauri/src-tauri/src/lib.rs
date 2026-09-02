@@ -14,7 +14,7 @@ use contract::{
     artifact_path, artifact_snapshot_to_dto, cleanup_failure_reason, AnalysisResponse,
     ArtifactAnalysisDto, ArtifactDto, CleanupCandidateDto, CleanupFailureDto,
     CleanupHistoryEntryDto, CleanupPlanResponse, CleanupResultResponse, ExecuteCleanupRequest,
-    LifecycleScriptDto, RunOptions, ScanResponse, SecurityScanResponse,
+    LifecycleScriptDto, RunOptions, ScanResponse, SecurityScanResponse, WorkspaceAnalysisResponse,
 };
 use dustfril_core::{
     api,
@@ -209,6 +209,94 @@ async fn analyze(options: RunOptions) -> Result<AnalysisResponse, String> {
     .map_err(|error| error.to_string())?
 }
 
+/// Runs the complete user-facing Workspace analysis workflow from one scan.
+/// The cleanup plan is derived from that analysis rather than scanning the
+/// selected folder again.
+#[tauri::command]
+async fn analyze_workspace(options: RunOptions) -> Result<WorkspaceAnalysisResponse, String> {
+    let record_history = options.record_history.unwrap_or(true);
+    let root = resolve_root(options.root)?;
+    let ecosystems: Vec<_> = options.ecosystems.into_iter().map(Into::into).collect();
+
+    tokio::task::spawn_blocking(move || {
+        let scan_result = match api::scan(&root, &ecosystems) {
+            Ok(result) => result,
+            Err(error) => {
+                if record_history {
+                    record_failed_scan_activity(&root, &error);
+                }
+                return Err(error.to_string());
+            }
+        };
+        let analysis = api::analyze(scan_result.clone()).map_err(|error| error.to_string())?;
+        let plan = api::clean::build_plan_from_analysis(analysis.clone())
+            .map_err(|error| error.to_string())?;
+
+        let mut artifact_snapshot = None;
+        let mut artifact_snapshot_warning = None;
+        match api::artifact_snapshot::record_artifact_snapshot_with_ecosystems(
+            &root,
+            &analysis,
+            &ecosystems,
+        ) {
+            Ok(snapshot) => artifact_snapshot = Some(artifact_snapshot_to_dto(snapshot)),
+            Err(error) => {
+                let warning = format!("Failed to record artifact snapshot: {error}");
+                eprintln!("{warning}");
+                artifact_snapshot_warning = Some(warning);
+            }
+        }
+
+        let history_warning = if record_history {
+            match history::record_scan(&root, &scan_result, analysis.total_size_bytes) {
+                Ok(()) => None,
+                Err(error) => Some(format_history_warning("scan", error)),
+            }
+        } else {
+            None
+        };
+
+        let analysis_response = AnalysisResponse {
+            total_size_bytes: analysis.total_size_bytes,
+            history_warning,
+            artifacts: analysis
+                .artifacts
+                .into_iter()
+                .map(|artifact| ArtifactAnalysisDto {
+                    path: artifact_path(&artifact.artifact.path),
+                    ecosystem: artifact.artifact.ecosystem.into(),
+                    size_bytes: artifact.size_bytes,
+                    last_modified_ms: artifact.last_modified.and_then(system_time_to_ms),
+                    age_days: artifact.age_days,
+                    recommendation: artifact.recommendation.into(),
+                })
+                .collect(),
+        };
+        let cleanup_plan = CleanupPlanResponse {
+            reclaimable_size_bytes: plan.reclaimable_size_bytes(),
+            candidates: plan
+                .candidates
+                .into_iter()
+                .map(|candidate| CleanupCandidateDto {
+                    path: artifact_path(&candidate.path),
+                    ecosystem: candidate.ecosystem.into(),
+                    size_bytes: candidate.size_bytes,
+                    age_days: candidate.age_days,
+                })
+                .collect(),
+        };
+
+        Ok(WorkspaceAnalysisResponse {
+            analysis: analysis_response,
+            cleanup_plan,
+            artifact_snapshot,
+            artifact_snapshot_warning,
+        })
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 #[tauri::command]
 async fn build_cleanup_plan(options: RunOptions) -> Result<CleanupPlanResponse, String> {
     let root = resolve_root(options.root)?;
@@ -356,11 +444,13 @@ async fn security_scan(options: RunOptions) -> Result<SecurityScanResponse, Stri
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             default_root,
             scan,
             analyze,
+            analyze_workspace,
             build_cleanup_plan,
             execute_cleanup,
             load_activity_history,

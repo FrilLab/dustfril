@@ -17,59 +17,57 @@ export function CleanupDialog(props: CleanupDialogProps) {
     return null;
   }
 
-  const actionLabel = props.deleteMode === 'Trash' ? 'Move to Trash' : 'Delete Permanently';
+  const isTrash = props.deleteMode === 'Trash';
+  const actionLabel = isTrash ? 'Move to Trash' : 'Delete Permanently';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm">
+    <div className="dialog-backdrop">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="cleanup-dialog-title"
-        className="w-full max-w-lg rounded-[28px] border border-white/10 bg-[#242426] p-6 shadow-[0_30px_80px_rgba(0,0,0,0.45)]"
+        className="cleanup-dialog"
       >
-        <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Confirm Cleanup</p>
-        <h2 id="cleanup-dialog-title" className="mt-2 text-xl font-semibold text-white">
-          {actionLabel}?
-        </h2>
-        <p className="mt-3 text-sm leading-6 text-slate-300">
-          You are about to clean {props.itemCount} item(s) totaling {formatBytes(props.totalBytes)}.
-          Review the selected paths before continuing.
+        <p className="eyebrow">Review Cleanup</p>
+        <h2 id="cleanup-dialog-title">{actionLabel}?</h2>
+        <p className="dialog-copy">
+          {isTrash
+            ? 'The selected artifacts will be moved to the system Trash, where they can still be recovered.'
+            : 'This permanently deletes the selected artifacts. This action cannot be undone.'}
         </p>
 
+        <div className="dialog-summary">
+          <span>{props.itemCount} selected</span>
+          <strong>{formatBytes(props.totalBytes)}</strong>
+        </div>
+
         {props.samplePaths.length ? (
-          <div className="mt-4 rounded-2xl border border-white/8 bg-black/20 p-4">
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Selected paths</p>
-            <ul className="mt-2 space-y-1 text-sm text-slate-300">
+          <div className="dialog-paths">
+            <p className="eyebrow">Selected paths</p>
+            <ul>
               {props.samplePaths.map((path) => (
-                <li key={path} className="truncate">
+                <li key={path} title={path}>
                   {path}
                 </li>
               ))}
               {props.itemCount > props.samplePaths.length ? (
-                <li className="text-slate-500">
-                  + {props.itemCount - props.samplePaths.length} more
-                </li>
+                <li className="dialog-more">+ {props.itemCount - props.samplePaths.length} more</li>
               ) : null}
             </ul>
           </div>
         ) : null}
 
-        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            onClick={props.onCancel}
-            disabled={props.busy}
-            className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/8 disabled:opacity-50"
-          >
+        <div className="dialog-actions">
+          <button type="button" onClick={props.onCancel} disabled={props.busy} className="button-secondary">
             Cancel
           </button>
           <button
             type="button"
             onClick={() => void props.onConfirm()}
             disabled={props.busy}
-            className="rounded-2xl bg-[#d1d1d6] px-4 py-3 text-sm font-medium text-slate-950 transition hover:bg-white disabled:opacity-50"
+            className={`button-confirm${isTrash ? '' : ' button-confirm-danger'}`}
           >
-            {props.busy ? 'Cleaning...' : actionLabel}
+            {props.busy ? 'Cleaning…' : actionLabel}
           </button>
         </div>
       </div>

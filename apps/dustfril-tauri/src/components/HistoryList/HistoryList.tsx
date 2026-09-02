@@ -12,26 +12,26 @@ export function HistoryList(props: HistoryListProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="history-list">
       {props.entries.map((entry, index) => (
         <article
           key={`${entry.id}-${index}`}
-          className="rounded-[24px] border border-white/8 bg-black/12 p-4"
+          className="history-entry"
         >
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="history-entry-header">
             <div>
-              <p className="text-sm font-semibold text-white">
+              <p className="history-entry-title">
                 {entry.kind} · {formatDate(entry.timestampMs)}
               </p>
-              <p className="mt-1 text-xs text-slate-400">
+              <p className="history-entry-subtitle">
                 Result: {entry.result.success ? 'Succeeded' : 'Failed'}
               </p>
             </div>
             <p
-              className={`rounded-full border px-3 py-1 text-xs ${
+              className={`history-badge ${
                 entry.result.success
-                  ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100'
-                  : 'border-rose-400/20 bg-rose-400/10 text-rose-100'
+                  ? 'history-badge-success'
+                  : 'history-badge-failure'
               }`}
             >
               {entry.result.success ? 'Success' : 'Failure'}
@@ -52,7 +52,7 @@ function ScanDetails({ entry }: { entry: ActivityRecord }) {
 
   return (
     <>
-      <div className="mt-4 grid gap-2 text-sm text-slate-300 sm:grid-cols-3">
+      <div className="history-details-grid">
         <Detail label="Target" value={details.path ?? 'Unknown'} />
         <Detail label="Artifacts" value={String(details.artifacts ?? 0)} />
         <Detail label="Total Size" value={formatBytes(details.size ?? 0)} />
@@ -69,9 +69,9 @@ function ScanAccessDetails({
   summary: NonNullable<ActivityDetails['accessSummary']>;
 }) {
   return (
-    <div className="mt-4 rounded-2xl border border-white/6 bg-white/4 p-3">
-      <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Scan Access Summary</p>
-      <div className="mt-2 grid gap-2 text-sm text-slate-300 sm:grid-cols-3">
+    <div className="history-access-summary">
+      <p className="eyebrow">Scan access summary</p>
+      <div className="history-details-grid">
         <Detail label="Directories" value={String(summary.directoriesVisited)} />
         <Detail label="Files Inspected" value={String(summary.filesInspected)} />
         <Detail label="Metadata Files" value={String(summary.metadataFilesInspected)} />
@@ -80,13 +80,11 @@ function ScanAccessDetails({
         <Detail label="Failures" value={String(summary.failures)} />
       </div>
       {summary.failureSamples.length ? (
-        <div className="mt-3">
-          <p className="text-xs uppercase tracking-[0.14em] text-slate-500">
-            Representative Failures
-          </p>
-          <ul className="mt-2 space-y-1 text-sm text-rose-200">
+        <div className="history-failure-list">
+          <p className="eyebrow">Representative failures</p>
+          <ul>
             {summary.failureSamples.map((failure) => (
-              <li key={`${failure.path}-${failure.reason}`} className="truncate">
+            <li key={`${failure.path}-${failure.reason}`}>
                 {failure.path}: {failure.reason}
               </li>
             ))}
@@ -104,7 +102,7 @@ function CleanupDetails({ entry }: { entry: ActivityRecord }) {
 
   return (
     <>
-      <div className="mt-4 grid gap-2 text-sm text-slate-300 sm:grid-cols-2">
+      <div className="history-details-grid">
         <Detail label="Mode" value={details.mode ?? 'Unknown'} />
         <Detail label="Freed" value={formatBytes(details.freed ?? 0)} />
       </div>
@@ -114,11 +112,11 @@ function CleanupDetails({ entry }: { entry: ActivityRecord }) {
       ) : null}
 
       {failed.length ? (
-        <div className="mt-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Failed</p>
-          <ul className="mt-2 space-y-1 text-sm text-rose-200">
+      <div className="history-failure-list">
+          <p className="eyebrow">Failed</p>
+          <ul>
             {failed.map((failure) => (
-              <li key={`${failure.path}-${failure.reason ?? ''}`} className="truncate">
+              <li key={`${failure.path}-${failure.reason ?? ''}`}>
                 - {failure.path}
                 {failure.reason ? ` (${failure.reason})` : ''}
               </li>
@@ -138,7 +136,7 @@ function SecurityDetails({ entry }: { entry: ActivityRecord }) {
 
   return (
     <>
-      <div className="mt-4 grid gap-2 text-sm text-slate-300 sm:grid-cols-4">
+      <div className="history-details-grid">
         <Detail label="Target" value={details.path ?? 'Unknown'} />
         <Detail
           label="Ecosystems"
@@ -159,19 +157,19 @@ function SecurityDetails({ entry }: { entry: ActivityRecord }) {
       ) : null}
 
       {findings.length ? (
-        <div className="mt-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Findings</p>
-          <ul className="mt-2 space-y-2 text-sm text-slate-300">
+        <div className="history-finding-list">
+          <p className="eyebrow">Findings</p>
+          <ul>
             {findings.map((finding, index) => (
               <li
                 key={`${finding.rule}-${finding.source}-${index}`}
-                className="rounded-2xl border border-white/6 bg-white/4 px-3 py-2"
+                className="history-finding"
               >
-                <p className="font-medium text-slate-200">
+                <p className="history-finding-title">
                   {finding.rule} · {finding.risk}
                 </p>
-                <p className="mt-1 truncate text-xs text-slate-400">{finding.source}</p>
-                <p className="mt-1 text-xs text-slate-300">{finding.reason}</p>
+                <p className="history-finding-source">{finding.source}</p>
+                <p className="history-finding-reason">{finding.reason}</p>
               </li>
             ))}
           </ul>
@@ -183,11 +181,11 @@ function SecurityDetails({ entry }: { entry: ActivityRecord }) {
 
 function PathList({ label, paths }: { label: string; paths: string[] }) {
   return (
-    <div className="mt-4">
-      <p className="text-xs uppercase tracking-[0.18em] text-slate-500">{label}</p>
-      <ul className="mt-2 space-y-1 text-sm text-slate-300">
+    <div className="history-failure-list">
+      <p className="eyebrow">{label}</p>
+      <ul>
         {paths.map((path) => (
-          <li key={path} className="truncate">
+          <li key={path}>
             - {path}
           </li>
         ))}
@@ -198,9 +196,9 @@ function PathList({ label, paths }: { label: string; paths: string[] }) {
 
 function Detail({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-white/6 bg-white/4 px-3 py-2">
-      <p className="text-xs uppercase tracking-[0.14em] text-slate-500">{label}</p>
-      <p className="mt-1 truncate text-slate-200">{value}</p>
+    <div className="history-detail">
+      <dt>{label}</dt>
+      <dd title={value}>{value}</dd>
     </div>
   );
 }

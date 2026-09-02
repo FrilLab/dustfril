@@ -74,6 +74,13 @@ export type AnalysisResponse = {
   historyWarning?: string;
 };
 
+export type WorkspaceAnalysisResponse = {
+  analysis: AnalysisResponse;
+  cleanupPlan: CleanupPlanResponse;
+  artifactSnapshot?: ArtifactSnapshotResult;
+  artifactSnapshotWarning?: string;
+};
+
 export type CleanupCandidate = {
   path: string;
   ecosystem: Ecosystem;

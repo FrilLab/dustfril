@@ -1,11 +1,11 @@
-import type { BrowserItemKind } from '../model/types';
+type ItemIconKind = 'folder' | 'document' | 'warning' | 'safe';
 
-export function ItemIcon(props: { kind: BrowserItemKind; large?: boolean }) {
+export function ItemIcon(props: { kind: ItemIconKind; large?: boolean }) {
   const size = props.large ? 'h-12 w-12' : 'h-8 w-8';
 
   if (props.kind === 'document') {
     return (
-      <div className={`flex ${size} items-center justify-center rounded-xl bg-white/8 text-slate-200`}>
+      <div className={`item-icon flex ${size} items-center justify-center rounded-xl bg-white/8 text-slate-200`}>
         <DocumentIcon />
       </div>
     );
@@ -13,7 +13,7 @@ export function ItemIcon(props: { kind: BrowserItemKind; large?: boolean }) {
 
   if (props.kind === 'warning') {
     return (
-      <div className={`flex ${size} items-center justify-center rounded-xl bg-amber-400/12 text-amber-100`}>
+      <div className={`item-icon flex ${size} items-center justify-center rounded-xl bg-amber-400/12 text-amber-100`}>
         <WarningIcon />
       </div>
     );
@@ -21,14 +21,14 @@ export function ItemIcon(props: { kind: BrowserItemKind; large?: boolean }) {
 
   if (props.kind === 'safe') {
     return (
-      <div className={`flex ${size} items-center justify-center rounded-xl bg-cyan-400/12 text-cyan-100`}>
+      <div className={`item-icon flex ${size} items-center justify-center rounded-xl bg-cyan-400/12 text-cyan-100`}>
         <SparkIcon />
       </div>
     );
   }
 
   return (
-    <div className={`flex ${size} items-center justify-center rounded-xl bg-sky-400/12 text-sky-100`}>
+    <div className={`item-icon flex ${size} items-center justify-center rounded-xl bg-sky-400/12 text-sky-100`}>
       <FolderIcon />
     </div>
   );

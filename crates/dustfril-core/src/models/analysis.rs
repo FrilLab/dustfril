@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::models::{Artifact, CleanupRecommendation};
 
 /// Detailed analysis for a single scanned artifact.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArtifactAnalysis {
     /// The original artifact found during scanning.
     pub artifact: Artifact,
@@ -23,7 +23,7 @@ pub struct ArtifactAnalysis {
 }
 
 /// Aggregate analysis output for all detected artifacts.
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AnalysisResult {
     /// Per-artifact analysis records.
     pub artifacts: Vec<ArtifactAnalysis>,
