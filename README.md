@@ -27,7 +27,7 @@ The repository is split into a reusable Rust core crate, a CLI app, and a Tauri 
 - Persist CLI cleanup history to the OS app data directory
 
 The supply-chain scanner is post-v0.0.1 work. The v0.0.1 release remains
-focused on the desktop artifact-cleaner workflow described in `AGENTS.md`.
+focused on the desktop artifact-cleaner workflow.
 
 Scans reject missing, symbolic-link, or non-directory roots and report
 filesystem traversal errors. Cleanup only accepts real artifact directories,
