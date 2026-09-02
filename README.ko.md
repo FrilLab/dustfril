@@ -25,6 +25,7 @@ DustFril은 개발 산출물을 스캔, 분석, 점검, 정리하기 위한 워�
 - 지원 lockfile의 존재 여부와 Git 상태 점검
 - 대상 개발 도구를 실행하지 않고 로컬 SHA-256 baseline과 실행 파일 무결성 비교
 - CLI 정리 이력을 운영체제 앱 데이터 디렉터리에 저장
+- 로컬 GitHub Actions 워크플로를 실행하지 않고 읽기 전용으로 보안 점검
 
 공급망 보안 스캐너는 v0.0.1 이후 작업입니다. v0.0.1 릴리스 범위는
 `AGENTS.md`에 정의된 데스크톱 산출물 정리 흐름으로 유지됩니다.
@@ -65,6 +66,7 @@ cargo run -p dustfril-cli -- dependencies --node
 cargo run -p dustfril-cli -- dependencies --compare --node
 cargo run -p dustfril-cli -- dependencies --compare --accept-baseline --node
 cargo run -p dustfril-cli -- security scan --node
+cargo run -p dustfril-cli -- security workflows
 cargo run -p dustfril-cli -- integrity scan --tool node --tool git
 ```
 
@@ -84,6 +86,7 @@ cargo run -p dustfril-cli -- analyze /path/to/workspace --node
 - `dependencies [path] [--compare] [--accept-baseline] [--rust] [--node] [--java]`
 - `security scan [path] [--node]`
 - `integrity scan [--tool <name>]...`
+- `security workflows [path]`
 
 `security scan`은 `package.json`, `Cargo.toml`, `package-lock.json`,
 `pnpm-lock.yaml`, `bun.lock`, `Cargo.lock`을 읽기 전용으로 오프라인 점검합니다.
@@ -123,6 +126,14 @@ activity history와 분리된 버전 형식의 baseline을 저장합니다. macO
 `rustc`, `git`, `java`, `gradle`이고, `--tool`을 반복해 일부만 선택할 수 있습니다.
 경로 또는 해시 변경은 무결성 변경으로 보고하며 악성 코드의 증거라고 단정하지
 않습니다. 서명 결과도 소프트웨어 전체의 신뢰성 판정이 아닙니다.
+
+security workflows는 직접적인 .github/workflows/*.yml, *.yaml 파일만
+구조적으로 읽습니다. 워크플로·job·step 구조와 환경 변수, action 입력 메타데이터를
+보존하고 기존 의심 명령 규칙을 run 내용에만 적용하며, 유효한 토큰 권한 범위와 넓은
+쓰기 권한을 점검합니다. 선언되지 않았거나 지원하지 않는 권한 의미는 추측하지 않고
+partial 분석 notice로 출력합니다. 워크플로·action을 실행하거나 expression을
+평가하지 않으며, GitHub 네트워크 및 저장소 파일도 변경하지 않습니다. 잘못되었거나
+읽을 수 없는 워크플로 파일은 명령 실패로 구분됩니다.
 
 ## 데스크톱 앱
 

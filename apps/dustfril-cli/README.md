@@ -12,6 +12,7 @@ This package exposes the `dfr` binary and wraps the shared logic from `dustfril-
 - `audit`: inspect Node lifecycle scripts
 - `dependencies`: report dependency metrics and optionally compare an explicit local baseline
 - `security scan`: inspect Node and Rust manifests and lockfiles for supply-chain risks
+- `security workflows`: inspect local GitHub Actions workflows for static security risks
 - `integrity scan`: inspect selected development-tool executables without launching them
 - `history`: load the unified local activity history as JSON
 
@@ -28,6 +29,7 @@ cargo run -p dustfril-cli -- dependencies --node
 cargo run -p dustfril-cli -- dependencies --compare --node
 cargo run -p dustfril-cli -- dependencies --compare --accept-baseline --node
 cargo run -p dustfril-cli -- security scan --node
+cargo run -p dustfril-cli -- security workflows
 cargo run -p dustfril-cli -- integrity scan --tool node --tool git
 cargo run -p dustfril-cli -- history
 ```

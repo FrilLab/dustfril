@@ -54,6 +54,14 @@ pub struct SecurityArgs {
 pub enum SecurityCommands {
     /// Scan Node lifecycle scripts for suspicious commands
     Scan(PathArgs),
+    /// Scan local GitHub Actions workflow files without executing them
+    #[command(name = "workflows", visible_alias = "workflow")]
+    Workflows(WorkflowPathArgs),
+}
+
+#[derive(Args)]
+pub struct WorkflowPathArgs {
+    pub path: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -218,6 +226,18 @@ mod tests {
             Commands::Security(SecurityArgs {
                 command: SecurityCommands::Scan(PathArgs { node: true, .. })
             })
+        ));
+    }
+
+    #[test]
+    fn cli_parses_workflow_security_scan_command() {
+        let cli = Cli::try_parse_from(["dfr", "security", "workflows", "workspace"]).unwrap();
+
+        assert!(matches!(
+            cli.command,
+            Commands::Security(SecurityArgs {
+                command: SecurityCommands::Workflows(WorkflowPathArgs { path: Some(path) })
+            }) if path == std::path::Path::new("workspace")
         ));
     }
 

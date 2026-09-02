@@ -19,6 +19,14 @@ pub fn classify(command: &str) -> RiskLevel {
     risk::classify(command)
 }
 
+/// Returns shared suspicious-command rule metadata without exposing the
+/// private rule table to integration layers.
+pub(crate) fn suspicious_command_rule(
+    command: &str,
+) -> Option<(&'static str, RiskLevel, &'static str)> {
+    rule::find(command).map(|rule| (rule.id, rule.risk_level, rule.reason))
+}
+
 pub fn security_scan(root: &Path) -> DustResult<Vec<SecurityWarning>> {
     lifecycle::audit_scan(root).map(|scripts| {
         scripts

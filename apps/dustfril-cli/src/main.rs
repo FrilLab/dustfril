@@ -33,6 +33,7 @@ fn main() -> ExitCode {
 
         Commands::Security(args) => match args.command {
             cli::SecurityCommands::Scan(args) => commands::security::scan(&args),
+            cli::SecurityCommands::Workflows(args) => commands::security::workflows(&args),
         },
 
         Commands::Integrity(args) => match args.command {

@@ -25,6 +25,7 @@ The repository is split into a reusable Rust core crate, a CLI app, and a Tauri 
 - Check supported lockfile presence and Git status
 - Compare selected development-tool executables with local SHA-256 baselines without launching them
 - Persist CLI cleanup history to the OS app data directory
+- Run a local, read-only GitHub Actions workflow security scan
 
 The supply-chain scanner is post-v0.0.1 work. The v0.0.1 release remains
 focused on the desktop artifact-cleaner workflow.
@@ -72,6 +73,7 @@ cargo run -p dustfril-cli -- dependencies --node
 cargo run -p dustfril-cli -- dependencies --compare --node
 cargo run -p dustfril-cli -- dependencies --compare --accept-baseline --node
 cargo run -p dustfril-cli -- security scan --node
+cargo run -p dustfril-cli -- security workflows
 cargo run -p dustfril-cli -- integrity scan --tool node --tool git
 cargo run -p dustfril-cli -- history
 ```
@@ -93,6 +95,7 @@ Available commands:
 - `security scan [path] [--node]`
 - `integrity scan [--tool <name>]...`
 - `history`
+- `security workflows [path]`
 
 `security scan` is a read-only, offline check of `package.json`, `Cargo.toml`,
 `package-lock.json`, `pnpm-lock.yaml`, `bun.lock`, and `Cargo.lock`. It reports
@@ -101,6 +104,15 @@ package names on a built-in list of historically compromised packages, and
 missing or changed lockfiles. Parse and read failures identify the relevant
 manifest or lockfile and fail the scan. It never runs detected commands,
 invokes a package manager, contacts the network, or modifies project files.
+
+`security workflows` inspects only direct `.github/workflows/*.yml`
+and `*.yaml` files. It parses workflow, job, and step structure,
+retains environment and action-input metadata for downstream analysis, applies
+the shared suspicious-command rules to `run:` steps, and reports
+effective broad token permissions. Undeclared or unsupported permission
+semantics are shown as partial-analysis notices. It never executes a workflow
+or action, evaluates expressions, contacts GitHub, or modifies repository
+files; malformed or unreadable workflow files fail the command.
 
 `dependencies` reports direct dependency categories, resolved lockfile nodes,
 transitive nodes where the format preserves that distinction, and packages
