@@ -651,7 +651,7 @@ fn parse_package_lock(
             )
         })?;
         let mut entries = Vec::new();
-        parse_npm_dependency_tree(path, dependencies, 0, &mut entries)?;
+        parse_npm_dependency_tree(path, dependencies, 0, manifest, &mut entries)?;
         Ok(entries)
     }
 }
@@ -714,6 +714,7 @@ fn parse_npm_dependency_tree(
     path: &Path,
     dependencies: &serde_json::Map<String, Value>,
     depth: usize,
+    manifest: &ParsedManifest,
     entries: &mut Vec<ResolvedDependency>,
 ) -> DustResult<()> {
     for (name, value) in dependencies {
@@ -728,7 +729,9 @@ fn parse_npm_dependency_tree(
             name: name.clone(),
             version: version.to_owned(),
             source: optional_json_string(object, "resolved", path)?.map(str::to_owned),
-            direct: depth == 0,
+            // npm v1 may hoist a transitive package into the root dependency
+            // map. Depth alone therefore cannot establish directness.
+            direct: depth == 0 && manifest.direct_names.contains(name),
             classification_available: true,
         });
 
@@ -739,7 +742,7 @@ fn parse_npm_dependency_tree(
                     format!("package-lock.json nested dependencies for {name:?} must be an object"),
                 )
             })?;
-            parse_npm_dependency_tree(path, nested, depth + 1, entries)?;
+            parse_npm_dependency_tree(path, nested, depth + 1, manifest, entries)?;
         }
     }
 
@@ -1686,6 +1689,43 @@ mod tests {
 
         assert_eq!(report.resolved_dependency_count.value, Some(2));
         assert_eq!(report.transitive_dependency_count.value, Some(1));
+    }
+
+    #[test]
+    fn package_lock_v1_does_not_misclassify_hoisted_transitives_as_direct() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(
+            temp_dir.path().join("package.json"),
+            r#"{"name":"demo","dependencies":{"root":"1.0.0"}}"#,
+        )
+        .unwrap();
+        fs::write(
+            temp_dir.path().join("package-lock.json"),
+            r#"{
+                "lockfileVersion":1,
+                "dependencies":{
+                    "hoisted-transitive":{"version":"2.0.0"},
+                    "root":{"version":"1.0.0","requires":{"hoisted-transitive":"^2.0.0"}}
+                }
+            }"#,
+        )
+        .unwrap();
+
+        let report = report(temp_dir.path(), &[Ecosystem::Node])
+            .unwrap()
+            .remove(0);
+
+        assert_eq!(report.resolved_dependency_count.value, Some(2));
+        assert_eq!(report.transitive_dependency_count.value, Some(1));
+        assert_eq!(
+            report
+                .resolved_dependencies
+                .iter()
+                .find(|entry| entry.name == "hoisted-transitive")
+                .unwrap()
+                .scope,
+            DependencyScope::Transitive
+        );
     }
 
     #[test]
