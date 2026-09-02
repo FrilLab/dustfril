@@ -4,13 +4,29 @@ use std::{
 };
 use walkdir::WalkDir;
 
-use crate::error::{DustError, DustResult};
+use crate::{
+    error::{DustError, DustResult},
+    models::ScanAccessSummary,
+};
 
 /// Collect all directories in a filesystem tree.
 ///
 /// Invalid or symbolic-link roots and traversal errors are returned instead of
 /// being silently omitted from the result.
 pub fn walk_dirs(root: &Path) -> DustResult<Vec<PathBuf>> {
+    walk_dirs_with_summary(root, &mut ScanAccessSummary::default())
+}
+
+/// Collects directories while recording traversal access in an existing
+/// scan-level summary.
+///
+/// The traversal does not follow symbolic links. A traversal error remains an
+/// error, preserving the scanner's existing failure semantics, but is added to
+/// the in-memory summary before it is returned.
+pub fn walk_dirs_with_summary(
+    root: &Path,
+    summary: &mut ScanAccessSummary,
+) -> DustResult<Vec<PathBuf>> {
     match fs::symlink_metadata(root) {
         Ok(metadata) if metadata.file_type().is_symlink() => {
             return Err(DustError::InvalidPath(root.to_path_buf()));
@@ -23,17 +39,36 @@ pub fn walk_dirs(root: &Path) -> DustResult<Vec<PathBuf>> {
         Err(error) => return Err(DustError::Io(error)),
     }
 
-    WalkDir::new(root)
-        .into_iter()
-        .map(|entry| {
-            let entry = entry.map_err(|error| DustError::Io(io::Error::other(error)))?;
-            Ok(entry
-                .file_type()
-                .is_dir()
-                .then(|| entry.path().to_path_buf()))
-        })
-        .filter_map(|entry| entry.transpose())
-        .collect()
+    let mut directories = Vec::new();
+
+    for entry in WalkDir::new(root).into_iter() {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) => {
+                let reason = error.to_string();
+                if let Some(path) = error.path() {
+                    summary.record_failure(path, &reason);
+                } else {
+                    summary.record_failure(root, &reason);
+                }
+                return Err(DustError::Io(io::Error::other(error)));
+            }
+        };
+
+        let file_type = entry.file_type();
+
+        if file_type.is_symlink() {
+            summary.record_symlink_skipped();
+            continue;
+        }
+
+        if file_type.is_dir() {
+            summary.record_directory();
+            directories.push(entry.path().to_path_buf());
+        }
+    }
+
+    Ok(directories)
 }
 
 #[cfg(test)]
@@ -53,6 +88,20 @@ mod tests {
         assert!(dirs.iter().any(|path| path == temp_dir.path()));
         assert!(dirs.iter().any(|path| path == &temp_dir.path().join("a")));
         assert!(dirs.iter().any(|path| path == &nested));
+    }
+
+    #[test]
+    fn walk_dirs_with_summary_counts_visited_directories() {
+        let temp_dir = TempDir::new().unwrap();
+        std::fs::create_dir(temp_dir.path().join("nested")).unwrap();
+        let mut summary = ScanAccessSummary::new(temp_dir.path());
+
+        let dirs = walk_dirs_with_summary(temp_dir.path(), &mut summary).unwrap();
+
+        assert_eq!(dirs.len(), 2);
+        assert_eq!(summary.directories_visited, 2);
+        assert_eq!(summary.symlinks_skipped, 0);
+        assert_eq!(summary.failures, 0);
     }
 
     #[test]
@@ -93,5 +142,22 @@ mod tests {
             walk_dirs(&link),
             Err(DustError::InvalidPath(path)) if path == link
         ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn walk_dirs_with_summary_counts_skipped_symbolic_links() {
+        use std::os::unix::fs::symlink;
+
+        let temp_dir = TempDir::new().unwrap();
+        let target = temp_dir.path().join("target");
+        std::fs::create_dir(&target).unwrap();
+        symlink(&target, temp_dir.path().join("link")).unwrap();
+        let mut summary = ScanAccessSummary::new(temp_dir.path());
+
+        walk_dirs_with_summary(temp_dir.path(), &mut summary).unwrap();
+
+        assert_eq!(summary.directories_visited, 2);
+        assert_eq!(summary.symlinks_skipped, 1);
     }
 }

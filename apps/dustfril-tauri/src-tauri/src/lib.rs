@@ -18,6 +18,7 @@ use contract::{
 };
 use dustfril_core::{
     api,
+    error::DustError,
     models::{CleanupCandidate, CleanupPlan},
 };
 
@@ -71,6 +72,19 @@ fn report_failed_activity_record(operation: &str, error: impl Display) {
     let _ = format_history_warning(operation, error);
 }
 
+fn record_failed_scan_activity(root: &Path, error: &DustError) {
+    let result = match error.scan_access_summary() {
+        Some(summary) => {
+            history::record_scan_failure_with_summary(root, &error.to_string(), summary)
+        }
+        None => history::record_scan_failure(root, &error.to_string()),
+    };
+
+    if let Err(history_error) = result {
+        report_failed_activity_record("scan", history_error);
+    }
+}
+
 #[tauri::command]
 async fn default_root() -> Result<String, String> {
     tokio::task::spawn_blocking(|| default_root_path().map(|path| path.display().to_string()))
@@ -87,10 +101,7 @@ async fn scan(options: RunOptions) -> Result<ScanResponse, String> {
         let result = match api::scan(&root, &ecosystems) {
             Ok(result) => result,
             Err(error) => {
-                if let Err(history_error) = history::record_scan_failure(&root, &error.to_string())
-                {
-                    report_failed_activity_record("scan", history_error);
-                }
+                record_failed_scan_activity(&root, &error);
                 return Err(error.to_string());
             }
         };
@@ -131,15 +142,33 @@ async fn scan(options: RunOptions) -> Result<ScanResponse, String> {
 
 #[tauri::command]
 async fn analyze(options: RunOptions) -> Result<AnalysisResponse, String> {
+    let record_history = options.record_history.unwrap_or(false);
     let root = resolve_root(options.root)?;
     let ecosystems: Vec<_> = options.ecosystems.into_iter().map(Into::into).collect();
 
     tokio::task::spawn_blocking(move || {
-        let scan_result = api::scan(&root, &ecosystems).map_err(|error| error.to_string())?;
-        let analysis = api::analyze(scan_result).map_err(|error| error.to_string())?;
+        let scan_result = match api::scan(&root, &ecosystems) {
+            Ok(result) => result,
+            Err(error) => {
+                if record_history {
+                    record_failed_scan_activity(&root, &error);
+                }
+                return Err(error.to_string());
+            }
+        };
+        let analysis = api::analyze(scan_result.clone()).map_err(|error| error.to_string())?;
+        let history_warning = if record_history {
+            match history::record_scan(&root, &scan_result, analysis.total_size_bytes) {
+                Ok(()) => None,
+                Err(error) => Some(format_history_warning("scan", error)),
+            }
+        } else {
+            None
+        };
 
         Ok(AnalysisResponse {
             total_size_bytes: analysis.total_size_bytes,
+            history_warning,
             artifacts: analysis
                 .artifacts
                 .into_iter()

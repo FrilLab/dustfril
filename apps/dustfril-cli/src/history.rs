@@ -12,6 +12,15 @@ pub fn record_scan_failure(target_path: &std::path::Path, reason: &str) -> std::
         .map_err(|error| std::io::Error::other(error.to_string()))
 }
 
+pub fn record_scan_failure_with_summary(
+    target_path: &std::path::Path,
+    reason: &str,
+    access_summary: &dustfril_core::models::ScanAccessSummary,
+) -> std::io::Result<()> {
+    api::history::record_scan_failure_with_summary(target_path, reason, access_summary)
+        .map_err(|error| std::io::Error::other(error.to_string()))
+}
+
 pub fn record_cleanup_failure(
     mode: dustfril_core::models::DeleteMode,
     reason: &str,

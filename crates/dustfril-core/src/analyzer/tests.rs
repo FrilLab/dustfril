@@ -7,6 +7,7 @@ use crate::{analyzer::Analyzer, models::*};
 fn scan_result(path: PathBuf, ecosystem: Ecosystem) -> ScanResult {
     ScanResult {
         artifacts: vec![Artifact { path, ecosystem }],
+        ..ScanResult::default()
     }
 }
 
@@ -98,6 +99,7 @@ fn analyze_multiple_artifacts() {
                 ecosystem: Ecosystem::Node,
             },
         ],
+        ..ScanResult::default()
     })
     .unwrap();
 

@@ -1,4 +1,4 @@
-import type { ActivityRecord } from '../../types/workflow';
+import type { ActivityDetails, ActivityRecord } from '../../types/workflow';
 import { formatBytes, formatDate } from '../../lib/format';
 import { EmptyState } from '../EmptyState/EmptyState';
 
@@ -57,8 +57,43 @@ function ScanDetails({ entry }: { entry: ActivityRecord }) {
         <Detail label="Artifacts" value={String(details.artifacts ?? 0)} />
         <Detail label="Total Size" value={formatBytes(details.size ?? 0)} />
       </div>
+      {details.accessSummary ? <ScanAccessDetails summary={details.accessSummary} /> : null}
       {details.reason ? <p className="mt-4 text-sm text-rose-200">{details.reason}</p> : null}
     </>
+  );
+}
+
+function ScanAccessDetails({
+  summary,
+}: {
+  summary: NonNullable<ActivityDetails['accessSummary']>;
+}) {
+  return (
+    <div className="mt-4 rounded-2xl border border-white/6 bg-white/4 p-3">
+      <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Scan Access Summary</p>
+      <div className="mt-2 grid gap-2 text-sm text-slate-300 sm:grid-cols-3">
+        <Detail label="Directories" value={String(summary.directoriesVisited)} />
+        <Detail label="Files Inspected" value={String(summary.filesInspected)} />
+        <Detail label="Metadata Files" value={String(summary.metadataFilesInspected)} />
+        <Detail label="Artifact Candidates" value={String(summary.artifactCandidates)} />
+        <Detail label="Symlinks Skipped" value={String(summary.symlinksSkipped)} />
+        <Detail label="Failures" value={String(summary.failures)} />
+      </div>
+      {summary.failureSamples.length ? (
+        <div className="mt-3">
+          <p className="text-xs uppercase tracking-[0.14em] text-slate-500">
+            Representative Failures
+          </p>
+          <ul className="mt-2 space-y-1 text-sm text-rose-200">
+            {summary.failureSamples.map((failure) => (
+              <li key={`${failure.path}-${failure.reason}`} className="truncate">
+                {failure.path}: {failure.reason}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

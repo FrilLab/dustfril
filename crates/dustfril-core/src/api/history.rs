@@ -4,8 +4,8 @@ use crate::{
     error::DustResult,
     history,
     models::{
-        ActivityRecord, CleanupHistoryEntry, CleanupResult, DeleteMode, Ecosystem, ScanResult,
-        SecurityReport,
+        ActivityRecord, CleanupHistoryEntry, CleanupResult, DeleteMode, Ecosystem,
+        ScanAccessSummary, ScanResult, SecurityReport,
     },
 };
 
@@ -36,6 +36,15 @@ pub fn record_scan(
 /// Records a scan that failed before producing a scan result.
 pub fn record_scan_failure(target_path: &Path, reason: &str) -> DustResult<()> {
     history::record_scan_failure(target_path, reason)
+}
+
+/// Records a failed scan together with its bounded partial access summary.
+pub fn record_scan_failure_with_summary(
+    target_path: &Path,
+    reason: &str,
+    access_summary: &ScanAccessSummary,
+) -> DustResult<()> {
+    history::record_scan_failure_with_summary(target_path, reason, access_summary)
 }
 
 /// Records a cleanup that failed before producing a cleanup result.

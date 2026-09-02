@@ -33,6 +33,7 @@ export type ArtifactAnalysis = {
 export type AnalysisResponse = {
   artifacts: ArtifactAnalysis[];
   totalSizeBytes: number;
+  historyWarning?: string;
 };
 
 export type CleanupCandidate = {
@@ -104,10 +105,27 @@ export type ActivityFailure = {
   reason?: string;
 };
 
+export type ScanAccessFailure = {
+  path: string;
+  reason: string;
+};
+
+export type ScanAccessSummary = {
+  root: string;
+  directoriesVisited: number;
+  filesInspected: number;
+  metadataFilesInspected: number;
+  artifactCandidates: number;
+  symlinksSkipped: number;
+  failures: number;
+  failureSamples: ScanAccessFailure[];
+};
+
 export type ActivityDetails = {
   path?: string;
   artifacts?: number;
   size?: number;
+  accessSummary?: ScanAccessSummary;
   mode?: 'trash' | 'permanent';
   deleted?: string[];
   failed?: ActivityFailure[];
@@ -145,6 +163,7 @@ export type ActivityRecord = {
 export type RunOptions = {
   root: string;
   ecosystems: Ecosystem[];
+  recordHistory?: boolean;
 };
 
 export const ecosystems: Ecosystem[] = ['Rust', 'Node', 'Java'];
