@@ -1,7 +1,7 @@
 use tempfile::TempDir;
 
 use crate::{
-    models::Ecosystem,
+    models::{Ecosystem, MAX_SCAN_FAILURE_SAMPLES},
     scanner::{
         detector::{Detector, RustDetector},
         scan,
@@ -36,6 +36,13 @@ fn scan_returns_empty_when_no_projects() {
     let result = scan(temp_dir.path(), &[]).unwrap();
 
     assert!(result.artifacts.is_empty());
+    assert_eq!(result.access_summary.root, temp_dir.path());
+    assert_eq!(result.access_summary.directories_visited, 1);
+    assert_eq!(result.access_summary.files_inspected, 0);
+    assert_eq!(result.access_summary.metadata_files_inspected, 0);
+    assert_eq!(result.access_summary.artifact_candidates, 0);
+    assert_eq!(result.access_summary.symlinks_skipped, 0);
+    assert_eq!(result.access_summary.failures, 0);
 }
 
 #[test]
@@ -52,6 +59,10 @@ fn scan_detects_rust_project() {
 
     assert_eq!(artifact.ecosystem, Ecosystem::Rust);
     assert_eq!(artifact.path, target);
+    assert_eq!(result.access_summary.directories_visited, 2);
+    assert_eq!(result.access_summary.files_inspected, 1);
+    assert_eq!(result.access_summary.metadata_files_inspected, 1);
+    assert_eq!(result.access_summary.artifact_candidates, 1);
 }
 
 #[test]
@@ -65,6 +76,10 @@ fn scan_detects_node_project() {
     assert_eq!(result.artifacts.len(), 1);
     assert_eq!(result.artifacts[0].ecosystem, Ecosystem::Node);
     assert_eq!(result.artifacts[0].path, node_modules);
+    assert_eq!(result.access_summary.directories_visited, 2);
+    assert_eq!(result.access_summary.files_inspected, 1);
+    assert_eq!(result.access_summary.metadata_files_inspected, 1);
+    assert_eq!(result.access_summary.artifact_candidates, 1);
 }
 
 #[test]
@@ -78,6 +93,10 @@ fn scan_detects_java_project() {
     assert_eq!(result.artifacts.len(), 1);
     assert_eq!(result.artifacts[0].ecosystem, Ecosystem::Java);
     assert_eq!(result.artifacts[0].path, build);
+    assert_eq!(result.access_summary.directories_visited, 2);
+    assert_eq!(result.access_summary.files_inspected, 1);
+    assert_eq!(result.access_summary.metadata_files_inspected, 1);
+    assert_eq!(result.access_summary.artifact_candidates, 1);
 }
 
 #[test]
@@ -86,16 +105,19 @@ fn scan_detects_multiple_projects() {
 
     let rust = temp_dir.path().join("rust");
     let node = temp_dir.path().join("node");
+    let java = temp_dir.path().join("java");
 
     std::fs::create_dir_all(&rust).unwrap();
     std::fs::create_dir_all(&node).unwrap();
+    std::fs::create_dir_all(&java).unwrap();
 
     let rust_target = create_rust_artifact(&rust);
     let node_modules = create_node_artifact(&node);
+    let java_build = create_java_artifact(&java);
 
     let result = scan(temp_dir.path(), &[]).unwrap();
 
-    assert_eq!(result.artifacts.len(), 2);
+    assert_eq!(result.artifacts.len(), 3);
 
     assert!(
         result
@@ -110,6 +132,16 @@ fn scan_detects_multiple_projects() {
             .iter()
             .any(|a| a.ecosystem == Ecosystem::Node && a.path == node_modules)
     );
+    assert!(
+        result
+            .artifacts
+            .iter()
+            .any(|a| a.ecosystem == Ecosystem::Java && a.path == java_build)
+    );
+    assert_eq!(result.access_summary.directories_visited, 7);
+    assert_eq!(result.access_summary.files_inspected, 3);
+    assert_eq!(result.access_summary.metadata_files_inspected, 3);
+    assert_eq!(result.access_summary.artifact_candidates, 3);
 }
 
 #[test]
@@ -170,6 +202,46 @@ fn rust_detector_reports_target_as_safe_artifact() {
     assert_eq!(detector.artifact_paths(), &["target"]);
 }
 
+#[test]
+fn nested_unsupported_files_are_not_counted_as_inspected_content() {
+    let temp_dir = TempDir::new().unwrap();
+    let nested = temp_dir.path().join("nested");
+    std::fs::create_dir(&nested).unwrap();
+    std::fs::write(
+        nested.join("source.rs"),
+        "source contents must not be persisted",
+    )
+    .unwrap();
+    std::fs::write(nested.join("notes.txt"), "unrelated contents").unwrap();
+
+    let result = scan(temp_dir.path(), &[]).unwrap();
+
+    assert_eq!(result.access_summary.directories_visited, 2);
+    assert_eq!(result.access_summary.files_inspected, 0);
+    assert_eq!(result.access_summary.metadata_files_inspected, 0);
+    assert_eq!(result.access_summary.artifact_candidates, 0);
+}
+
+#[test]
+fn access_summary_failure_samples_are_bounded() {
+    let root = TempDir::new().unwrap();
+    let mut summary = crate::models::ScanAccessSummary::new(root.path());
+
+    for index in 0..(MAX_SCAN_FAILURE_SAMPLES + 3) {
+        summary.record_failure(
+            &root.path().join(format!("failure-{index}")),
+            "permission denied",
+        );
+    }
+
+    assert_eq!(summary.failures, (MAX_SCAN_FAILURE_SAMPLES + 3) as u64);
+    assert_eq!(summary.failure_samples.len(), MAX_SCAN_FAILURE_SAMPLES);
+    assert_eq!(
+        summary.failure_samples[0].path,
+        std::path::Path::new("failure-0")
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn scanner_does_not_return_symbolic_link_artifacts() {
@@ -183,4 +255,6 @@ fn scanner_does_not_return_symbolic_link_artifacts() {
     let result = scan(root.path(), &[Ecosystem::Rust]).unwrap();
 
     assert!(result.artifacts.is_empty());
+    assert_eq!(result.access_summary.symlinks_skipped, 1);
+    assert_eq!(result.access_summary.artifact_candidates, 0);
 }

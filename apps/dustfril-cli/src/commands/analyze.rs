@@ -96,6 +96,8 @@ pub fn execute(args: PathArgs) -> bool {
         eprintln!("Failed to record scan history: {error}");
     }
 
+    format::print_scan_access_summary(&scan_result.access_summary);
+
     if analysis_result.artifacts.is_empty() {
         println!("No artifacts found.");
         return true;

@@ -210,7 +210,7 @@ mod tests {
     use super::*;
     use crate::models::{
         ActivityKind, ActivityResult, Artifact, CleanupFailure, CleanupFailureReason, Ecosystem,
-        RiskLevel, SecurityFinding, SecurityFindingKind, SecurityReport,
+        RiskLevel, ScanAccessSummary, SecurityFinding, SecurityFindingKind, SecurityReport,
     };
 
     fn cleanup_result() -> CleanupResult {
@@ -346,6 +346,7 @@ mod tests {
     fn scan_activity_contains_target_summary() {
         let scan = ScanResult {
             artifacts: vec![Artifact::new("target".into(), Ecosystem::Rust)],
+            ..ScanResult::default()
         };
 
         let activity = ActivityRecord::scan(Path::new("/workspace"), &scan, 4096);
@@ -354,6 +355,53 @@ mod tests {
         assert_eq!(activity.result.details["path"], "/workspace");
         assert_eq!(activity.result.details["artifacts"], 1);
         assert_eq!(activity.result.details["size"], 4096);
+    }
+
+    #[test]
+    fn scan_access_summary_survives_history_reload() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("history.json");
+        let mut access_summary = ScanAccessSummary::new("/workspace");
+        access_summary.directories_visited = 2;
+        access_summary.files_inspected = 1;
+        access_summary.metadata_files_inspected = 1;
+        access_summary.artifact_candidates = 1;
+
+        let scan = ScanResult {
+            artifacts: vec![Artifact::new("/workspace/target".into(), Ecosystem::Rust)],
+            access_summary,
+        };
+        record_to(
+            &path,
+            ActivityRecord::scan(Path::new("/workspace"), &scan, 1024),
+        )
+        .unwrap();
+
+        let records = load_unlocked(&path).unwrap();
+
+        assert_eq!(records.len(), 1);
+        assert_eq!(
+            records[0].result.details["accessSummary"]["directoriesVisited"],
+            2
+        );
+        assert_eq!(
+            records[0].result.details["accessSummary"]["artifactCandidates"],
+            1
+        );
+    }
+
+    #[test]
+    fn scan_history_does_not_persist_unrelated_source_contents() {
+        let workspace = TempDir::new().unwrap();
+        let source_contents = "unique source contents must stay out of history";
+        std::fs::write(workspace.path().join("source.rs"), source_contents).unwrap();
+        let scan = crate::api::scan(workspace.path(), &[]).unwrap();
+        let activity = ActivityRecord::scan(workspace.path(), &scan, 0);
+
+        let serialized = serde_json::to_string(&activity).unwrap();
+
+        assert!(!serialized.contains(source_contents));
+        assert!(!serialized.contains("source.rs"));
     }
 
     #[test]

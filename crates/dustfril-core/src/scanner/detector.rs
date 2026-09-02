@@ -1,6 +1,6 @@
 use std::{fs, path::Path};
 
-use crate::models::{Artifact, Ecosystem};
+use crate::models::{Artifact, Ecosystem, ScanAccessSummary};
 
 /// Registered detectors for all supported ecosystems.
 pub static DETECTORS: &[&dyn Detector] = &[&RustDetector, &NodeDetector, &JavaDetector];
@@ -8,7 +8,11 @@ pub static DETECTORS: &[&dyn Detector] = &[&RustDetector, &NodeDetector, &JavaDe
 /// Matches project roots and returns removable artifact directories.
 pub trait Detector: Sync {
     /// Returns true if this directory is a project of this ecosystem.
+    #[allow(dead_code)]
     fn matches(&self, root: &Path) -> bool;
+
+    /// Recognized project metadata names checked by this detector.
+    fn metadata_paths(&self) -> &[&str];
 
     /// Artifact directory names managed by this detector.
     fn artifact_paths(&self) -> &[&str];
@@ -16,15 +20,52 @@ pub trait Detector: Sync {
     /// Ecosystem handled by this detector.
     fn ecosystem(&self) -> Ecosystem;
 
+    /// Matches a project while recording only metadata files actually found
+    /// and inspected by the detector.
+    fn matches_with_summary(&self, root: &Path, summary: &mut ScanAccessSummary) -> bool {
+        self.metadata_paths().iter().any(|name| {
+            let path = root.join(name);
+            match fs::symlink_metadata(&path) {
+                Ok(metadata) if metadata.file_type().is_symlink() => false,
+                Ok(metadata) if metadata.is_file() => {
+                    summary.record_metadata_file();
+                    true
+                }
+                Ok(_) => false,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+                Err(error) => {
+                    summary.record_failure(&path, &error.to_string());
+                    false
+                }
+            }
+        })
+    }
+
     /// Finds removable artifacts inside the project.
+    #[allow(dead_code)]
     fn artifacts(&self, root: &Path) -> Vec<Artifact> {
+        self.artifacts_with_summary(root, None)
+    }
+
+    /// Finds artifacts and records detector-access failures in the scan
+    /// summary when one is supplied.
+    fn artifacts_with_summary(
+        &self,
+        root: &Path,
+        mut summary: Option<&mut ScanAccessSummary>,
+    ) -> Vec<Artifact> {
         self.artifact_paths()
             .iter()
             .map(|name| root.join(name))
-            .filter(|path| {
-                fs::symlink_metadata(path)
-                    .map(|metadata| metadata.is_dir())
-                    .unwrap_or(false)
+            .filter(|path| match fs::symlink_metadata(path) {
+                Ok(metadata) => metadata.is_dir(),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+                Err(error) => {
+                    if let Some(summary) = summary.as_deref_mut() {
+                        summary.record_failure(path, &error.to_string());
+                    }
+                    false
+                }
             })
             .map(|path| Artifact::new(path, self.ecosystem()))
             .collect()
@@ -58,6 +99,10 @@ impl Detector for RustDetector {
         root.join("Cargo.toml").is_file()
     }
 
+    fn metadata_paths(&self) -> &[&str] {
+        &["Cargo.toml"]
+    }
+
     fn artifact_paths(&self) -> &[&str] {
         &["target"]
     }
@@ -73,6 +118,10 @@ pub struct NodeDetector;
 impl Detector for NodeDetector {
     fn matches(&self, root: &Path) -> bool {
         root.join("package.json").is_file()
+    }
+
+    fn metadata_paths(&self) -> &[&str] {
+        &["package.json"]
     }
 
     fn artifact_paths(&self) -> &[&str] {
@@ -91,6 +140,10 @@ impl Detector for JavaDetector {
         root.join("pom.xml").is_file()
             || root.join("build.gradle").is_file()
             || root.join("build.gradle.kts").is_file()
+    }
+
+    fn metadata_paths(&self) -> &[&str] {
+        &["pom.xml", "build.gradle", "build.gradle.kts"]
     }
 
     fn artifact_paths(&self) -> &[&str] {

@@ -2,7 +2,7 @@ use dustfril_core::api;
 
 use crate::{
     cli::PathArgs,
-    history,
+    format, history,
     shared::path::{resolve_path, validate_path},
 };
 
@@ -43,6 +43,8 @@ pub fn execute(args: PathArgs) -> bool {
             eprintln!("Failed to calculate scan size; history was not recorded: {error}");
         }
     }
+
+    format::print_scan_access_summary(&result.access_summary);
 
     if result.artifacts.is_empty() {
         println!("No artifacts found.");

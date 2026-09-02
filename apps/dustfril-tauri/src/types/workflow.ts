@@ -104,10 +104,27 @@ export type ActivityFailure = {
   reason?: string;
 };
 
+export type ScanAccessFailure = {
+  path: string;
+  reason: string;
+};
+
+export type ScanAccessSummary = {
+  root: string;
+  directoriesVisited: number;
+  filesInspected: number;
+  metadataFilesInspected: number;
+  artifactCandidates: number;
+  symlinksSkipped: number;
+  failures: number;
+  failureSamples: ScanAccessFailure[];
+};
+
 export type ActivityDetails = {
   path?: string;
   artifacts?: number;
   size?: number;
+  accessSummary?: ScanAccessSummary;
   mode?: 'trash' | 'permanent';
   deleted?: string[];
   failed?: ActivityFailure[];
