@@ -655,6 +655,9 @@ fn parse_package_lock_packages(
             // link, so neither record is a resolved external package node.
             continue;
         }
+        if object.get("link").and_then(Value::as_bool) == Some(true) {
+            continue;
+        }
 
         let selector_name = package_name_from_selector(key);
         let name = optional_json_string(object, "name", path)?
@@ -664,10 +667,6 @@ fn parse_package_lock_packages(
             continue;
         };
         let Some(version) = optional_json_string(object, "version", path)? else {
-            // Workspace/link entries do not represent a resolved package node.
-            if object.get("link").and_then(Value::as_bool) == Some(true) {
-                continue;
-            }
             return Err(manifest_error(
                 path,
                 format!("package-lock.json package entry {key:?} is missing version"),
