@@ -1,5 +1,6 @@
 //! Shared models.
 mod analysis;
+mod artifact_snapshot;
 mod audit;
 mod cleanup;
 mod dependency;
@@ -11,6 +12,7 @@ mod signature;
 mod workflow;
 
 pub use analysis::*;
+pub use artifact_snapshot::*;
 pub use audit::*;
 pub use cleanup::*;
 pub use dependency::*;

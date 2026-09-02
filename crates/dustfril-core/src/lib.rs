@@ -3,6 +3,7 @@ pub mod error;
 pub mod models;
 
 mod analyzer;
+mod artifact_snapshot;
 mod audit_tool;
 mod cleaner;
 mod dependency;

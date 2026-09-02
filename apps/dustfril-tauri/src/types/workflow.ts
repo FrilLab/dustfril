@@ -19,6 +19,44 @@ export type Artifact = {
 export type ScanResponse = {
   artifacts: Artifact[];
   historyWarning?: string;
+  artifactSnapshot?: ArtifactSnapshotResult;
+  artifactSnapshotWarning?: string;
+};
+
+export type ArtifactSnapshotStatus = 'baselineCreated' | 'compared';
+export type ArtifactChangeKind =
+  | 'new'
+  | 'removed'
+  | 'sizeIncreased'
+  | 'sizeDecreased'
+  | 'unchanged';
+
+export type ArtifactSizeChange = {
+  path: string;
+  ecosystem: Ecosystem;
+  kind: ArtifactChangeKind;
+  previousSizeBytes: number | null;
+  currentSizeBytes: number | null;
+  deltaBytes: number;
+};
+
+export type ArtifactSnapshot = {
+  workspaceId: string;
+  timestamp: string;
+  artifacts: Array<{
+    path: string;
+    ecosystem: Ecosystem;
+    sizeBytes: number;
+    lastModifiedMs: number | null;
+    ageDays: number | null;
+  }>;
+};
+
+export type ArtifactSnapshotResult = {
+  status: ArtifactSnapshotStatus;
+  snapshot: ArtifactSnapshot;
+  previousSnapshot: ArtifactSnapshot | null;
+  changes: ArtifactSizeChange[];
 };
 
 export type ArtifactAnalysis = {

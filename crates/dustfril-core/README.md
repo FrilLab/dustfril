@@ -8,6 +8,7 @@ This crate contains the filesystem scanners, analyzers, cleanup planner and exec
 
 - `api::scan`: detect supported artifacts under a root path
 - `api::analyze`: compute size, age, and cleanup recommendation
+- `api::artifact_snapshot`: build and persist generated-artifact snapshots from an existing `AnalysisResult`
 - `api::clean::build_plan`: build cleanup candidates from scan results
 - `api::clean::execute`: execute cleanup in Trash or permanent mode
 - `api::audit`: inspect supported lifecycle scripts; malformed manifests are
@@ -23,6 +24,23 @@ This crate contains the filesystem scanners, analyzers, cleanup planner and exec
 - `api::check_lockfile_integrity`: check supported lockfile presence and Git status
 - `api::history`: record and load cleanup history using atomic replacement;
   corrupted or unsupported history files are returned as errors
+
+Artifact snapshots are stored separately from Activity History in the local,
+versioned `artifact-snapshots.json` file. Snapshot identity is the canonical
+workspace path plus the normalized scanner-owned artifact path and ecosystem.
+Only existing `target/`, `node_modules/`, and `build/` artifacts are included;
+`Cargo.lock` and ordinary source files are excluded. The first snapshot creates
+a baseline without changes. Later snapshots compare only structured analysis
+metadata and return deterministic new/removed/increased/decreased/unchanged
+states with exact signed byte deltas. The store atomically replaces its file,
+preserves multiple workspaces, retains at most 32 snapshots per workspace, and
+returns malformed or unsupported state errors explicitly. A persistence error
+does not mutate the caller's completed analysis result. Symlink and canonical
+access share a workspace history; a moved workspace is treated as a new
+workspace because the implementation does not guess across path moves.
+When a snapshot is created from a filtered scan, the latest state for
+unselected ecosystems is carried forward so omitted artifacts are not treated
+as removed or spuriously new by later snapshots.
 
 Cleanup execution validates artifact type and protected paths, refuses
 symbolic links, and never falls back from Trash mode to permanent deletion.

@@ -15,6 +15,7 @@ The repository is split into a reusable Rust core crate, a CLI app, and a Tauri 
 
 - Scan removable artifacts for Rust, Node.js, and Java workspaces
 - Analyze artifact size, age, and cleanup recommendation
+- Track generated-artifact sizes across explicit snapshots with exact byte deltas
 - Build a cleanup plan before deleting anything
 - Clean artifacts with Trash or permanent deletion mode
 - Audit Node lifecycle scripts such as `preinstall` and `postinstall`
@@ -73,6 +74,7 @@ Examples:
 ```bash
 cargo run -p dustfril-cli -- scan
 cargo run -p dustfril-cli -- analyze
+cargo run -p dustfril-cli -- snapshot
 cargo run -p dustfril-cli -- clean --dry-run
 cargo run -p dustfril-cli -- clean
 cargo run -p dustfril-cli -- clean --permanent
@@ -97,6 +99,7 @@ Available commands:
 
 - `scan [path] [--rust] [--node] [--java]`
 - `analyze [path] [--rust] [--node] [--java]`
+- `snapshot [path] [--rust] [--node] [--java]`
 - `clean [path] [--dry-run] [--permanent] [--rust] [--node] [--java]`
 - `audit [path] [--node]`
 - `dependencies [path] [--compare] [--accept-baseline] [--rust] [--node] [--java]`
@@ -154,6 +157,21 @@ tools are `node`, `bun`, `cargo`, `rustc`, `git`, `java`, and `gradle`; use
 repeated `--tool` flags to select a subset. A changed path or hash is reported
 as an integrity change, not as proof of malware, and a signature result is not
 a general software-trust verdict.
+
+`snapshot` runs one scan/analyze workflow and stores the existing scanner-owned
+generated artifacts (`target/`, `node_modules/`, and `build/`) in the local,
+versioned `artifact-snapshots.json` state. `scan` records the same snapshot as
+part of its explicit scan workflow. The first snapshot creates a baseline;
+later snapshots report deterministic `New`, `Removed`, `SizeIncreased`,
+`SizeDecreased`, and `Unchanged` states with raw byte counts. Snapshot
+construction reuses `AnalysisResult` and does not walk artifact directories a
+second time. State is keyed by canonical workspace path and retains the latest
+32 snapshots per workspace. Access through a symlink resolves to the same
+canonical workspace; moving a workspace creates a new history rather than
+guessing that it is the old one. Snapshot persistence warnings do not discard
+a completed scan/analyze result. Filtered snapshots carry forward the latest
+state for ecosystems that were not selected, so a later full scan does not
+report unobserved artifacts as newly created.
 
 ## Desktop App
 

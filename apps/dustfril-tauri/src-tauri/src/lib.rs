@@ -11,10 +11,10 @@ use std::{
 };
 
 use contract::{
-    artifact_path, cleanup_failure_reason, AnalysisResponse, ArtifactAnalysisDto, ArtifactDto,
-    CleanupCandidateDto, CleanupFailureDto, CleanupHistoryEntryDto, CleanupPlanResponse,
-    CleanupResultResponse, ExecuteCleanupRequest, LifecycleScriptDto, RunOptions, ScanResponse,
-    SecurityScanResponse,
+    artifact_path, artifact_snapshot_to_dto, cleanup_failure_reason, AnalysisResponse,
+    ArtifactAnalysisDto, ArtifactDto, CleanupCandidateDto, CleanupFailureDto,
+    CleanupHistoryEntryDto, CleanupPlanResponse, CleanupResultResponse, ExecuteCleanupRequest,
+    LifecycleScriptDto, RunOptions, ScanResponse, SecurityScanResponse,
 };
 use dustfril_core::{
     api,
@@ -106,8 +106,24 @@ async fn scan(options: RunOptions) -> Result<ScanResponse, String> {
             }
         };
         let mut history_warning = None;
+        let mut artifact_snapshot = None;
+        let mut artifact_snapshot_warning = None;
         let total_size_bytes = match api::analyze(result.clone()) {
-            Ok(analysis) => Some(analysis.total_size_bytes),
+            Ok(analysis) => {
+                match api::artifact_snapshot::record_artifact_snapshot_with_ecosystems(
+                    &root,
+                    &analysis,
+                    &ecosystems,
+                ) {
+                    Ok(snapshot) => artifact_snapshot = Some(artifact_snapshot_to_dto(snapshot)),
+                    Err(error) => {
+                        let warning = format!("Failed to record artifact snapshot: {error}");
+                        eprintln!("{warning}");
+                        artifact_snapshot_warning = Some(warning);
+                    }
+                }
+                Some(analysis.total_size_bytes)
+            }
             Err(error) => {
                 let warning = format!(
                     "Failed to calculate scan size; scan activity history was not recorded: {error}"
@@ -120,7 +136,11 @@ async fn scan(options: RunOptions) -> Result<ScanResponse, String> {
 
         if let Some(total_size_bytes) = total_size_bytes {
             if let Err(error) = history::record_scan(&root, &result, total_size_bytes) {
-                history_warning = Some(format_history_warning("scan", error));
+                let warning = format_history_warning("scan", error);
+                history_warning = Some(match history_warning {
+                    Some(existing) => format!("{existing} {warning}"),
+                    None => warning,
+                });
             }
         }
 
@@ -134,6 +154,8 @@ async fn scan(options: RunOptions) -> Result<ScanResponse, String> {
                 })
                 .collect(),
             history_warning,
+            artifact_snapshot,
+            artifact_snapshot_warning,
         })
     })
     .await

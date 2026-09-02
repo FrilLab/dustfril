@@ -1,4 +1,5 @@
 pub mod analyze;
+pub mod artifact_snapshot;
 pub mod audit;
 pub mod clean;
 pub mod dependency;
