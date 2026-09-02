@@ -66,4 +66,30 @@ mod tests {
         assert_eq!(report.findings.len(), 1);
         assert_eq!(report.findings[0].rule_id, "remote-script-pipe");
     }
+
+    #[test]
+    fn workflow_scan_reuses_parsed_environment_for_direct_secret_findings() {
+        let temp_dir = TempDir::new().unwrap();
+        let directory = temp_dir.path().join(".github/workflows");
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(
+            directory.join("test.yml"),
+            "name: Test\npermissions: read-all\nenv:\n  TOKEN: ${{ secrets.WORKFLOW_TOKEN }}\njobs:\n  build:\n    env:\n      TOKEN: ${{ secrets.JOB_TOKEN }}\n    steps:\n      - name: Log token\n        run: echo \"$TOKEN\"\n",
+        )
+        .unwrap();
+
+        let report = workflow_security_scan(temp_dir.path()).unwrap();
+
+        assert_eq!(report.findings.len(), 1);
+        let finding = &report.findings[0];
+        assert_eq!(finding.rule_id, "workflow-direct-secret-exposure");
+        assert_eq!(finding.job_id.as_deref(), Some("build"));
+        assert_eq!(finding.step_index, Some(0));
+        assert_eq!(finding.secret_reference.as_deref(), Some("JOB_TOKEN"));
+        assert_eq!(
+            finding.exposure_sink,
+            Some(crate::models::WorkflowExposureSink::Stdout)
+        );
+        assert!(report.notices.is_empty());
+    }
 }
