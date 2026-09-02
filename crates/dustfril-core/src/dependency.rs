@@ -16,8 +16,9 @@ use serde_yaml::Value as YamlValue;
 use crate::{
     error::{DustError, DustResult},
     models::{
-        DependencyLockfile, DependencyLockfileStatus, DependencyMetric, DependencyReport,
-        DependencyReportStatus, DuplicateDependency, Ecosystem, LockfileKind,
+        DependencyEntry, DependencyLockfile, DependencyLockfileStatus, DependencyMetric,
+        DependencyReport, DependencyReportStatus, DependencyScope, DuplicateDependency, Ecosystem,
+        LockfileKind,
     },
 };
 
@@ -71,6 +72,7 @@ enum LockSelection {
 struct ResolvedDependency {
     name: String,
     version: String,
+    source: Option<String>,
     direct: bool,
     classification_available: bool,
 }
@@ -183,8 +185,26 @@ fn complete_report(
     let duplicates = duplicate_versions(&entries);
     let resolved_count = entries.len();
     let transitive_count = entries.iter().filter(|entry| !entry.direct).count();
+    let all_classifications_available = entries.iter().all(|entry| entry.classification_available);
+    let mut resolved_dependencies = entries
+        .into_iter()
+        .map(|entry| DependencyEntry {
+            ecosystem: ecosystem_for_kind(kind),
+            name: entry.name,
+            version: entry.version,
+            source: entry.source,
+            scope: if !entry.classification_available {
+                DependencyScope::Unknown
+            } else if entry.direct {
+                DependencyScope::Direct
+            } else {
+                DependencyScope::Transitive
+            },
+        })
+        .collect::<Vec<_>>();
+    resolved_dependencies.sort();
     let lockfile_format = lockfile_format(kind);
-    let transitive_metric = if entries.iter().all(|entry| entry.classification_available) {
+    let transitive_metric = if all_classifications_available {
         DependencyMetric::available(transitive_count)
     } else {
         DependencyMetric::unknown(
@@ -209,6 +229,7 @@ fn complete_report(
         resolved_dependency_count: DependencyMetric::available(resolved_count),
         transitive_dependency_count: transitive_metric,
         duplicate_versions: duplicates,
+        resolved_dependencies,
         warnings: Vec::new(),
     }
 }
@@ -240,6 +261,7 @@ fn missing_lockfile_report(
         resolved_dependency_count: DependencyMetric::unknown(reason.clone()),
         transitive_dependency_count: DependencyMetric::unknown(reason.clone()),
         duplicate_versions: Vec::new(),
+        resolved_dependencies: Vec::new(),
         warnings: vec![reason],
     }
 }
@@ -267,6 +289,7 @@ fn unsupported_format_report(
         resolved_dependency_count: DependencyMetric::unsupported(reason.clone()),
         transitive_dependency_count: DependencyMetric::unsupported(reason.clone()),
         duplicate_versions: Vec::new(),
+        resolved_dependencies: Vec::new(),
         warnings: vec![reason],
     }
 }
@@ -678,6 +701,7 @@ fn parse_package_lock_packages(
         entries.push(ResolvedDependency {
             name,
             version: version.to_owned(),
+            source: optional_json_string(object, "resolved", path)?.map(str::to_owned),
             direct,
             classification_available: true,
         });
@@ -703,6 +727,7 @@ fn parse_npm_dependency_tree(
         entries.push(ResolvedDependency {
             name: name.clone(),
             version: version.to_owned(),
+            source: optional_json_string(object, "resolved", path)?.map(str::to_owned),
             direct: depth == 0,
             classification_available: true,
         });
@@ -814,10 +839,19 @@ fn parse_pnpm_section(
             continue;
         }
         let (name, version) = parsed_selector.expect("selector was validated above");
+        let source = yaml_value_field(package, "resolution")
+            .and_then(YamlValue::as_mapping)
+            .and_then(|resolution| {
+                ["tarball", "repo", "url"]
+                    .into_iter()
+                    .find_map(|key| yaml_value_field(resolution, key).and_then(YamlValue::as_str))
+            })
+            .map(str::to_owned);
         resolved.push(ResolvedDependency {
             direct: manifest.direct_names.contains(&name),
             name,
             version,
+            source,
             classification_available: false,
         });
     }
@@ -897,6 +931,7 @@ fn parse_bun_lock(path: &Path, manifest: &ParsedManifest) -> DustResult<Vec<Reso
                         direct: manifest.direct_names.contains(&name),
                         name,
                         version,
+                        source: values.get(1).and_then(Value::as_str).map(str::to_owned),
                         classification_available: false,
                     });
                 }
@@ -986,6 +1021,7 @@ fn parse_bun_workspace_dependency(
                 direct,
                 name,
                 version,
+                source: values.get(1).and_then(Value::as_str).map(str::to_owned),
                 classification_available: false,
             });
             for value in values.iter().skip(1) {
@@ -1013,6 +1049,11 @@ fn parse_bun_workspace_dependency(
                 direct,
                 name: name.to_owned(),
                 version: version.to_owned(),
+                source: object
+                    .get("resolved")
+                    .or_else(|| object.get("url"))
+                    .and_then(Value::as_str)
+                    .map(str::to_owned),
                 classification_available: false,
             });
             parse_bun_nested_dependencies(path, object, manifest, entries)
@@ -1068,6 +1109,11 @@ fn parse_bun_package_value(
         direct: manifest.direct_names.contains(name),
         name: name.to_owned(),
         version: version.to_owned(),
+        source: object
+            .get("resolved")
+            .or_else(|| object.get("url"))
+            .and_then(Value::as_str)
+            .map(str::to_owned),
         classification_available: false,
     });
     Ok(())
@@ -1197,6 +1243,10 @@ fn parse_cargo_lock(path: &Path, manifest: &ParsedManifest) -> DustResult<Vec<Re
             direct,
             name: name.to_owned(),
             version: version.to_owned(),
+            source: package
+                .get("source")
+                .and_then(toml::Value::as_str)
+                .map(str::to_owned),
             classification_available: true,
         });
     }
@@ -1446,10 +1496,11 @@ fn read_input(path: &Path) -> DustResult<String> {
 }
 
 fn validate_root(root: &Path) -> DustResult<()> {
-    match fs::symlink_metadata(root) {
-        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
-            Err(DustError::InvalidPath(root.to_path_buf()))
-        }
+    // Dependency reporting is read-only and keys baselines by the canonical
+    // target, so a directory reached through a symlink is a valid project
+    // input. Artifact scanning keeps its stricter symlink-root policy.
+    match fs::metadata(root) {
+        Ok(metadata) if !metadata.is_dir() => Err(DustError::InvalidPath(root.to_path_buf())),
         Ok(_) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             Err(DustError::InvalidPath(root.to_path_buf()))
@@ -1560,6 +1611,22 @@ mod tests {
         assert_eq!(report.transitive_dependency_count.value, Some(1));
         assert_eq!(report.duplicate_versions[0].name, "shared");
         assert_eq!(report.duplicate_versions[0].versions, ["1.0.0", "2.0.0"]);
+        assert_eq!(
+            report
+                .resolved_dependencies
+                .iter()
+                .filter(|entry| entry.scope == DependencyScope::Direct)
+                .count(),
+            5
+        );
+        assert_eq!(
+            report
+                .resolved_dependencies
+                .iter()
+                .filter(|entry| entry.scope == DependencyScope::Transitive)
+                .count(),
+            1
+        );
     }
 
     #[test]
@@ -1758,6 +1825,7 @@ dependencies = ["serde 1.0.0"]
 [[package]]
 name = "serde"
 version = "1.0.0"
+source = "registry+https://example.invalid/index"
 
 [[package]]
 name = "serde"
@@ -1789,6 +1857,15 @@ version = "1.0.0"
         assert_eq!(report.resolved_dependency_count.value, Some(5));
         assert_eq!(report.transitive_dependency_count.value, Some(1));
         assert_eq!(report.duplicate_versions[0].name, "serde");
+        assert_eq!(
+            report
+                .resolved_dependencies
+                .iter()
+                .find(|entry| entry.name == "serde")
+                .unwrap()
+                .source,
+            Some("registry+https://example.invalid/index".to_owned())
+        );
     }
 
     #[test]

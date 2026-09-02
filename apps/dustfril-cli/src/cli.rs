@@ -33,9 +33,9 @@ pub enum Commands {
     /// Audit lifecycle scripts
     Audit(PathArgs),
 
-    /// Report dependency inventory and version exposure
+    /// Report dependency inventory and explicit baseline changes
     #[command(name = "dependencies", visible_alias = "dependency")]
-    Dependencies(PathArgs),
+    Dependencies(DependencyArgs),
 
     /// Scan lifecycle scripts for suspicious commands
     Security(SecurityArgs),
@@ -97,6 +97,26 @@ pub struct PathArgs {
 
     #[arg(long)]
     pub java: bool,
+}
+
+#[derive(Args)]
+pub struct DependencyArgs {
+    #[command(flatten)]
+    pub path_args: PathArgs,
+
+    /// Compare the current inventory with the stored local baseline.
+    #[arg(long)]
+    pub compare: bool,
+
+    /// Explicitly accept the current inventory after displaying its diff.
+    #[arg(long)]
+    pub accept_baseline: bool,
+}
+
+impl DependencyArgs {
+    pub fn ecosystems(&self) -> Vec<Ecosystem> {
+        self.path_args.ecosystems()
+    }
 }
 
 impl PathArgs {
@@ -207,8 +227,31 @@ mod tests {
 
         assert!(matches!(
             cli.command,
-            Commands::Dependencies(PathArgs { rust: true, .. })
+            Commands::Dependencies(DependencyArgs {
+                path_args: PathArgs { rust: true, .. },
+                compare: false,
+                accept_baseline: false,
+            })
         ));
+    }
+
+    #[test]
+    fn cli_parses_dependency_comparison_and_explicit_acceptance() {
+        let cli = Cli::try_parse_from([
+            "dfr",
+            "dependencies",
+            "--compare",
+            "--accept-baseline",
+            "--node",
+        ])
+        .unwrap();
+
+        let Commands::Dependencies(args) = cli.command else {
+            panic!("expected dependency command");
+        };
+        assert!(args.compare);
+        assert!(args.accept_baseline);
+        assert_eq!(args.ecosystems(), vec![Ecosystem::Node]);
     }
 
     #[test]

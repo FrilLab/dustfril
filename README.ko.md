@@ -21,6 +21,7 @@ DustFril은 개발 산출물을 스캔, 분석, 점검, 정리하기 위한 워�
 - 스캔·정리 활동 이력을 버전 형식으로 운영체제 앱 데이터 디렉터리에 저장
 - Node 및 Rust 프로젝트의 오프라인 공급망 보안 점검
 - 매니페스트와 lockfile에서 Node 및 Rust 의존성 inventory를 결정적으로 계산
+- 명시적 로컬 baseline과 의존성 inventory를 비교해 추가·삭제·버전·지원되는 소스 변경을 출력
 - 지원 lockfile의 존재 여부와 Git 상태 점검
 - 대상 개발 도구를 실행하지 않고 로컬 SHA-256 baseline과 실행 파일 무결성 비교
 - CLI 정리 이력을 운영체제 앱 데이터 디렉터리에 저장
@@ -61,6 +62,8 @@ cargo run -p dustfril-cli -- clean
 cargo run -p dustfril-cli -- clean --permanent
 cargo run -p dustfril-cli -- audit --node
 cargo run -p dustfril-cli -- dependencies --node
+cargo run -p dustfril-cli -- dependencies --compare --node
+cargo run -p dustfril-cli -- dependencies --compare --accept-baseline --node
 cargo run -p dustfril-cli -- security scan --node
 cargo run -p dustfril-cli -- integrity scan --tool node --tool git
 ```
@@ -78,7 +81,7 @@ cargo run -p dustfril-cli -- analyze /path/to/workspace --node
 - `analyze [path] [--rust] [--node] [--java]`
 - `clean [path] [--dry-run] [--permanent] [--rust] [--node] [--java]`
 - `audit [path] [--node]`
-- `dependencies [path] [--rust] [--node] [--java]`
+- `dependencies [path] [--compare] [--accept-baseline] [--rust] [--node] [--java]`
 - `security scan [path] [--node]`
 - `integrity scan [--tool <name>]...`
 
@@ -99,6 +102,16 @@ cargo run -p dustfril-cli -- analyze /path/to/workspace --node
 lockfile 누락과 Yarn, 레거시 `bun.lockb`, Java 및 지원하지 않는 package manager는
 명시적인 상태로 출력합니다. 설치된 의존성의 디스크 크기나 취약점 점수는 계산하지
 않습니다.
+
+`dependencies --compare`는 OS 앱 데이터 디렉터리의 버전 형식
+`dependency-baseline.json`에 저장된 명시적 baseline과 현재 정규화된
+inventory를 비교합니다. 첫 번째 완전한 관측은 기존 의존성을 전부 추가로
+출력하지 않고 baseline만 생성합니다. 비교만 수행할 때 기존 baseline은
+변경되지 않으며, diff를 확인한 뒤 `--accept-baseline`을 명시해야 현재
+inventory로 교체됩니다. baseline 키는 canonical workspace 경로이므로
+심볼릭 링크와 canonical 경로는 같은 프로젝트로 처리하고, workspace를
+이동하면 새 프로젝트로 처리합니다. 불완전하거나 지원되지 않는 결과는
+경고로 남기며 기존 baseline을 지우지 않습니다.
 
 `integrity scan`은 PATH에서 요청한 개발 도구를 찾고 파일 메타데이터와 바이트를
 읽어 SHA-256을 스트리밍 계산합니다. 대상 실행 파일을 절대 실행하지 않으며,

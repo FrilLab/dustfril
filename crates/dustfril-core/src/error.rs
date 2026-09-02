@@ -19,6 +19,8 @@ pub enum DustError {
     Manifest(String),
     /// Indicates that the persisted executable-integrity state is invalid.
     IntegrityState(String),
+    /// Indicates that the persisted dependency-baseline state is invalid.
+    DependencyState(String),
 }
 
 /// Standard result type used by the core crate.
@@ -50,6 +52,9 @@ impl fmt::Display for DustError {
             }
             DustError::IntegrityState(message) => {
                 write!(f, "Executable integrity state error: {message}")
+            }
+            DustError::DependencyState(message) => {
+                write!(f, "Dependency baseline state error: {message}")
             }
         }
     }
