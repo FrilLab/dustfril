@@ -139,6 +139,170 @@ pub struct DuplicateDependency {
     pub versions: Vec<String>,
 }
 
+/// Whether a resolved dependency is directly declared, transitive, or cannot
+/// be classified reliably by the selected lockfile format.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DependencyScope {
+    Direct,
+    Transitive,
+    Unknown,
+}
+
+impl fmt::Display for DependencyScope {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let value = match self {
+            Self::Direct => "Direct",
+            Self::Transitive => "Transitive",
+            Self::Unknown => "Unknown",
+        };
+
+        f.write_str(value)
+    }
+}
+
+/// A normalized logical dependency entry used by reports and baselines.
+///
+/// The dependency identity is `(ecosystem, name, version, source)`. A
+/// lockfile location is intentionally not included, so ordering and layout
+/// changes do not create false changes.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DependencyEntry {
+    pub ecosystem: Ecosystem,
+    pub name: String,
+    pub version: String,
+    /// Registry/source identifier when the parser can obtain it reliably.
+    pub source: Option<String>,
+    pub scope: DependencyScope,
+}
+
+/// State of the explicit baseline used for a dependency comparison.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DependencyBaselineStatus {
+    /// No prior baseline existed; the current inventory was stored.
+    BaselineCreated,
+    /// A prior baseline was compared and remains unchanged until explicitly
+    /// accepted by the caller.
+    Compared,
+    /// No complete inventory was available, so no baseline was read or
+    /// modified.
+    Unavailable,
+}
+
+impl fmt::Display for DependencyBaselineStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let value = match self {
+            Self::BaselineCreated => "Baseline created",
+            Self::Compared => "Compared",
+            Self::Unavailable => "Unavailable",
+        };
+
+        f.write_str(value)
+    }
+}
+
+/// The kind of logical dependency change found between two baselines.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DependencyChangeKind {
+    Added,
+    Removed,
+    VersionChanged,
+    SourceChanged,
+}
+
+impl fmt::Display for DependencyChangeKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let value = match self {
+            Self::Added => "Added",
+            Self::Removed => "Removed",
+            Self::VersionChanged => "Version changed",
+            Self::SourceChanged => "Source changed",
+        };
+
+        f.write_str(value)
+    }
+}
+
+/// One deterministic dependency change. Added entries have only `current`,
+/// removed entries only `previous`, and replacement changes have both.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DependencyChange {
+    pub kind: DependencyChangeKind,
+    pub previous: Option<DependencyEntry>,
+    pub current: Option<DependencyEntry>,
+}
+
+/// Structured result of comparing a current inventory with an explicit local
+/// baseline.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DependencyDiff {
+    /// Stable identity derived from the canonical workspace root.
+    pub workspace_id: String,
+    pub baseline_status: DependencyBaselineStatus,
+    pub added: Vec<DependencyChange>,
+    pub removed: Vec<DependencyChange>,
+    pub version_changes: Vec<DependencyChange>,
+    pub source_changes: Vec<DependencyChange>,
+    pub warnings: Vec<String>,
+}
+
+impl DependencyDiff {
+    pub fn empty(
+        workspace_id: impl Into<String>,
+        baseline_status: DependencyBaselineStatus,
+    ) -> Self {
+        Self {
+            workspace_id: workspace_id.into(),
+            baseline_status,
+            added: Vec::new(),
+            removed: Vec::new(),
+            version_changes: Vec::new(),
+            source_changes: Vec::new(),
+            warnings: Vec::new(),
+        }
+    }
+
+    /// Returns whether the comparison found any logical dependency changes.
+    pub fn has_changes(&self) -> bool {
+        !self.added.is_empty()
+            || !self.removed.is_empty()
+            || !self.version_changes.is_empty()
+            || !self.source_changes.is_empty()
+    }
+}
+
+/// Versioned local state containing one inventory per observed ecosystem and
+/// workspace. Only normalized dependency data is persisted.
+pub const DEPENDENCY_BASELINE_STATE_VERSION: u32 = 1;
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DependencyBaseline {
+    pub workspace_id: String,
+    pub inventories: BTreeMap<Ecosystem, Vec<DependencyEntry>>,
+}
+
+/// On-disk dependency baseline collection.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DependencyBaselineState {
+    pub version: u32,
+    pub projects: BTreeMap<String, DependencyBaseline>,
+}
+
+impl Default for DependencyBaselineState {
+    fn default() -> Self {
+        Self {
+            version: DEPENDENCY_BASELINE_STATE_VERSION,
+            projects: BTreeMap::new(),
+        }
+    }
+}
+
 /// Structured dependency inventory for one supported ecosystem.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DependencyReport {
@@ -166,6 +330,8 @@ pub struct DependencyReport {
     pub transitive_dependency_count: DependencyMetric,
     /// Packages with more than one distinct resolved version.
     pub duplicate_versions: Vec<DuplicateDependency>,
+    /// Normalized resolved dependency entries reused by baseline comparison.
+    pub resolved_dependencies: Vec<DependencyEntry>,
     /// Non-fatal scope or availability notes.
     pub warnings: Vec<String>,
 }
@@ -187,6 +353,7 @@ impl DependencyReport {
             resolved_dependency_count: DependencyMetric::unsupported(reason.clone()),
             transitive_dependency_count: DependencyMetric::unsupported(reason.clone()),
             duplicate_versions: Vec::new(),
+            resolved_dependencies: Vec::new(),
             warnings: vec![reason],
         }
     }

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 /// Supported project ecosystems.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Ecosystem {
     Rust,
     Node,

@@ -1,4 +1,7 @@
-use dustfril_core::models::{DependencyMetric, DependencyReport, DuplicateDependency};
+use dustfril_core::models::{
+    DependencyChange, DependencyDiff, DependencyEntry, DependencyMetric, DependencyReport,
+    DuplicateDependency,
+};
 
 /// Prints dependency reports without adding CLI-specific analysis semantics.
 pub fn print_dependency_reports(reports: &[DependencyReport]) {
@@ -14,6 +17,53 @@ pub fn print_dependency_reports(reports: &[DependencyReport]) {
             println!();
         }
         print_dependency_report(report);
+    }
+}
+
+/// Prints the structured logical diff from an explicit dependency baseline.
+pub fn print_dependency_diff(diff: &DependencyDiff) {
+    println!("Dependency change report\n");
+    println!("Workspace:    {}", diff.workspace_id);
+    println!("Baseline:     {}", diff.baseline_status);
+    print_changes("Added", &diff.added);
+    print_changes("Removed", &diff.removed);
+    print_changes("Version changed", &diff.version_changes);
+    print_changes("Source changed", &diff.source_changes);
+    for warning in &diff.warnings {
+        println!("Warning:       {warning}");
+    }
+    if !diff.has_changes() {
+        println!("No dependency changes detected.");
+    }
+}
+
+fn print_changes(label: &str, changes: &[DependencyChange]) {
+    if changes.is_empty() {
+        return;
+    }
+    println!("{label}: {}", changes.len());
+    for change in changes {
+        let entry = change.current.as_ref().or(change.previous.as_ref());
+        if let Some(entry) = entry {
+            println!(
+                "  {} {} {} ({})",
+                entry.ecosystem, entry.name, entry.version, entry.scope
+            );
+        }
+        if let (Some(previous), Some(current)) = (&change.previous, &change.current) {
+            println!(
+                "    {} -> {}",
+                dependency_label(previous),
+                dependency_label(current)
+            );
+        }
+    }
+}
+
+fn dependency_label(entry: &DependencyEntry) -> String {
+    match &entry.source {
+        Some(source) => format!("{} {} [{}]", entry.name, entry.version, source),
+        None => format!("{} {}", entry.name, entry.version),
     }
 }
 

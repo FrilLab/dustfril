@@ -21,6 +21,7 @@ The repository is split into a reusable Rust core crate, a CLI app, and a Tauri 
 - Persist versioned local activity history for scans, cleanup, and explicit security scans (including legacy cleanup history migration)
 - Run an offline supply-chain security scan for Node and Rust projects
 - Report deterministic Node and Rust dependency inventory from manifests and lockfiles
+- Compare dependency inventories with explicit local baselines and report added, removed, version, and supported source changes
 - Check supported lockfile presence and Git status
 - Compare selected development-tool executables with local SHA-256 baselines without launching them
 - Persist CLI cleanup history to the OS app data directory
@@ -68,6 +69,8 @@ cargo run -p dustfril-cli -- clean
 cargo run -p dustfril-cli -- clean --permanent
 cargo run -p dustfril-cli -- audit --node
 cargo run -p dustfril-cli -- dependencies --node
+cargo run -p dustfril-cli -- dependencies --compare --node
+cargo run -p dustfril-cli -- dependencies --compare --accept-baseline --node
 cargo run -p dustfril-cli -- security scan --node
 cargo run -p dustfril-cli -- integrity scan --tool node --tool git
 cargo run -p dustfril-cli -- history
@@ -86,7 +89,7 @@ Available commands:
 - `analyze [path] [--rust] [--node] [--java]`
 - `clean [path] [--dry-run] [--permanent] [--rust] [--node] [--java]`
 - `audit [path] [--node]`
-- `dependencies [path] [--rust] [--node] [--java]`
+- `dependencies [path] [--compare] [--accept-baseline] [--rust] [--node] [--java]`
 - `security scan [path] [--node]`
 - `integrity scan [--tool <name>]...`
 - `history`
@@ -109,6 +112,17 @@ workspace member manifests have a dedicated aggregation design. Missing
 lockfiles and unsupported Yarn, legacy `bun.lockb`, Java, or package-manager
 formats are explicit report states. It does not measure installed dependency
 size or claim vulnerability risk.
+
+`dependencies --compare` compares the current normalized inventory with the
+explicit local baseline in `dependency-baseline.json` under the OS app data
+directory. The first complete observation creates a baseline without reporting
+all existing dependencies as added. Existing baselines are not replaced by a
+comparison; pass `--accept-baseline` only after reviewing the diff. Baselines
+are keyed by the canonical workspace path, so symlink and canonical access share
+state while a moved workspace is treated as a new project. Unsupported or
+missing inventories are reported as warnings and are not used to erase a
+baseline; when no complete inventory is available, the comparison is marked
+unavailable and the warning is still returned.
 
 `integrity scan` resolves the requested development tools through PATH, reads
 filesystem metadata, streams each target through SHA-256, and stores its
