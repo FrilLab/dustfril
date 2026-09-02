@@ -22,7 +22,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_yaml::Value;
 
 use crate::{
-    audit_tool::command,
+    audit_tool::command::{self, TokenPart, TokenQuote},
     models::{
         RiskLevel, Workflow, WorkflowExposureSink, WorkflowFinding, WorkflowFindingCategory,
         WorkflowJob, WorkflowScanNotice, WorkflowStep,
@@ -79,17 +79,21 @@ fn analyze_step(
     };
 
     for segment in &segments {
-        for token in &segment.tokens {
-            used_references.extend(references_in_text(token, &environment));
+        for parts in &segment.token_parts {
+            used_references.extend(references_in_token_parts(parts, &environment));
         }
 
         let Some(executable) = command::executable_preserving_case(&segment.tokens) else {
             continue;
         };
         let arguments = command::arguments_preserving_case(&segment.tokens);
+        let argument_parts =
+            command::argument_parts_preserving_case(&segment.tokens, &segment.token_parts);
 
-        if executable.eq_ignore_ascii_case("echo") || executable.eq_ignore_ascii_case("printf") {
-            let references = references_in_arguments(arguments, &environment);
+        if executable.eq_ignore_ascii_case("echo")
+            || (executable.eq_ignore_ascii_case("printf") && !printf_assigns_output(arguments))
+        {
+            let references = references_in_arguments(argument_parts, &environment);
             emit_findings(
                 &context,
                 WorkflowExposureSink::Stdout,
@@ -98,7 +102,7 @@ fn analyze_step(
                 findings,
             );
         } else if executable.eq_ignore_ascii_case("curl") {
-            let references = curl_request_references(arguments, &environment);
+            let references = curl_request_references(arguments, argument_parts, &environment);
             emit_findings(
                 &context,
                 WorkflowExposureSink::NetworkRequest,
@@ -229,20 +233,32 @@ fn secret_references_in_value(value: &Value) -> SecretReferences {
 }
 
 fn references_in_arguments(
-    arguments: &[String],
+    arguments: &[Vec<TokenPart>],
     environment: &SecretEnvironment,
 ) -> SecretReferences {
     arguments
         .iter()
-        .flat_map(|argument| references_in_text(argument, environment))
+        .flat_map(|parts| references_in_token_parts(parts, environment))
         .collect()
 }
 
-fn references_in_text(text: &str, environment: &SecretEnvironment) -> SecretReferences {
-    let mut references: SecretReferences = secret_references_in_text(text);
-    for variable in shell_variables_in_text(text) {
-        if let Some(variable_references) = environment.get(&variable) {
-            references.extend(variable_references.iter().cloned());
+fn references_in_token_parts(
+    parts: &[TokenPart],
+    environment: &SecretEnvironment,
+) -> SecretReferences {
+    let mut references = secret_references_in_text(
+        &parts
+            .iter()
+            .map(|part| part.text.as_str())
+            .collect::<String>(),
+    );
+    for part in parts {
+        if part.quote != TokenQuote::Single {
+            for variable in shell_variables_in_text(&part.text) {
+                if let Some(variable_references) = environment.get(&variable) {
+                    references.extend(variable_references.iter().cloned());
+                }
+            }
         }
     }
     references
@@ -348,6 +364,7 @@ fn is_shell_variable_part(character: char) -> bool {
 
 fn curl_request_references(
     arguments: &[String],
+    argument_parts: &[Vec<TokenPart>],
     environment: &SecretEnvironment,
 ) -> SecretReferences {
     let mut references = SecretReferences::new();
@@ -363,18 +380,22 @@ fn curl_request_references(
             continue;
         }
 
-        if let Some((value, consumed)) = curl_option_value(arguments, index) {
+        if let Some((value_index, consumed)) = curl_option_value(arguments, index) {
+            let value = &arguments[value_index];
             if is_url_option(argument) && is_http_url(value) {
                 has_literal_url = true;
             } else if is_secret_sink_option(argument) {
-                references.extend(references_in_text(value, environment));
+                references.extend(references_in_token_parts(
+                    &argument_parts[value_index],
+                    environment,
+                ));
             }
             index += consumed;
             continue;
         }
 
-        if curl_option_takes_value(argument) {
-            index += if index + 1 < arguments.len() { 2 } else { 1 };
+        if let Some(consumed) = curl_option_consumed(argument) {
+            index += consumed;
             continue;
         }
 
@@ -388,7 +409,7 @@ fn curl_request_references(
     }
 }
 
-fn curl_option_value(arguments: &[String], index: usize) -> Option<(&str, usize)> {
+fn curl_option_value(arguments: &[String], index: usize) -> Option<(usize, usize)> {
     let argument = arguments.get(index)?.as_str();
 
     for option in [
@@ -403,21 +424,22 @@ fn curl_option_value(arguments: &[String], index: usize) -> Option<(&str, usize)
         "--url",
     ] {
         if argument == option {
-            return arguments.get(index + 1).map(|value| (value.as_str(), 2));
+            return arguments.get(index + 1).map(|_| (index + 1, 2));
         }
-        if let Some(value) = argument.strip_prefix(&format!("{option}=")) {
-            return Some((value, 1));
+        if argument.starts_with(&format!("{option}=")) {
+            return Some((index, 1));
         }
     }
 
     for option in ["-d", "-F", "-H"] {
         if argument == option {
-            return arguments.get(index + 1).map(|value| (value.as_str(), 2));
+            return arguments.get(index + 1).map(|_| (index + 1, 2));
         }
-        if let Some(value) = argument.strip_prefix(option)
-            && !value.is_empty()
+        if argument
+            .strip_prefix(option)
+            .is_some_and(|value| !value.is_empty())
         {
-            return Some((value, 1));
+            return Some((index, 1));
         }
     }
 
@@ -449,18 +471,8 @@ fn is_url_option(argument: &str) -> bool {
     argument == "--url" || argument.starts_with("--url=")
 }
 
-fn curl_option_takes_value(argument: &str) -> bool {
-    [
-        "-b",
-        "-c",
-        "-e",
-        "-K",
-        "-m",
-        "-o",
-        "-T",
-        "-u",
-        "-x",
-        "-X",
+fn curl_option_consumed(argument: &str) -> Option<usize> {
+    let long_options = [
         "--cacert",
         "--cert",
         "--config",
@@ -478,15 +490,31 @@ fn curl_option_takes_value(argument: &str) -> bool {
         "--retry",
         "--upload-file",
         "--user",
-    ]
-    .iter()
-    .any(|option| {
-        argument == *option
-            || (argument.starts_with(option)
-                && option.starts_with('-')
-                && !option.starts_with("--"))
-            || argument.starts_with(&format!("{option}="))
+    ];
+    if long_options
+        .iter()
+        .any(|option| argument == *option || argument.starts_with(&format!("{option}=")))
+    {
+        return Some(if argument.contains('=') { 1 } else { 2 });
+    }
+
+    let short_options = ["-b", "-c", "-e", "-K", "-m", "-o", "-T", "-u", "-x", "-X"];
+    short_options.iter().find_map(|option| {
+        if argument == *option {
+            Some(2)
+        } else if argument
+            .strip_prefix(option)
+            .is_some_and(|value| !value.is_empty())
+        {
+            Some(1)
+        } else {
+            None
+        }
     })
+}
+
+fn printf_assigns_output(arguments: &[String]) -> bool {
+    arguments.first().is_some_and(|argument| argument == "-v")
 }
 
 fn is_http_url(value: &str) -> bool {
@@ -613,6 +641,60 @@ mod tests {
                 .iter()
                 .all(|finding| finding.exposure_sink == Some(WorkflowExposureSink::NetworkRequest))
         );
+    }
+
+    #[test]
+    fn consumes_attached_curl_options_without_skipping_following_sink_options() {
+        let workflow = workflow_with_steps(
+            &[],
+            &[],
+            &[(
+                "curl -XPOST -H \"$TOKEN\" https://example.invalid/upload",
+                &[("TOKEN", "${{ secrets.API_TOKEN }}")],
+            )],
+        );
+
+        let (findings, notices) = findings_for(&workflow);
+
+        assert!(notices.is_empty());
+        assert_eq!(finding_names(&findings), ["API_TOKEN"]);
+        assert_eq!(
+            findings[0].exposure_sink,
+            Some(WorkflowExposureSink::NetworkRequest)
+        );
+    }
+
+    #[test]
+    fn does_not_report_single_quoted_shell_variable_as_exposure() {
+        let workflow = workflow_with_steps(
+            &[("TOKEN", "${{ secrets.API_TOKEN }}")],
+            &[],
+            &[("echo '$TOKEN'", &[])],
+        );
+
+        let (findings, notices) = findings_for(&workflow);
+
+        assert!(findings.is_empty());
+        assert_eq!(notices.len(), 1);
+        assert!(notices[0].reason.contains("API_TOKEN"));
+    }
+
+    #[test]
+    fn does_not_report_printf_assignment_as_stdout_exposure() {
+        let workflow = workflow_with_steps(
+            &[],
+            &[],
+            &[(
+                "printf -v copy '%s' \"$TOKEN\"",
+                &[("TOKEN", "${{ secrets.API_TOKEN }}")],
+            )],
+        );
+
+        let (findings, notices) = findings_for(&workflow);
+
+        assert!(findings.is_empty());
+        assert_eq!(notices.len(), 1);
+        assert!(notices[0].reason.contains("API_TOKEN"));
     }
 
     #[test]

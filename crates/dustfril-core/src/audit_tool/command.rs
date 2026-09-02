@@ -12,10 +12,24 @@ pub enum Separator {
     Sequence,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TokenQuote {
+    Unquoted,
+    Single,
+    Double,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct TokenPart {
+    pub text: String,
+    pub quote: TokenQuote,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct Segment {
     pub preceding: Option<Separator>,
     pub tokens: Vec<String>,
+    pub(crate) token_parts: Vec<Vec<TokenPart>>,
 }
 
 pub fn parse(command: &str) -> Vec<Segment> {
@@ -34,7 +48,11 @@ pub(crate) fn parse_preserving_case(command: &str) -> Vec<Segment> {
 fn parse_internal(command: &str, lowercase: bool) -> Vec<Segment> {
     let mut segments = Vec::new();
     let mut tokens = Vec::new();
+    let mut token_parts = Vec::new();
     let mut token = String::new();
+    let mut token_part = String::new();
+    let mut token_parts_for_token = Vec::new();
+    let mut token_quote = TokenQuote::Unquoted;
     let mut quote = None;
     let mut escaped = false;
     let mut preceding = None;
@@ -45,7 +63,7 @@ fn parse_internal(command: &str, lowercase: bool) -> Vec<Segment> {
         if escaped {
             escaped = false;
             if !matches!(character, '\n' | '\r') {
-                token.push(normalize(character, lowercase));
+                push_character(&mut token, &mut token_part, normalize(character, lowercase));
             } else if character == '\r' && characters.peek() == Some(&'\n') {
                 characters.next();
             }
@@ -66,9 +84,11 @@ fn parse_internal(command: &str, lowercase: bool) -> Vec<Segment> {
 
         if let Some(quote_character) = quote {
             if character == quote_character {
+                push_part(&mut token_parts_for_token, &mut token_part, token_quote);
                 quote = None;
+                token_quote = TokenQuote::Unquoted;
             } else {
-                token.push(normalize(character, lowercase));
+                push_character(&mut token, &mut token_part, normalize(character, lowercase));
             }
             continue;
         }
@@ -81,13 +101,21 @@ fn parse_internal(command: &str, lowercase: bool) -> Vec<Segment> {
             let mut lookahead = characters.clone();
             lookahead.next();
             if lookahead.next() == Some('{') {
-                token.push(normalize(character, lowercase));
-                token.push(characters.next().unwrap());
-                token.push(characters.next().unwrap());
+                push_character(&mut token, &mut token_part, normalize(character, lowercase));
+                push_character(&mut token, &mut token_part, characters.next().unwrap());
+                push_character(&mut token, &mut token_part, characters.next().unwrap());
                 while let Some(expression_character) = characters.next() {
-                    token.push(normalize(expression_character, lowercase));
+                    push_character(
+                        &mut token,
+                        &mut token_part,
+                        normalize(expression_character, lowercase),
+                    );
                     if expression_character == '}' && characters.peek() == Some(&'}') {
-                        token.push(normalize(characters.next().unwrap(), lowercase));
+                        push_character(
+                            &mut token,
+                            &mut token_part,
+                            normalize(characters.next().unwrap(), lowercase),
+                        );
                         break;
                     }
                 }
@@ -96,25 +124,64 @@ fn parse_internal(command: &str, lowercase: bool) -> Vec<Segment> {
         }
 
         match character {
-            '\'' | '"' => quote = Some(character),
+            '\'' | '"' => {
+                push_part(&mut token_parts_for_token, &mut token_part, token_quote);
+                quote = Some(character);
+                token_quote = if character == '\'' {
+                    TokenQuote::Single
+                } else {
+                    TokenQuote::Double
+                };
+            }
             '\r' | '\n' => {
                 if character == '\r' && characters.peek() == Some(&'\n') {
                     characters.next();
                 }
-                push_token(&mut tokens, &mut token);
+                push_token(
+                    &mut tokens,
+                    &mut token_parts,
+                    &mut token,
+                    &mut token_part,
+                    &mut token_parts_for_token,
+                    token_quote,
+                );
                 if tokens.is_empty() {
                     if preceding.is_none() {
                         preceding = Some(Separator::Sequence);
                     }
                 } else {
-                    push_segment(&mut segments, &mut tokens, preceding.take());
+                    push_segment(
+                        &mut segments,
+                        &mut tokens,
+                        &mut token_parts,
+                        preceding.take(),
+                    );
                     preceding = Some(Separator::Sequence);
                 }
             }
-            character if character.is_whitespace() => push_token(&mut tokens, &mut token),
+            character if character.is_whitespace() => push_token(
+                &mut tokens,
+                &mut token_parts,
+                &mut token,
+                &mut token_part,
+                &mut token_parts_for_token,
+                token_quote,
+            ),
             '&' | '|' | ';' => {
-                push_token(&mut tokens, &mut token);
-                push_segment(&mut segments, &mut tokens, preceding.take());
+                push_token(
+                    &mut tokens,
+                    &mut token_parts,
+                    &mut token,
+                    &mut token_part,
+                    &mut token_parts_for_token,
+                    token_quote,
+                );
+                push_segment(
+                    &mut segments,
+                    &mut tokens,
+                    &mut token_parts,
+                    preceding.take(),
+                );
                 preceding = Some(match character {
                     '&' => {
                         if characters.peek() == Some(&'&') {
@@ -140,23 +207,42 @@ fn parse_internal(command: &str, lowercase: bool) -> Vec<Segment> {
                         if comment_character == '\r' && characters.peek() == Some(&'\n') {
                             characters.next();
                         }
-                        push_token(&mut tokens, &mut token);
-                        push_segment(&mut segments, &mut tokens, preceding.take());
+                        push_token(
+                            &mut tokens,
+                            &mut token_parts,
+                            &mut token,
+                            &mut token_part,
+                            &mut token_parts_for_token,
+                            token_quote,
+                        );
+                        push_segment(
+                            &mut segments,
+                            &mut tokens,
+                            &mut token_parts,
+                            preceding.take(),
+                        );
                         preceding = Some(Separator::Sequence);
                         break;
                     }
                 }
             }
-            _ => token.push(normalize(character, lowercase)),
+            _ => push_character(&mut token, &mut token_part, normalize(character, lowercase)),
         }
     }
 
     if escaped {
-        token.push('\\');
+        push_character(&mut token, &mut token_part, '\\');
     }
 
-    push_token(&mut tokens, &mut token);
-    push_segment(&mut segments, &mut tokens, preceding);
+    push_token(
+        &mut tokens,
+        &mut token_parts,
+        &mut token,
+        &mut token_part,
+        &mut token_parts_for_token,
+        token_quote,
+    );
+    push_segment(&mut segments, &mut tokens, &mut token_parts, preceding);
 
     segments
 }
@@ -166,6 +252,24 @@ fn normalize(character: char, lowercase: bool) -> char {
         character.to_ascii_lowercase()
     } else {
         character
+    }
+}
+
+fn push_character(token: &mut String, token_part: &mut String, character: char) {
+    token.push(character);
+    token_part.push(character);
+}
+
+fn push_part(
+    token_parts_for_token: &mut Vec<TokenPart>,
+    token_part: &mut String,
+    quote: TokenQuote,
+) {
+    if !token_part.is_empty() {
+        token_parts_for_token.push(TokenPart {
+            text: std::mem::take(token_part),
+            quote,
+        });
     }
 }
 
@@ -196,6 +300,15 @@ pub fn arguments(tokens: &[String]) -> &[String] {
 pub(crate) fn arguments_preserving_case(tokens: &[String]) -> &[String] {
     executable_index_with_case(tokens, true)
         .map(|index| &tokens[index + 1..])
+        .unwrap_or(&[])
+}
+
+pub(crate) fn argument_parts_preserving_case<'a>(
+    tokens: &[String],
+    token_parts: &'a [Vec<TokenPart>],
+) -> &'a [Vec<TokenPart>] {
+    executable_index_with_case(tokens, true)
+        .map(|index| &token_parts[index + 1..])
         .unwrap_or(&[])
 }
 
@@ -281,21 +394,32 @@ fn equals(left: &str, right: &str, ignore_case: bool) -> bool {
     }
 }
 
-fn push_token(tokens: &mut Vec<String>, token: &mut String) {
+fn push_token(
+    tokens: &mut Vec<String>,
+    token_parts: &mut Vec<Vec<TokenPart>>,
+    token: &mut String,
+    token_part: &mut String,
+    token_parts_for_token: &mut Vec<TokenPart>,
+    token_quote: TokenQuote,
+) {
     if !token.is_empty() {
+        push_part(token_parts_for_token, token_part, token_quote);
         tokens.push(std::mem::take(token));
+        token_parts.push(std::mem::take(token_parts_for_token));
     }
 }
 
 fn push_segment(
     segments: &mut Vec<Segment>,
     tokens: &mut Vec<String>,
+    token_parts: &mut Vec<Vec<TokenPart>>,
     preceding: Option<Separator>,
 ) {
     if !tokens.is_empty() {
         segments.push(Segment {
             preceding,
             tokens: std::mem::take(tokens),
+            token_parts: std::mem::take(token_parts),
         });
     }
 }
