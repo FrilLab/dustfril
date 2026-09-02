@@ -6,3 +6,4 @@ pub mod history;
 pub mod integrity;
 pub mod scan;
 pub mod security;
+pub mod snapshot;

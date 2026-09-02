@@ -1,9 +1,13 @@
-use std::path::Path;
+use std::{
+    path::Path,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use dustfril_core::models::{
-    CleanupFailureReason, CleanupRecommendation, DeleteMode, Ecosystem, LifecycleScript,
-    LockfileCheck, LockfileKind, LockfileStatus, PackageManager, RiskLevel, ScriptType,
-    SecurityFinding, SecurityReport, SecurityWarning,
+    ArtifactChangeKind, ArtifactSizeChange, ArtifactSnapshot, ArtifactSnapshotArtifact,
+    ArtifactSnapshotResult, ArtifactSnapshotStatus, CleanupFailureReason, CleanupRecommendation,
+    DeleteMode, Ecosystem, LifecycleScript, LockfileCheck, LockfileKind, LockfileStatus,
+    PackageManager, RiskLevel, ScriptType, SecurityFinding, SecurityReport, SecurityWarning,
 };
 use serde::{Deserialize, Serialize};
 
@@ -36,6 +40,105 @@ pub(crate) struct ScanResponse {
     pub(crate) artifacts: Vec<ArtifactDto>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) history_warning: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) artifact_snapshot: Option<ArtifactSnapshotResultDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) artifact_snapshot_warning: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ArtifactSnapshotResultDto {
+    pub(crate) status: ArtifactSnapshotStatus,
+    pub(crate) snapshot: ArtifactSnapshotDto,
+    pub(crate) previous_snapshot: Option<ArtifactSnapshotDto>,
+    pub(crate) changes: Vec<ArtifactSizeChangeDto>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ArtifactSnapshotDto {
+    pub(crate) workspace_id: String,
+    pub(crate) timestamp: String,
+    pub(crate) artifacts: Vec<ArtifactSnapshotArtifactDto>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ArtifactSnapshotArtifactDto {
+    pub(crate) path: String,
+    pub(crate) ecosystem: EcosystemDto,
+    pub(crate) size_bytes: u64,
+    pub(crate) last_modified_ms: Option<u64>,
+    pub(crate) age_days: Option<u64>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ArtifactSizeChangeDto {
+    pub(crate) path: String,
+    pub(crate) ecosystem: EcosystemDto,
+    pub(crate) kind: ArtifactChangeKind,
+    pub(crate) previous_size_bytes: Option<u64>,
+    pub(crate) current_size_bytes: Option<u64>,
+    pub(crate) delta_bytes: i128,
+}
+
+pub(crate) fn artifact_snapshot_to_dto(
+    result: ArtifactSnapshotResult,
+) -> ArtifactSnapshotResultDto {
+    ArtifactSnapshotResultDto {
+        status: result.status,
+        snapshot: snapshot_to_dto(result.snapshot),
+        previous_snapshot: result.previous_snapshot.map(snapshot_to_dto),
+        changes: result
+            .changes
+            .into_iter()
+            .map(artifact_size_change_to_dto)
+            .collect(),
+    }
+}
+
+fn snapshot_to_dto(snapshot: ArtifactSnapshot) -> ArtifactSnapshotDto {
+    ArtifactSnapshotDto {
+        workspace_id: snapshot.workspace_id,
+        timestamp: snapshot.timestamp.to_rfc3339(),
+        artifacts: snapshot
+            .artifacts
+            .into_iter()
+            .map(artifact_snapshot_artifact_to_dto)
+            .collect(),
+    }
+}
+
+fn artifact_snapshot_artifact_to_dto(
+    artifact: ArtifactSnapshotArtifact,
+) -> ArtifactSnapshotArtifactDto {
+    ArtifactSnapshotArtifactDto {
+        path: artifact.path.display().to_string(),
+        ecosystem: artifact.ecosystem.into(),
+        size_bytes: artifact.size_bytes,
+        last_modified_ms: artifact.last_modified.and_then(system_time_to_ms),
+        age_days: artifact.age_days,
+    }
+}
+
+fn artifact_size_change_to_dto(change: ArtifactSizeChange) -> ArtifactSizeChangeDto {
+    ArtifactSizeChangeDto {
+        path: change.path.display().to_string(),
+        ecosystem: change.ecosystem.into(),
+        kind: change.kind,
+        previous_size_bytes: change.previous_size_bytes,
+        current_size_bytes: change.current_size_bytes,
+        delta_bytes: change.delta_bytes,
+    }
+}
+
+fn system_time_to_ms(value: SystemTime) -> Option<u64> {
+    value
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .and_then(|duration| u64::try_from(duration.as_millis()).ok())
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -410,6 +513,7 @@ impl From<LockfileStatus> for LockfileStatusDto {
 
 #[cfg(test)]
 mod tests {
+    use dustfril_core::models::AnalysisResult;
     use serde_json::json;
 
     use super::*;
@@ -575,6 +679,8 @@ mod tests {
                 ecosystem: EcosystemDto::Node,
             }],
             history_warning: None,
+            artifact_snapshot: None,
+            artifact_snapshot_warning: None,
         };
         let history = CleanupHistoryEntryDto {
             executed_at_ms: 1_750_000_000_000,
@@ -603,6 +709,44 @@ mod tests {
                 "failedPaths": []
             })
         );
+    }
+
+    #[test]
+    fn artifact_snapshot_wire_format_uses_desktop_timestamp_fields() {
+        let timestamp =
+            ArtifactSnapshot::from_analysis(Path::new("/workspace"), &AnalysisResult::default())
+                .timestamp;
+        let result = ArtifactSnapshotResult {
+            status: ArtifactSnapshotStatus::Compared,
+            snapshot: ArtifactSnapshot {
+                workspace_id: "/workspace".to_owned(),
+                timestamp,
+                artifacts: vec![ArtifactSnapshotArtifact {
+                    path: "target".into(),
+                    ecosystem: Ecosystem::Rust,
+                    size_bytes: 15,
+                    last_modified: Some(SystemTime::UNIX_EPOCH),
+                    age_days: Some(1),
+                }],
+            },
+            previous_snapshot: None,
+            changes: vec![ArtifactSizeChange {
+                path: "target".into(),
+                ecosystem: Ecosystem::Rust,
+                kind: ArtifactChangeKind::SizeIncreased,
+                previous_size_bytes: Some(10),
+                current_size_bytes: Some(15),
+                delta_bytes: 5,
+            }],
+        };
+
+        let value = serde_json::to_value(artifact_snapshot_to_dto(result)).unwrap();
+        assert_eq!(value["status"], "compared");
+        assert_eq!(value["snapshot"]["workspaceId"], "/workspace");
+        assert!(value["snapshot"]["timestamp"].is_string());
+        assert_eq!(value["snapshot"]["artifacts"][0]["lastModifiedMs"], 0);
+        assert_eq!(value["changes"][0]["kind"], "sizeIncreased");
+        assert_eq!(value["changes"][0]["deltaBytes"], 5);
     }
 
     #[test]
@@ -638,6 +782,8 @@ mod tests {
         let scan = ScanResponse {
             artifacts: Vec::new(),
             history_warning: None,
+            artifact_snapshot: None,
+            artifact_snapshot_warning: None,
         };
         let cleanup = CleanupResultResponse {
             deleted_paths: Vec::new(),

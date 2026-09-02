@@ -271,7 +271,7 @@ export function useAppState() {
     setCleanupPlan(plan);
     setSelectedCleanupPaths(plan.candidates.map((candidate) => candidate.path));
     setLastScanAtMs(Date.now());
-    setError(scan.historyWarning ?? null);
+    setError(scan.historyWarning ?? scan.artifactSnapshotWarning ?? null);
     setHistoryEntries(await loadActivityHistory());
   }
 

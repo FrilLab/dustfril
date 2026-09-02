@@ -17,6 +17,8 @@ fn main() -> ExitCode {
 
         Commands::Analyze(args) => commands::analyze::execute(args),
 
+        Commands::Snapshot(args) => commands::snapshot::execute(args),
+
         Commands::Clean(args) => {
             if args.dry_run {
                 commands::clean::dry_run(&args)

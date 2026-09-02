@@ -24,6 +24,9 @@ pub enum Commands {
     /// Analyze artifact disk usage
     Analyze(PathArgs),
 
+    /// Create an explicit generated-artifact size snapshot
+    Snapshot(PathArgs),
+
     /// Clean detected artifacts
     Clean(CleanArgs),
 

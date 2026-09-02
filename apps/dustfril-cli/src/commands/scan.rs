@@ -2,7 +2,7 @@ use dustfril_core::api;
 
 use crate::{
     cli::PathArgs,
-    history,
+    format, history,
     shared::path::{resolve_path, validate_path},
 };
 
@@ -32,16 +32,30 @@ pub fn execute(args: PathArgs) -> bool {
         }
     };
 
-    match api::analyze(result.clone()) {
+    let snapshot_result = match api::analyze(result.clone()) {
         Ok(analysis) => {
+            let snapshot_result =
+                match api::artifact_snapshot::record_artifact_snapshot(&path, &analysis) {
+                    Ok(snapshot) => Some(snapshot),
+                    Err(error) => {
+                        eprintln!("Failed to record artifact snapshot: {error}");
+                        None
+                    }
+                };
             if let Err(error) = api::history::record_scan(&path, &result, analysis.total_size_bytes)
             {
                 eprintln!("Failed to record scan history: {error}");
             }
+            snapshot_result
         }
         Err(error) => {
             eprintln!("Failed to calculate scan size; history was not recorded: {error}");
+            None
         }
+    };
+
+    if let Some(snapshot) = &snapshot_result {
+        format::print_artifact_snapshot_result(snapshot);
     }
 
     if result.artifacts.is_empty() {

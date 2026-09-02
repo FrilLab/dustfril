@@ -28,7 +28,7 @@ case-sensitive.
 | Command | Request | Response |
 | --- | --- | --- |
 | `default_root` | none | path string |
-| `scan` | `{ options: RunOptions }` | `ScanResponse` (may include additive `historyWarning`) |
+| `scan` | `{ options: RunOptions }` | `ScanResponse` (may include additive `historyWarning`, `artifactSnapshot`, or `artifactSnapshotWarning`) |
 | `analyze` | `{ options: RunOptions }` | `AnalysisResponse` |
 | `build_cleanup_plan` | `{ options: RunOptions }` | `CleanupPlanResponse` |
 | `audit` | `{ options: RunOptions }` | `LifecycleScript[]` |
@@ -48,6 +48,7 @@ boundary and matching Rust serialization tests and TypeScript updates.
 - Scan, analyze, review, and cleanup workflow
 - Safe cleanup with Trash or permanent delete confirmation
 - Activity history viewer backed by shared, versioned core history storage
+- Explicit scans return the generated-artifact snapshot comparison produced by Core
 
 Activity persistence is auxiliary to scan, cleanup, and security results. If a
 history write fails, the operation response remains available and includes an

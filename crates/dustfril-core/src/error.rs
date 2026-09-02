@@ -21,6 +21,8 @@ pub enum DustError {
     IntegrityState(String),
     /// Indicates that the persisted dependency-baseline state is invalid.
     DependencyState(String),
+    /// Indicates that the persisted generated-artifact snapshot state is invalid.
+    ArtifactSnapshotState(String),
     /// Indicates that a GitHub Actions workflow could not be inspected.
     Workflow(String),
 }
@@ -57,6 +59,9 @@ impl fmt::Display for DustError {
             }
             DustError::DependencyState(message) => {
                 write!(f, "Dependency baseline state error: {message}")
+            }
+            DustError::ArtifactSnapshotState(message) => {
+                write!(f, "Artifact snapshot state error: {message}")
             }
             DustError::Workflow(message) => {
                 write!(f, "Workflow inspection error: {message}")

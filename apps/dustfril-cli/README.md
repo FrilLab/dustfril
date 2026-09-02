@@ -8,6 +8,7 @@ This package exposes the `dfr` binary and wraps the shared logic from `dustfril-
 
 - `scan`: detect supported build artifacts
 - `analyze`: report artifact size, age, and cleanup recommendation
+- `snapshot`: persist and compare one generated-artifact size snapshot
 - `clean`: preview or execute cleanup
 - `audit`: inspect Node lifecycle scripts
 - `dependencies`: report dependency metrics and optionally compare an explicit local baseline
@@ -23,6 +24,7 @@ From the workspace root:
 ```bash
 cargo run -p dustfril-cli -- scan
 cargo run -p dustfril-cli -- analyze
+cargo run -p dustfril-cli -- snapshot
 cargo run -p dustfril-cli -- clean --dry-run
 cargo run -p dustfril-cli -- audit --node
 cargo run -p dustfril-cli -- dependencies --node
@@ -43,6 +45,15 @@ cargo build -p dustfril-cli
 ## Notes
 
 - Supported ecosystem filters: `--rust`, `--node`, `--java`
+- `snapshot` tracks only existing scanner-owned `target/`, `node_modules/`,
+  and `build/` artifacts; it never treats `Cargo.lock` or ordinary source
+  files as artifact-history targets
+- `scan` also records one artifact snapshot after reusing its analysis result
+- The first snapshot creates a baseline; later snapshots report exact byte
+  deltas and deterministic new/removed/increased/decreased/unchanged states
+- Snapshot state is local, versioned, canonical-workspace keyed, atomically
+  replaced, and bounded to the latest 32 snapshots per workspace; moved
+  workspaces intentionally start a new history
 - `dependencies --compare` creates the first baseline without Added findings;
   later comparisons preserve it until `--accept-baseline` is explicitly passed
 - dependency baselines are local, versioned, canonical-workspace keyed, and
