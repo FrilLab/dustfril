@@ -29,6 +29,12 @@ pub fn print_workflow_security_scan_report(report: &WorkflowScanReport) {
             if let Some(step_name) = &finding.step_name {
                 println!("Step Name:    {step_name}");
             }
+            if let Some(secret_reference) = &finding.secret_reference {
+                println!("Secret:       {secret_reference}");
+            }
+            if let Some(exposure_sink) = &finding.exposure_sink {
+                println!("Sink:         {exposure_sink}");
+            }
             if let Some(evidence) = &finding.evidence {
                 println!("Evidence:     {evidence}");
             }

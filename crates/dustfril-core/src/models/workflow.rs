@@ -123,6 +123,7 @@ impl WorkflowPermissionLevel {
 pub enum WorkflowFindingCategory {
     SuspiciousCommand,
     TokenPermissions,
+    SecretExposure,
 }
 
 impl fmt::Display for WorkflowFindingCategory {
@@ -130,6 +131,26 @@ impl fmt::Display for WorkflowFindingCategory {
         match self {
             Self::SuspiciousCommand => f.write_str("Suspicious command"),
             Self::TokenPermissions => f.write_str("Token permissions"),
+            Self::SecretExposure => f.write_str("Secret exposure"),
+        }
+    }
+}
+
+/// A known sink to which a GitHub secret reference was directly passed.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum WorkflowExposureSink {
+    /// The secret is an argument to a supported stdout/logging command.
+    Stdout,
+    /// The secret is an argument to a supported network request command.
+    NetworkRequest,
+}
+
+impl fmt::Display for WorkflowExposureSink {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Stdout => f.write_str("stdout"),
+            Self::NetworkRequest => f.write_str("network request"),
         }
     }
 }
@@ -155,6 +176,12 @@ pub struct WorkflowFinding {
     pub evidence: Option<String>,
     /// Explanation of the exposure and why it was reported.
     pub reason: String,
+    /// GitHub secret reference name, without the expression syntax or value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secret_reference: Option<String>,
+    /// Known sink for a direct secret-exposure finding.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exposure_sink: Option<WorkflowExposureSink>,
 }
 
 /// A partial-analysis notice that does not claim a workflow is safe.

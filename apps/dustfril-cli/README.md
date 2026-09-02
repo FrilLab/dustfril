@@ -53,6 +53,9 @@ cargo build -p dustfril-cli
 - `clean --dry-run` previews without appending a cleanup activity
 - command failures return a non-zero process exit status
 - security scans are read-only and use deterministic offline checks
+- `security workflows` reports only proven direct `secrets.NAME` exposure to
+  supported `echo`/`printf` stdout or literal-URL `curl` request arguments;
+  unsupported script flows are shown as partial-analysis notices
 - executable-integrity scans read metadata and bytes only; they never invoke a target tool
 - executable-integrity scans report platform signature evidence separately from hash changes
 - Linux and Windows currently report executable signature verification as explicitly unsupported

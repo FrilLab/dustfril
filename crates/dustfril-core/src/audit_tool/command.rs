@@ -19,6 +19,19 @@ pub struct Segment {
 }
 
 pub fn parse(command: &str) -> Vec<Segment> {
+    parse_internal(command, true)
+}
+
+/// Parses command segments while retaining the original case of token data.
+///
+/// Lifecycle rules use [`parse`] so command matching remains case-insensitive.
+/// Workflow secret analysis also needs the original case because GitHub secret
+/// and shell variable names are case-sensitive.
+pub(crate) fn parse_preserving_case(command: &str) -> Vec<Segment> {
+    parse_internal(command, false)
+}
+
+fn parse_internal(command: &str, lowercase: bool) -> Vec<Segment> {
     let mut segments = Vec::new();
     let mut tokens = Vec::new();
     let mut token = String::new();
@@ -32,7 +45,7 @@ pub fn parse(command: &str) -> Vec<Segment> {
         if escaped {
             escaped = false;
             if !matches!(character, '\n' | '\r') {
-                token.push(character.to_ascii_lowercase());
+                token.push(normalize(character, lowercase));
             } else if character == '\r' && characters.peek() == Some(&'\n') {
                 characters.next();
             }
@@ -55,9 +68,31 @@ pub fn parse(command: &str) -> Vec<Segment> {
             if character == quote_character {
                 quote = None;
             } else {
-                token.push(character.to_ascii_lowercase());
+                token.push(normalize(character, lowercase));
             }
             continue;
+        }
+
+        // GitHub expressions may contain spaces even when the surrounding
+        // shell argument is not quoted. Retain a complete expression as one
+        // token so downstream workflow analysis can inspect it without
+        // treating the expression body as separate shell arguments.
+        if character == '$' && characters.peek() == Some(&'{') {
+            let mut lookahead = characters.clone();
+            lookahead.next();
+            if lookahead.next() == Some('{') {
+                token.push(normalize(character, lowercase));
+                token.push(characters.next().unwrap());
+                token.push(characters.next().unwrap());
+                while let Some(expression_character) = characters.next() {
+                    token.push(normalize(expression_character, lowercase));
+                    if expression_character == '}' && characters.peek() == Some(&'}') {
+                        token.push(normalize(characters.next().unwrap(), lowercase));
+                        break;
+                    }
+                }
+                continue;
+            }
         }
 
         match character {
@@ -99,7 +134,20 @@ pub fn parse(command: &str) -> Vec<Segment> {
                     _ => unreachable!(),
                 });
             }
-            _ => token.push(character.to_ascii_lowercase()),
+            '#' if token.is_empty() => {
+                while let Some(comment_character) = characters.next() {
+                    if comment_character == '\n' || comment_character == '\r' {
+                        if comment_character == '\r' && characters.peek() == Some(&'\n') {
+                            characters.next();
+                        }
+                        push_token(&mut tokens, &mut token);
+                        push_segment(&mut segments, &mut tokens, preceding.take());
+                        preceding = Some(Separator::Sequence);
+                        break;
+                    }
+                }
+            }
+            _ => token.push(normalize(character, lowercase)),
         }
     }
 
@@ -113,16 +161,40 @@ pub fn parse(command: &str) -> Vec<Segment> {
     segments
 }
 
+fn normalize(character: char, lowercase: bool) -> char {
+    if lowercase {
+        character.to_ascii_lowercase()
+    } else {
+        character
+    }
+}
+
 pub fn executable(tokens: &[String]) -> Option<&str> {
     command_token(tokens).map(|token| token.rsplit(['/', '\\']).next().unwrap_or(token))
+}
+
+/// Returns the executable name from a case-preserving parse.
+pub(crate) fn executable_preserving_case(tokens: &[String]) -> Option<&str> {
+    command_token_preserving_case(tokens)
+        .map(|token| token.rsplit(['/', '\\']).next().unwrap_or(token))
 }
 
 pub fn command_token(tokens: &[String]) -> Option<&str> {
     executable_index(tokens).map(|index| tokens[index].as_str())
 }
 
+pub(crate) fn command_token_preserving_case(tokens: &[String]) -> Option<&str> {
+    executable_index_with_case(tokens, true).map(|index| tokens[index].as_str())
+}
+
 pub fn arguments(tokens: &[String]) -> &[String] {
     executable_index(tokens)
+        .map(|index| &tokens[index + 1..])
+        .unwrap_or(&[])
+}
+
+pub(crate) fn arguments_preserving_case(tokens: &[String]) -> &[String] {
+    executable_index_with_case(tokens, true)
         .map(|index| &tokens[index + 1..])
         .unwrap_or(&[])
 }
@@ -140,6 +212,10 @@ fn first_token_index(tokens: &[String]) -> Option<usize> {
 }
 
 fn executable_index(tokens: &[String]) -> Option<usize> {
+    executable_index_with_case(tokens, false)
+}
+
+fn executable_index_with_case(tokens: &[String], ignore_case: bool) -> Option<usize> {
     let mut index = first_token_index(tokens)?;
 
     loop {
@@ -148,23 +224,21 @@ fn executable_index(tokens: &[String]) -> Option<usize> {
             .next()
             .unwrap_or(&tokens[index]);
 
-        match executable {
-            "command" => {
+        if equals(executable, "command", ignore_case) {
+            index += 1;
+        } else if equals(executable, "env", ignore_case) {
+            index += 1;
+            while index < tokens.len()
+                && (is_environment_assignment(&tokens[index])
+                    || equals(&tokens[index], "-i", ignore_case))
+            {
                 index += 1;
             }
-            "env" => {
-                index += 1;
-                while index < tokens.len()
-                    && (is_environment_assignment(&tokens[index]) || tokens[index] == "-i")
-                {
-                    index += 1;
-                }
-            }
-            "sudo" => {
-                index += 1;
-                skip_sudo_options(tokens, &mut index);
-            }
-            _ => return (index < tokens.len()).then_some(index),
+        } else if equals(executable, "sudo", ignore_case) {
+            index += 1;
+            skip_sudo_options(tokens, &mut index, ignore_case);
+        } else {
+            return (index < tokens.len()).then_some(index);
         }
 
         if index >= tokens.len() {
@@ -173,7 +247,7 @@ fn executable_index(tokens: &[String]) -> Option<usize> {
     }
 }
 
-fn skip_sudo_options(tokens: &[String], index: &mut usize) {
+fn skip_sudo_options(tokens: &[String], index: &mut usize, ignore_case: bool) {
     while *index < tokens.len() {
         let token = &tokens[*index];
 
@@ -186,15 +260,24 @@ fn skip_sudo_options(tokens: &[String], index: &mut usize) {
             break;
         }
 
-        let takes_value = matches!(
-            token.as_str(),
-            "-u" | "--user" | "-g" | "--group" | "-p" | "--prompt" | "-C" | "--chdir"
-        );
+        let takes_value = [
+            "-u", "--user", "-g", "--group", "-p", "--prompt", "-C", "--chdir",
+        ]
+        .iter()
+        .any(|option| equals(token, option, ignore_case));
         *index += 1;
 
         if takes_value && *index < tokens.len() {
             *index += 1;
         }
+    }
+}
+
+fn equals(left: &str, right: &str, ignore_case: bool) -> bool {
+    if ignore_case {
+        left.eq_ignore_ascii_case(right)
+    } else {
+        left == right
     }
 }
 

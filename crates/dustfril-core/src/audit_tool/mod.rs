@@ -1,4 +1,4 @@
-mod command;
+pub(crate) mod command;
 mod lifecycle;
 mod package_manager;
 mod risk;

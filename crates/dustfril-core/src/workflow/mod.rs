@@ -7,6 +7,7 @@
 mod commands;
 mod parser;
 mod permissions;
+mod secrets;
 
 use crate::{error::DustResult, models::WorkflowScanReport};
 
@@ -26,6 +27,7 @@ pub fn scan(root: &std::path::Path) -> DustResult<WorkflowScanReport> {
     for workflow in &report.workflows {
         commands::analyze(workflow, &mut report.findings);
         permissions::analyze(workflow, &mut report.findings, &mut report.notices);
+        secrets::analyze(workflow, &mut report.findings, &mut report.notices);
     }
 
     Ok(report)

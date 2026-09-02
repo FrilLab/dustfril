@@ -25,6 +25,8 @@ pub fn analyze(workflow: &Workflow, findings: &mut Vec<WorkflowFinding>) {
                 risk_level,
                 evidence: Some(command.to_owned()),
                 reason: reason.to_owned(),
+                secret_reference: None,
+                exposure_sink: None,
             });
         }
     }

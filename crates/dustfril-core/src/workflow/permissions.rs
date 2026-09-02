@@ -148,6 +148,8 @@ fn permission_finding(
         risk_level,
         evidence: Some(evidence),
         reason,
+        secret_reference: None,
+        exposure_sink: None,
     }
 }
 

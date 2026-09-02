@@ -108,7 +108,13 @@ run content only. Workflow and job permission overrides are modeled for
 read-all, write-all, empty, and individual none/read/write scopes. Unknown or
 undeclared effective permissions become partial-analysis notices. Malformed or
 unreadable files fail with a path-specific error. The scanner is offline,
-read-only, and never executes a workflow or action.
+read-only, and never executes a workflow or action. Direct secret-exposure
+analysis recognizes only `secrets.NAME`, one-hop workflow/job/step environment
+aliases, `echo`/`printf` stdout arguments, and documented literal-URL `curl`
+request arguments. It records only the reference name and sink; actual secret
+values and raw commands are never included in those findings. Other
+expression contexts, shell aliases, scripts, generated files, and action
+implementations remain unresolved and are not treated as proven exposure.
 
 ## Test
 
