@@ -106,6 +106,10 @@ mod tests {
         assert_eq!(plan.candidates.len(), 1);
         assert_eq!(plan.candidates[0].path, node_modules);
         assert_eq!(
+            plan.candidates[0].project,
+            analysis.artifacts[0].artifact.project
+        );
+        assert_eq!(
             plan.candidates[0].recommendation,
             CleanupRecommendation::Keep
         );
@@ -122,6 +126,7 @@ mod tests {
             candidates: vec![CleanupCandidate {
                 path: target.clone(),
                 ecosystem: Ecosystem::Rust,
+                project: crate::models::ProjectIdentity::default(),
                 size_bytes: 5,
                 age_days: Some(120),
                 recommendation: crate::models::CleanupRecommendation::SafeToClean,
@@ -134,5 +139,33 @@ mod tests {
         assert_eq!(result.deleted_paths, vec![target]);
         assert!(result.failed_paths.is_empty());
         assert_eq!(result.freed_size_bytes, 5);
+    }
+
+    #[test]
+    fn project_identity_and_size_accounting_survive_the_cleanup_pipeline() {
+        let workspace = TempDir::new().unwrap();
+        let project = workspace.path().join("web");
+        let node_modules = project.join("node_modules");
+        let nested = node_modules.join("package-a").join("node_modules");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(project.join("package.json"), "{}\n").unwrap();
+        std::fs::write(node_modules.join("outer.bin"), b"outer").unwrap();
+        std::fs::write(nested.join("nested.bin"), b"nested").unwrap();
+
+        let scan = crate::api::scan(workspace.path(), &[Ecosystem::Node]).unwrap();
+        assert_eq!(scan.artifacts.len(), 1);
+
+        let mut analysis = crate::api::analyze(scan).unwrap();
+        assert_eq!(analysis.total_size_bytes, 11);
+        analysis.artifacts[0].recommendation = CleanupRecommendation::SafeToClean;
+
+        let plan = build_plan_from_analysis(analysis).unwrap();
+        assert_eq!(plan.candidates.len(), 1);
+        assert_eq!(plan.candidates[0].project.display_name, "web");
+        assert_eq!(plan.reclaimable_size_bytes(), 11);
+
+        let result = execute(&plan, DeleteMode::Permanent).unwrap();
+        assert_eq!(result.freed_size_bytes, 11);
+        assert_eq!(result.deleted_paths, vec![node_modules]);
     }
 }

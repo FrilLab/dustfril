@@ -521,7 +521,7 @@ button:disabled {
 }
 
 .workspace-table {
-  min-width: 620px;
+  min-width: 720px;
   min-height: 0;
   flex: 1;
   overflow: auto;
@@ -533,7 +533,7 @@ button:disabled {
 
 .result-row {
   display: grid;
-  grid-template-columns: 30px minmax(190px, 2.2fr) minmax(68px, 0.7fr) minmax(115px, 1.1fr) minmax(128px, 1.2fr) minmax(104px, 0.95fr);
+  grid-template-columns: 30px minmax(135px, 1.15fr) minmax(190px, 1.8fr) minmax(68px, 0.7fr) minmax(128px, 1.2fr) minmax(104px, 0.95fr);
   align-items: center;
   min-width: 0;
   min-height: 50px;
@@ -628,6 +628,38 @@ button:disabled {
   white-space: nowrap;
 }
 
+.result-project,
+.result-project small {
+  min-width: 0;
+}
+
+.result-project {
+  display: flex;
+  flex-direction: column;
+}
+
+.result-project strong {
+  overflow: hidden;
+  color: #f4f7fa;
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-project small {
+  overflow: hidden;
+  margin-top: 2px;
+  color: #747e8b;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-artifact .result-name-copy small {
+  color: #aeb9c5;
+}
+
 .result-size,
 .result-modified {
   color: #b8c1cc;
@@ -710,6 +742,16 @@ button:disabled {
   margin-bottom: 7px;
   color: #f4f7fa;
   font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspector-artifact {
+  display: block;
+  margin: -2px 0 7px;
+  overflow: hidden;
+  color: #aeb9c5;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1401,15 +1443,11 @@ button:disabled {
   }
 
   .workspace-table {
-    min-width: 480px;
+    min-width: 540px;
   }
 
   .result-row {
-    grid-template-columns: 28px minmax(175px, 2.2fr) 64px minmax(100px, 1fr) minmax(95px, 0.8fr);
-  }
-
-  .result-kind {
-    display: none;
+    grid-template-columns: 28px minmax(115px, 1fr) minmax(155px, 1.4fr) 64px minmax(95px, 0.8fr);
   }
 
   .cleanup-mode-control {

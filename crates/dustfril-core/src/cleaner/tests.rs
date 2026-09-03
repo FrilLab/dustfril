@@ -9,10 +9,7 @@ use crate::{
 
 fn artifact(recommendation: CleanupRecommendation) -> ArtifactAnalysis {
     ArtifactAnalysis {
-        artifact: Artifact {
-            path: PathBuf::from("target"),
-            ecosystem: Ecosystem::Rust,
-        },
+        artifact: Artifact::new(PathBuf::from("target"), Ecosystem::Rust),
         size_bytes: 100,
         last_modified: None,
         age_days: Some(100),
@@ -34,6 +31,7 @@ fn reclaimable_size_bytes_returns_sum() {
             CleanupCandidate {
                 path: PathBuf::from("a"),
                 ecosystem: Ecosystem::Rust,
+                project: ProjectIdentity::default(),
                 size_bytes: 10,
                 age_days: None,
                 recommendation: CleanupRecommendation::SafeToClean,
@@ -41,6 +39,7 @@ fn reclaimable_size_bytes_returns_sum() {
             CleanupCandidate {
                 path: PathBuf::from("b"),
                 ecosystem: Ecosystem::Node,
+                project: ProjectIdentity::default(),
                 size_bytes: 20,
                 age_days: None,
                 recommendation: CleanupRecommendation::SafeToClean,
@@ -54,10 +53,7 @@ fn reclaimable_size_bytes_returns_sum() {
 #[test]
 fn safe_to_clean_becomes_candidate() {
     let artifact = ArtifactAnalysis {
-        artifact: Artifact {
-            path: PathBuf::from("target"),
-            ecosystem: Ecosystem::Rust,
-        },
+        artifact: Artifact::new(PathBuf::from("target"), Ecosystem::Rust),
         size_bytes: 100,
         last_modified: None,
         age_days: Some(200),
@@ -80,10 +76,7 @@ fn safe_to_clean_becomes_candidate() {
 #[test]
 fn keep_is_not_candidate() {
     let artifact = ArtifactAnalysis {
-        artifact: Artifact {
-            path: PathBuf::from("target"),
-            ecosystem: Ecosystem::Rust,
-        },
+        artifact: Artifact::new(PathBuf::from("target"), Ecosystem::Rust),
         size_bytes: 100,
         last_modified: None,
         age_days: Some(5),
@@ -117,6 +110,7 @@ fn execute_cleanup_deletes_directory() {
         candidates: vec![CleanupCandidate {
             path: target.clone(),
             ecosystem: Ecosystem::Rust,
+            project: ProjectIdentity::default(),
             size_bytes: size,
             age_days: Some(365),
             recommendation: CleanupRecommendation::SafeToClean,
@@ -147,6 +141,7 @@ fn execute_cleanup_removes_target_directory() {
     let candidate = CleanupCandidate {
         path: target_dir.clone(),
         ecosystem: Ecosystem::Rust,
+        project: ProjectIdentity::default(),
         size_bytes: 5,
         age_days: Some(100),
         recommendation: CleanupRecommendation::SafeToClean,
@@ -176,6 +171,7 @@ fn execute_cleanup_skips_a_covered_child_candidate() {
             CleanupCandidate {
                 path: nested,
                 ecosystem: Ecosystem::Node,
+                project: ProjectIdentity::default(),
                 size_bytes: 6,
                 age_days: None,
                 recommendation: CleanupRecommendation::SafeToClean,
@@ -183,6 +179,7 @@ fn execute_cleanup_skips_a_covered_child_candidate() {
             CleanupCandidate {
                 path: outer.clone(),
                 ecosystem: Ecosystem::Node,
+                project: ProjectIdentity::default(),
                 size_bytes: 6,
                 age_days: None,
                 recommendation: CleanupRecommendation::SafeToClean,
@@ -210,6 +207,7 @@ fn execute_cleanup_validates_candidates_before_collapsing_paths() {
             CleanupCandidate {
                 path: target.clone(),
                 ecosystem: Ecosystem::Node,
+                project: ProjectIdentity::default(),
                 size_bytes: 0,
                 age_days: None,
                 recommendation: CleanupRecommendation::SafeToClean,
@@ -217,6 +215,7 @@ fn execute_cleanup_validates_candidates_before_collapsing_paths() {
             CleanupCandidate {
                 path: target.clone(),
                 ecosystem: Ecosystem::Rust,
+                project: ProjectIdentity::default(),
                 size_bytes: 12,
                 age_days: None,
                 recommendation: CleanupRecommendation::SafeToClean,
@@ -368,6 +367,7 @@ fn cleanup_plan_normalizes_ancestor_and_descendant_candidates() {
         CleanupCandidate {
             path: nested,
             ecosystem: Ecosystem::Node,
+            project: ProjectIdentity::default(),
             size_bytes: 20,
             age_days: None,
             recommendation: CleanupRecommendation::SafeToClean,
@@ -375,6 +375,7 @@ fn cleanup_plan_normalizes_ancestor_and_descendant_candidates() {
         CleanupCandidate {
             path: outer.clone(),
             ecosystem: Ecosystem::Node,
+            project: ProjectIdentity::default(),
             size_bytes: 100,
             age_days: None,
             recommendation: CleanupRecommendation::SafeToClean,
@@ -395,6 +396,7 @@ fn cleanup_reports_failed_path() {
     let candidate = CleanupCandidate {
         path: missing,
         ecosystem: Ecosystem::Rust,
+        project: ProjectIdentity::default(),
         size_bytes: 100,
         age_days: None,
         recommendation: CleanupRecommendation::SafeToClean,
@@ -421,6 +423,7 @@ fn execute_cleanup_reports_missing_path() {
         candidates: vec![CleanupCandidate {
             path: missing.clone(),
             ecosystem: Ecosystem::Rust,
+            project: ProjectIdentity::default(),
             size_bytes: 100,
             age_days: Some(365),
             recommendation: CleanupRecommendation::SafeToClean,
@@ -450,6 +453,7 @@ fn execute_cleanup_rejects_unsafe_path() {
         candidates: vec![CleanupCandidate {
             path: unsafe_dir.clone(),
             ecosystem: Ecosystem::Rust,
+            project: ProjectIdentity::default(),
             size_bytes: 0,
             age_days: None,
             recommendation: CleanupRecommendation::SafeToClean,
@@ -480,6 +484,7 @@ fn execute_cleanup_rejects_a_regular_file_with_an_artifact_name() {
         candidates: vec![CleanupCandidate {
             path: target.clone(),
             ecosystem: Ecosystem::Rust,
+            project: ProjectIdentity::default(),
             size_bytes: 0,
             age_days: None,
             recommendation: CleanupRecommendation::SafeToClean,
@@ -510,6 +515,7 @@ fn execute_cleanup_rejects_symbolic_link_candidates() {
         candidates: vec![CleanupCandidate {
             path: link.clone(),
             ecosystem: Ecosystem::Rust,
+            project: ProjectIdentity::default(),
             size_bytes: 0,
             age_days: None,
             recommendation: CleanupRecommendation::SafeToClean,

@@ -3,7 +3,7 @@ use tempfile::TempDir;
 use crate::{
     models::{Ecosystem, MAX_SCAN_FAILURE_SAMPLES},
     scanner::{
-        detector::{Detector, RustDetector},
+        detector::{Detector, NodeDetector, RustDetector},
         scan,
     },
 };
@@ -66,6 +66,47 @@ fn scan_detects_rust_project() {
 }
 
 #[test]
+fn rust_artifact_keeps_its_discovered_project_identity() {
+    let temp_dir = TempDir::new().unwrap();
+    let project = temp_dir.path().join("dustfril");
+    std::fs::create_dir(&project).unwrap();
+
+    let target = create_rust_artifact(&project);
+    let result = scan(temp_dir.path(), &[Ecosystem::Rust]).unwrap();
+
+    assert_eq!(result.artifacts.len(), 1);
+    assert_eq!(result.artifacts[0].path, target);
+    assert_eq!(result.artifacts[0].project.root, project);
+    assert_eq!(result.artifacts[0].project.display_name, "dustfril");
+    assert_eq!(result.artifacts[0].project.ecosystem, Ecosystem::Rust);
+}
+
+#[test]
+fn rust_projects_with_the_same_artifact_name_keep_distinct_identities() {
+    let temp_dir = TempDir::new().unwrap();
+    let alpha = temp_dir.path().join("alpha");
+    let beta = temp_dir.path().join("beta");
+    std::fs::create_dir_all(&alpha).unwrap();
+    std::fs::create_dir_all(&beta).unwrap();
+
+    create_rust_artifact(&alpha);
+    create_rust_artifact(&beta);
+
+    let result = scan(temp_dir.path(), &[Ecosystem::Rust]).unwrap();
+    let mut project_names = result
+        .artifacts
+        .iter()
+        .map(|artifact| artifact.project.display_name.as_str())
+        .collect::<Vec<_>>();
+    project_names.sort_unstable();
+
+    assert_eq!(project_names, ["alpha", "beta"]);
+    assert!(result.artifacts.iter().all(|artifact| {
+        artifact.path.file_name().and_then(|name| name.to_str()) == Some("target")
+    }));
+}
+
+#[test]
 fn scan_detects_node_project() {
     let temp_dir = TempDir::new().unwrap();
 
@@ -80,6 +121,22 @@ fn scan_detects_node_project() {
     assert_eq!(result.access_summary.files_inspected, 2);
     assert_eq!(result.access_summary.metadata_files_inspected, 2);
     assert_eq!(result.access_summary.artifact_candidates, 1);
+}
+
+#[test]
+fn node_artifact_keeps_its_discovered_project_identity() {
+    let temp_dir = TempDir::new().unwrap();
+    let project = temp_dir.path().join("web");
+    std::fs::create_dir(&project).unwrap();
+
+    let node_modules = create_node_artifact(&project);
+    let result = scan(temp_dir.path(), &[Ecosystem::Node]).unwrap();
+
+    assert_eq!(result.artifacts.len(), 1);
+    assert_eq!(result.artifacts[0].path, node_modules);
+    assert_eq!(result.artifacts[0].project.root, project);
+    assert_eq!(result.artifacts[0].project.display_name, "web");
+    assert_eq!(result.artifacts[0].project.ecosystem, Ecosystem::Node);
 }
 
 #[test]
@@ -240,6 +297,76 @@ fn node_modules_is_a_terminal_discovery_boundary() {
 }
 
 #[test]
+fn nested_dependency_manifests_do_not_create_projects() {
+    let temp_dir = TempDir::new().unwrap();
+    let web = temp_dir.path().join("web");
+    std::fs::create_dir(&web).unwrap();
+    let outer_artifact = create_node_artifact(&web);
+    let package = outer_artifact.join("package-a");
+    let nested_artifact = package.join("node_modules");
+
+    std::fs::create_dir_all(&nested_artifact).unwrap();
+    std::fs::write(package.join("package.json"), "{}\n").unwrap();
+
+    let result = scan(temp_dir.path(), &[Ecosystem::Node]).unwrap();
+
+    assert_eq!(result.artifacts.len(), 1);
+    assert_eq!(result.artifacts[0].path, outer_artifact);
+    assert_eq!(result.artifacts[0].project.display_name, "web");
+}
+
+#[test]
+fn gradle_module_artifact_uses_the_gradle_workspace_identity() {
+    let temp_dir = TempDir::new().unwrap();
+    let backend = temp_dir.path().join("backend");
+    let app = backend.join("app");
+    std::fs::create_dir_all(&app).unwrap();
+    std::fs::write(backend.join("settings.gradle.kts"), "include(\":app\")\n").unwrap();
+    std::fs::write(backend.join("build.gradle.kts"), "\n").unwrap();
+    std::fs::write(app.join("build.gradle.kts"), "\n").unwrap();
+    let build = app.join("build");
+    std::fs::create_dir(&build).unwrap();
+
+    let result = scan(temp_dir.path(), &[Ecosystem::Java]).unwrap();
+
+    assert_eq!(result.artifacts.len(), 1);
+    assert_eq!(result.artifacts[0].path, build);
+    assert_eq!(result.artifacts[0].project.root, backend);
+    assert_eq!(result.artifacts[0].project.display_name, "backend");
+    assert_eq!(result.artifacts[0].project.ecosystem, Ecosystem::Java);
+}
+
+#[test]
+fn gradle_discovery_does_not_escape_the_scanned_workspace() {
+    let temp_dir = TempDir::new().unwrap();
+    let backend = temp_dir.path().join("backend");
+    let app = backend.join("app");
+    std::fs::create_dir_all(app.join("build")).unwrap();
+    std::fs::write(backend.join("settings.gradle"), "include(\":app\")\n").unwrap();
+    std::fs::write(app.join("build.gradle"), "\n").unwrap();
+
+    let result = scan(&app, &[Ecosystem::Java]).unwrap();
+
+    assert_eq!(result.artifacts.len(), 1);
+    assert_eq!(result.artifacts[0].project.root, app);
+}
+
+#[test]
+fn maven_artifact_uses_the_maven_project_root() {
+    let temp_dir = TempDir::new().unwrap();
+    let api = temp_dir.path().join("api");
+    std::fs::create_dir(&api).unwrap();
+    let build = create_java_artifact(&api);
+
+    let result = scan(temp_dir.path(), &[Ecosystem::Java]).unwrap();
+
+    assert_eq!(result.artifacts.len(), 1);
+    assert_eq!(result.artifacts[0].path, build);
+    assert_eq!(result.artifacts[0].project.root, api);
+    assert_eq!(result.artifacts[0].project.display_name, "api");
+}
+
+#[test]
 fn independent_projects_and_projects_outside_artifacts_are_still_discovered() {
     let temp_dir = TempDir::new().unwrap();
     let first = temp_dir.path().join("first");
@@ -324,6 +451,20 @@ fn rust_detector_reports_target_as_safe_artifact() {
     let detector = RustDetector;
 
     assert_eq!(detector.artifact_paths(), &["target"]);
+}
+
+#[test]
+fn node_detector_accepts_workspace_metadata_as_a_project_marker() {
+    let temp_dir = TempDir::new().unwrap();
+    std::fs::write(
+        temp_dir.path().join("pnpm-workspace.yaml"),
+        "packages:\n  - packages/*\n",
+    )
+    .unwrap();
+
+    let detector = NodeDetector;
+
+    assert!(detector.matches(temp_dir.path()));
 }
 
 #[test]

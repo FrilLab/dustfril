@@ -126,6 +126,8 @@ fn print_cleanup_plan(plan: &CleanupPlan) {
 
     for candidate in &plan.candidates {
         println!("[{}]", candidate.ecosystem);
+        println!("  Project: {}", candidate.project.display_name);
+        println!("  Root:    {}", candidate.project.root.display());
         println!("  Path: {}", candidate.path.display());
         println!("  Size: {}", format::format_size(candidate.size_bytes));
 

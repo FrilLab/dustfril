@@ -34,6 +34,8 @@ export function filterArtifacts(artifacts: ArtifactAnalysis[], search: string) {
 
   return artifacts.filter((artifact) =>
     [
+      artifact.project.displayName,
+      artifact.project.root,
       leafName(artifact.path),
       artifact.path,
       artifact.ecosystem,
@@ -45,6 +47,10 @@ export function filterArtifacts(artifacts: ArtifactAnalysis[], search: string) {
 
 export function kindForArtifact(ecosystem: ArtifactAnalysis['ecosystem']) {
   return `${ecosystem} artifact`;
+}
+
+export function artifactLabel(artifact: ArtifactAnalysis) {
+  return `${leafName(artifact.path)} · ${artifact.ecosystem}`;
 }
 
 export function recommendationLabel(recommendation: Recommendation) {
@@ -75,6 +81,9 @@ export function artifactDetailLines(
   selected: boolean,
 ) {
   return [
+    ['Project', artifact.project.displayName],
+    ['Project root', artifact.project.root],
+    ['Artifact', leafName(artifact.path)],
     ['Path', artifact.path],
     ['Ecosystem', artifact.ecosystem],
     ['Kind', kindForArtifact(artifact.ecosystem)],

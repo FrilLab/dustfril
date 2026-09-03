@@ -3,7 +3,7 @@ import { FolderIcon, ItemIcon } from '../../../components/icons';
 import { formatAge, formatBytes, formatCount, formatDate } from '../../../lib/format';
 import {
   artifactDetailLines,
-  kindForArtifact,
+  artifactLabel,
   leafName,
   recommendationClass,
   recommendationLabel,
@@ -191,9 +191,9 @@ function WorkspaceResults(props: WorkspaceResultsProps) {
     <div className="workspace-table" role="table" aria-label="Cleanup recommendations">
       <div className="result-row result-row-header" role="row">
         <span aria-hidden="true" />
-        <span role="columnheader">Name</span>
+        <span role="columnheader">Project</span>
+        <span role="columnheader">Artifact</span>
         <span role="columnheader">Size</span>
-        <span role="columnheader">Kind</span>
         <span role="columnheader" className="modified-column">
           Modified
         </span>
@@ -226,24 +226,27 @@ function WorkspaceResults(props: WorkspaceResultsProps) {
                     checked={selected}
                     onChange={() => props.onTogglePath(candidate.path)}
                     onClick={(event) => event.stopPropagation()}
-                    aria-label={`Select ${leafName(artifact.path)} for cleanup`}
+                    aria-label={`Select ${artifactLabel(artifact)} in ${artifact.project.displayName} for cleanup`}
                   />
                 ) : (
                   <span className="result-selection-empty" aria-hidden="true" />
                 )}
               </span>
-              <span className="result-name" role="cell">
+              <span className="result-project" role="cell">
+                <strong>{artifact.project.displayName}</strong>
+                <small title={artifact.project.root}>{artifact.project.root}</small>
+              </span>
+              <span className="result-name result-artifact" role="cell">
                 <ItemIcon kind="folder" />
                 <span className="result-name-copy">
                   <strong>{leafName(artifact.path)}</strong>
-                  <small title={artifact.path}>{artifact.path}</small>
+                  <small title={artifact.path}>
+                    {artifactLabel(artifact)} · {artifact.path}
+                  </small>
                 </span>
               </span>
               <span role="cell" className="result-size">
                 {formatBytes(artifact.sizeBytes)}
-              </span>
-              <span role="cell" className="result-kind">
-                {kindForArtifact(artifact.ecosystem)}
               </span>
               <span role="cell" className="result-modified modified-column">
                 {artifact.lastModifiedMs === null ? formatAge(artifact.ageDays) : formatDate(artifact.lastModifiedMs)}
@@ -291,7 +294,8 @@ function Inspector({
           <div className="inspector-title-row">
             <ItemIcon kind="folder" large />
             <div className="min-width-zero">
-              <strong className="inspector-title">{leafName(artifact.path)}</strong>
+              <strong className="inspector-title">{artifact.project.displayName}</strong>
+              <span className="inspector-artifact">{artifactLabel(artifact)}</span>
               <span className={recommendationClass(artifact.recommendation)}>
                 {recommendationLabel(artifact.recommendation)}
               </span>

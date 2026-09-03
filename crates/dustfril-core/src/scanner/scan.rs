@@ -33,12 +33,17 @@ pub fn scan(root: &Path, ecosystems: &[Ecosystem]) -> DustResult<ScanResult> {
     let mut artifacts = Vec::new();
     for dir in directories {
         for detector in &detectors {
-            if !detector.matches_with_summary(&dir, &mut result.access_summary) {
+            let Some(project) =
+                detector.project_with_summary(&dir, root, &mut result.access_summary)
+            else {
                 continue;
-            }
+            };
 
-            artifacts
-                .extend(detector.artifacts_with_summary(&dir, Some(&mut result.access_summary)));
+            artifacts.extend(detector.artifacts_for_project_with_summary(
+                &dir,
+                &project,
+                Some(&mut result.access_summary),
+            ));
         }
     }
 

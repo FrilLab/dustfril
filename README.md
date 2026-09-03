@@ -14,6 +14,7 @@ The repository is split into a reusable Rust core crate, a CLI app, and a Tauri 
 ## Current Capabilities
 
 - Scan removable artifacts for Rust, Node.js, and Java workspaces
+- Identify each artifact with its discovered project root, display name, and ecosystem
 - Analyze artifact size, age, and cleanup recommendation
 - Track generated-artifact sizes across explicit snapshots with exact byte deltas
 - Build a cleanup plan before deleting anything
@@ -183,6 +184,11 @@ The desktop app currently exposes the same core workflows in a workspace browser
 - cleanup execution
 - lifecycle script audit
 - unified activity history
+
+Cleanup results are project-aware: each artifact carries the project identity
+returned by discovery, including its root directory and ecosystem. The scanned
+workspace remains the traversal boundary and is not replaced by an artifact's
+own project root.
 
 Start the frontend app from `apps/dustfril-tauri`:
 

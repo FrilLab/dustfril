@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::models::{ArtifactAnalysis, Ecosystem};
+use crate::models::{ArtifactAnalysis, Ecosystem, ProjectIdentity};
 
 /// Plan containing artifact paths selected for removal.
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -116,6 +116,9 @@ pub struct CleanupCandidate {
     pub path: PathBuf,
     /// Ecosystem that owns the artifact.
     pub ecosystem: Ecosystem,
+    /// Project identity retained from discovery and analysis.
+    #[serde(default, skip_serializing_if = "ProjectIdentity::is_empty")]
+    pub project: ProjectIdentity,
     /// Estimated reclaimable size for this candidate.
     pub size_bytes: u64,
     /// Age in days when known.
@@ -141,6 +144,7 @@ impl From<ArtifactAnalysis> for CleanupCandidate {
         Self {
             path: analysis.artifact.path,
             ecosystem: analysis.artifact.ecosystem,
+            project: analysis.artifact.project,
             size_bytes: analysis.size_bytes,
             age_days: analysis.age_days,
             recommendation: analysis.recommendation,
@@ -177,8 +181,9 @@ mod tests {
 
     #[test]
     fn cleanup_candidate_from_analysis_preserves_expected_fields() {
+        let project = ProjectIdentity::new(PathBuf::from("dustfril"), Ecosystem::Rust);
         let analysis = ArtifactAnalysis {
-            artifact: Artifact::new(PathBuf::from("target"), Ecosystem::Rust),
+            artifact: Artifact::for_project(PathBuf::from("dustfril/target"), project.clone()),
             size_bytes: 42,
             last_modified: Some(SystemTime::UNIX_EPOCH),
             age_days: Some(120),
@@ -187,8 +192,9 @@ mod tests {
 
         let candidate = CleanupCandidate::from(analysis);
 
-        assert_eq!(candidate.path, PathBuf::from("target"));
+        assert_eq!(candidate.path, PathBuf::from("dustfril/target"));
         assert_eq!(candidate.ecosystem, Ecosystem::Rust);
+        assert_eq!(candidate.project, project);
         assert_eq!(candidate.size_bytes, 42);
         assert_eq!(candidate.age_days, Some(120));
         assert_eq!(candidate.recommendation, CleanupRecommendation::SafeToClean);

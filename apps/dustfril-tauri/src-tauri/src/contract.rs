@@ -7,7 +7,8 @@ use dustfril_core::models::{
     ArtifactChangeKind, ArtifactSizeChange, ArtifactSnapshot, ArtifactSnapshotArtifact,
     ArtifactSnapshotResult, ArtifactSnapshotStatus, CleanupFailureReason, CleanupRecommendation,
     DeleteMode, Ecosystem, LifecycleScript, LockfileCheck, LockfileKind, LockfileStatus,
-    PackageManager, RiskLevel, ScriptType, SecurityFinding, SecurityReport, SecurityWarning,
+    PackageManager, ProjectIdentity, RiskLevel, ScriptType, SecurityFinding, SecurityReport,
+    SecurityWarning,
 };
 use serde::{Deserialize, Serialize};
 
@@ -149,6 +150,23 @@ fn system_time_to_ms(value: SystemTime) -> Option<u64> {
 pub(crate) struct ArtifactDto {
     pub(crate) path: String,
     pub(crate) ecosystem: EcosystemDto,
+    pub(crate) project: ProjectIdentityDto,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ProjectIdentityDto {
+    pub(crate) root: String,
+    pub(crate) display_name: String,
+    pub(crate) ecosystem: EcosystemDto,
+}
+
+pub(crate) fn project_identity_to_dto(project: &ProjectIdentity) -> ProjectIdentityDto {
+    ProjectIdentityDto {
+        root: project.root.display().to_string(),
+        display_name: project.display_name.clone(),
+        ecosystem: project.ecosystem.into(),
+    }
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -179,6 +197,7 @@ pub(crate) struct WorkspaceAnalysisResponse {
 pub(crate) struct ArtifactAnalysisDto {
     pub(crate) path: String,
     pub(crate) ecosystem: EcosystemDto,
+    pub(crate) project: ProjectIdentityDto,
     pub(crate) size_bytes: u64,
     pub(crate) last_modified_ms: Option<u64>,
     pub(crate) age_days: Option<u64>,
@@ -201,6 +220,7 @@ pub(crate) struct CleanupPlanResponse {
 pub(crate) struct CleanupCandidateDto {
     pub(crate) path: String,
     pub(crate) ecosystem: EcosystemDto,
+    pub(crate) project: ProjectIdentityDto,
     pub(crate) size_bytes: u64,
     pub(crate) age_days: Option<u64>,
     /// Advisory status retained even after a user manually selects the item.
@@ -599,6 +619,11 @@ mod tests {
             artifacts: vec![ArtifactAnalysisDto {
                 path: "/workspace/target".to_string(),
                 ecosystem: EcosystemDto::Rust,
+                project: ProjectIdentityDto {
+                    root: "/workspace".to_string(),
+                    display_name: "workspace".to_string(),
+                    ecosystem: EcosystemDto::Rust,
+                },
                 size_bytes: 42,
                 last_modified_ms: None,
                 age_days: Some(120),
@@ -614,6 +639,11 @@ mod tests {
                 "artifacts": [{
                     "path": "/workspace/target",
                     "ecosystem": "Rust",
+                    "project": {
+                        "root": "/workspace",
+                        "displayName": "workspace",
+                        "ecosystem": "Rust"
+                    },
                     "sizeBytes": 42,
                     "lastModifiedMs": null,
                     "ageDays": 120,
@@ -636,6 +666,11 @@ mod tests {
                 candidates: vec![CleanupCandidateDto {
                     path: "/workspace/target".to_string(),
                     ecosystem: EcosystemDto::Rust,
+                    project: ProjectIdentityDto {
+                        root: "/workspace".to_string(),
+                        display_name: "workspace".to_string(),
+                        ecosystem: EcosystemDto::Rust,
+                    },
                     size_bytes: 42,
                     age_days: Some(120),
                     recommendation: RecommendationDto::SafeToClean,
@@ -659,6 +694,11 @@ mod tests {
                     "candidates": [{
                         "path": "/workspace/target",
                         "ecosystem": "Rust",
+                        "project": {
+                            "root": "/workspace",
+                            "displayName": "workspace",
+                            "ecosystem": "Rust"
+                        },
                     "sizeBytes": 42,
                     "ageDays": 120,
                     "recommendation": "SafeToClean",
@@ -721,6 +761,11 @@ mod tests {
             candidates: vec![CleanupCandidateDto {
                 path: "/workspace/target".to_string(),
                 ecosystem: EcosystemDto::Rust,
+                project: ProjectIdentityDto {
+                    root: "/workspace".to_string(),
+                    display_name: "workspace".to_string(),
+                    ecosystem: EcosystemDto::Rust,
+                },
                 size_bytes: 42,
                 age_days: None,
                 recommendation: RecommendationDto::SafeToClean,
@@ -745,6 +790,11 @@ mod tests {
                 "candidates": [{
                     "path": "/workspace/target",
                     "ecosystem": "Rust",
+                    "project": {
+                        "root": "/workspace",
+                        "displayName": "workspace",
+                        "ecosystem": "Rust"
+                    },
                     "sizeBytes": 42,
                     "ageDays": null,
                     "recommendation": "SafeToClean",
@@ -773,6 +823,11 @@ mod tests {
             artifacts: vec![ArtifactDto {
                 path: "/workspace/node_modules".to_string(),
                 ecosystem: EcosystemDto::Node,
+                project: ProjectIdentityDto {
+                    root: "/workspace".to_string(),
+                    display_name: "workspace".to_string(),
+                    ecosystem: EcosystemDto::Node,
+                },
             }],
             history_warning: None,
             artifact_snapshot: None,
@@ -791,7 +846,12 @@ mod tests {
             json!({
                 "artifacts": [{
                     "path": "/workspace/node_modules",
-                    "ecosystem": "Node"
+                    "ecosystem": "Node",
+                    "project": {
+                        "root": "/workspace",
+                        "displayName": "workspace",
+                        "ecosystem": "Node"
+                    }
                 }]
             })
         );
