@@ -181,4 +181,32 @@ describe('HistoryList', () => {
     expect(screen.getByText('Ecosystems').parentElement).toHaveTextContent('None');
     expect(screen.queryByText('All')).not.toBeInTheDocument();
   });
+
+  it('sorts every history column and keeps the details drawer tied to its event id', () => {
+    render(<HistoryList entries={[scanEntry, cleanupEntry, securityEntry]} />);
+
+    expect(screen.getByRole('columnheader', { name: 'Time' })).toHaveAttribute(
+      'aria-sort',
+      'descending',
+    );
+    expect(screen.getAllByRole('button')).toHaveLength(5);
+
+    fireEvent.click(screen.getByRole('row', { name: /Inspect Cleanup activity/ }));
+    expect(screen.getByRole('heading', { name: 'Cleanup details' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Target' }));
+    expect(screen.getByRole('heading', { name: 'Cleanup details' })).toBeInTheDocument();
+    expect(screen.getByText('/Users/mars112/code/dustfril/target')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Target' })).toHaveAttribute(
+      'aria-sort',
+      'ascending',
+    );
+    expect(screen.getByRole('columnheader', { name: 'Time' })).toHaveAttribute('aria-sort', 'none');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Target' }));
+    expect(screen.getByRole('columnheader', { name: 'Target' })).toHaveAttribute(
+      'aria-sort',
+      'descending',
+    );
+  });
 });

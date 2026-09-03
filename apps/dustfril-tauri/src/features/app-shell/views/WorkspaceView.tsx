@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { EmptyState } from '../../../components/EmptyState/EmptyState';
 import { FolderIcon, ItemIcon } from '../../../components/icons';
+import { SortableHeader } from '../../../components/SortableHeader/SortableHeader';
 import { formatAge, formatBytes, formatCount, formatDate } from '../../../lib/format';
 import {
   artifactDetailLines,
@@ -15,6 +16,11 @@ import type {
   DeleteMode,
 } from '../../../types/workflow';
 import { cleanupAgeOptions } from '../../../types/workflow';
+import {
+  sortArtifacts,
+  type WorkspaceSortColumn,
+  type WorkspaceSortState,
+} from '../../../model/sorting';
 
 type WorkspaceViewProps = {
   artifacts: ArtifactAnalysis[];
@@ -23,6 +29,8 @@ type WorkspaceViewProps = {
   reclaimableBytes: number;
   selectedItemId: string | null;
   selectedPaths: string[];
+  selectedCandidateBytes: number;
+  canReviewCleanup: boolean;
   deleteMode: DeleteMode;
   deleteModes: DeleteMode[];
   cleanupAgeDays: number;
@@ -35,12 +43,25 @@ type WorkspaceViewProps = {
   onTogglePath: (path: string) => void;
   onDeleteModeChange: (mode: DeleteMode) => void;
   onCleanupAgeChange: (days: number) => void | Promise<void>;
+  onRequestCleanup: () => void;
 };
 
 export function WorkspaceView(props: WorkspaceViewProps) {
+  const [sort, setSort] = useState<WorkspaceSortState>({ column: 'size', direction: 'desc' });
   const candidatesByPath = new Map(props.candidates.map((candidate) => [candidate.path, candidate]));
   const selectedArtifact =
     props.artifacts.find((artifact) => artifact.path === props.selectedItemId) ?? null;
+  const sortedArtifacts = useMemo(
+    () => sortArtifacts(props.artifacts, sort),
+    [props.artifacts, sort],
+  );
+
+  function handleSort(column: WorkspaceSortColumn) {
+    setSort((current) => ({
+      column,
+      direction: current.column === column && current.direction === 'asc' ? 'desc' : 'asc',
+    }));
+  }
 
   useEffect(() => {
     if (!selectedArtifact) {
@@ -72,10 +93,6 @@ export function WorkspaceView(props: WorkspaceViewProps) {
                 {formatBytes(props.reclaimableBytes)}
               </strong>{' '}
               reclaimable
-            </span>
-            <span className="summary-separator">·</span>
-            <span>
-              <strong>{formatCount(props.selectedPaths.length)}</strong> selected
             </span>
             {props.lastAnalysisAtMs ? (
               <span className="summary-last-analysis">
@@ -123,11 +140,13 @@ export function WorkspaceView(props: WorkspaceViewProps) {
           </div>
 
           <WorkspaceResults
-            artifacts={props.artifacts}
+            artifacts={sortedArtifacts}
             candidatesByPath={candidatesByPath}
             selectedItemId={props.selectedItemId}
             selectedPaths={props.selectedPaths}
             analysisReady={props.analysisReady}
+            sort={sort}
+            onSort={handleSort}
             onSelectItem={props.onSelectItem}
             onTogglePath={props.onTogglePath}
           />
@@ -160,6 +179,19 @@ export function WorkspaceView(props: WorkspaceViewProps) {
             ))}
           </div>
         </div>
+        <div className="cleanup-selection-summary">
+          <span>
+            {formatCount(props.selectedPaths.length)} selected · {formatBytes(props.selectedCandidateBytes)}
+          </span>
+          <button
+            type="button"
+            className="review-button"
+            onClick={props.onRequestCleanup}
+            disabled={!props.canReviewCleanup}
+          >
+            Review Cleanup
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -171,6 +203,8 @@ type WorkspaceResultsProps = {
   selectedItemId: string | null;
   selectedPaths: string[];
   analysisReady: boolean;
+  sort: WorkspaceSortState;
+  onSort: (column: WorkspaceSortColumn) => void;
   onSelectItem: (path: string) => void;
   onTogglePath: (path: string) => void;
 };
@@ -198,13 +232,38 @@ function WorkspaceResults(props: WorkspaceResultsProps) {
     <div className="workspace-table" role="table" aria-label="Cleanup recommendations">
       <div className="result-row result-row-header" role="row">
         <span aria-hidden="true" />
-        <span role="columnheader">Project</span>
-        <span role="columnheader">Artifact</span>
-        <span role="columnheader">Size</span>
-        <span role="columnheader" className="modified-column">
-          Modified
-        </span>
-        <span role="columnheader">Status</span>
+        <SortableHeader
+          label="Project"
+          active={props.sort.column === 'project'}
+          direction={props.sort.direction}
+          onSort={() => props.onSort('project')}
+        />
+        <SortableHeader
+          label="Artifact"
+          active={props.sort.column === 'artifact'}
+          direction={props.sort.direction}
+          onSort={() => props.onSort('artifact')}
+        />
+        <SortableHeader
+          label="Size"
+          active={props.sort.column === 'size'}
+          direction={props.sort.direction}
+          onSort={() => props.onSort('size')}
+        />
+        <div className="modified-column">
+          <SortableHeader
+            label="Modified"
+            active={props.sort.column === 'modified'}
+            direction={props.sort.direction}
+            onSort={() => props.onSort('modified')}
+          />
+        </div>
+        <SortableHeader
+          label="Status"
+          active={props.sort.column === 'status'}
+          direction={props.sort.direction}
+          onSort={() => props.onSort('status')}
+        />
       </div>
       <div className="workspace-table-body">
         {props.artifacts.map((artifact) => {

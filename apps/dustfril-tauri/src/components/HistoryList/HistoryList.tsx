@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { SortableHeader } from '../SortableHeader/SortableHeader';
 import type {
   ActivityDetails,
   ActivityRecord,
@@ -7,8 +8,18 @@ import type {
   SecurityActivityFinding,
 } from '../../types/workflow';
 import { formatBytes, formatDate } from '../../lib/format';
+import {
+  cleanupItems,
+  cleanupModeLabel,
+  historyResultLabel,
+  historyStatusLabel,
+  historyTargetLabel,
+} from '../../model/activity';
 import { leafName } from '../../model/presentation';
+import { sortActivityRecords, type HistorySortColumn, type HistorySortState } from '../../model/sorting';
 import { EmptyState } from '../EmptyState/EmptyState';
+
+export { historyStatusLabel } from '../../model/activity';
 
 type HistoryListProps = {
   entries: ActivityRecord[];
@@ -16,8 +27,20 @@ type HistoryListProps = {
 
 export function HistoryList(props: HistoryListProps) {
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
+  const [sort, setSort] = useState<HistorySortState>({ column: 'time', direction: 'desc' });
   const selectedEntry =
     props.entries.find((entry) => entry.id === selectedEntryId) ?? null;
+  const sortedEntries = useMemo(
+    () => sortActivityRecords(props.entries, sort),
+    [props.entries, sort],
+  );
+
+  function handleSort(column: HistorySortColumn) {
+    setSort((current) => ({
+      column,
+      direction: current.column === column && current.direction === 'asc' ? 'desc' : 'asc',
+    }));
+  }
 
   useEffect(() => {
     if (selectedEntryId && !selectedEntry) {
@@ -49,17 +72,42 @@ export function HistoryList(props: HistoryListProps) {
       <div className="history-list-scroll">
         <div className="history-table" role="table" aria-label="Activity history">
           <div className="history-row history-row-header" role="row">
-            <span role="columnheader">Time</span>
-            <span role="columnheader">Action</span>
-            <span role="columnheader">Target</span>
-            <span role="columnheader">Result</span>
-            <span role="columnheader">Status</span>
+            <SortableHeader
+              label="Time"
+              active={sort.column === 'time'}
+              direction={sort.direction}
+              onSort={() => handleSort('time')}
+            />
+            <SortableHeader
+              label="Action"
+              active={sort.column === 'action'}
+              direction={sort.direction}
+              onSort={() => handleSort('action')}
+            />
+            <SortableHeader
+              label="Target"
+              active={sort.column === 'target'}
+              direction={sort.direction}
+              onSort={() => handleSort('target')}
+            />
+            <SortableHeader
+              label="Result"
+              active={sort.column === 'result'}
+              direction={sort.direction}
+              onSort={() => handleSort('result')}
+            />
+            <SortableHeader
+              label="Status"
+              active={sort.column === 'status'}
+              direction={sort.direction}
+              onSort={() => handleSort('status')}
+            />
             <span aria-hidden="true" />
           </div>
           <div className="history-table-body">
-            {props.entries.map((entry, index) => (
+            {sortedEntries.map((entry) => (
               <HistoryRow
-                key={`${entry.id}-${index}`}
+                key={entry.id}
                 entry={entry}
                 selected={entry.id === selectedEntryId}
                 onSelect={() => setSelectedEntryId(entry.id)}
@@ -340,93 +388,8 @@ function Detail({ label, value }: { label: string; value: string }) {
   );
 }
 
-function cleanupItems(details: ActivityDetails): CleanupActivityItem[] {
-  if (details.items?.length) {
-    return details.items;
-  }
-
-  return [
-    ...(details.deleted ?? []).map((path) => ({ path, status: 'succeeded' as const })),
-    ...(details.failed ?? []).map((failure) => ({
-      path: failure.path,
-      status: 'failed' as const,
-      reason: failure.reason,
-    })),
-  ];
-}
-
-function cleanupModeLabel(mode: ActivityDetails['mode']) {
-  return mode === 'trash'
-    ? 'Move to Trash'
-    : mode === 'permanent'
-      ? 'Delete permanently'
-      : 'Unknown';
-}
-
-export function historyStatusLabel(entry: ActivityRecord) {
-  const failureCount = historyFailureCount(entry);
-  if (failureCount > 0 && (entry.kind !== 'Cleanup' || cleanupSuccessCount(entry) > 0)) {
-    return 'Partial failure';
-  }
-
-  return entry.result.success ? 'Success' : 'Failed';
-}
-
 function historyStatusClass(status: string) {
   return status === 'Success' ? 'history-status-success' : 'history-status-failure';
-}
-
-function historyFailureCount(entry: ActivityRecord) {
-  if (entry.kind === 'Scan') {
-    return entry.result.details.accessSummary?.failures ?? 0;
-  }
-
-  if (entry.kind === 'Cleanup') {
-    const recordedFailures = entry.result.details.failed?.length ?? 0;
-    const contextualFailures =
-      entry.result.details.items?.filter((item) => item.status === 'failed').length ?? 0;
-    return Math.max(recordedFailures, contextualFailures);
-  }
-
-  return 0;
-}
-
-function cleanupSuccessCount(entry: ActivityRecord) {
-  if (entry.kind !== 'Cleanup') {
-    return 0;
-  }
-
-  return cleanupItems(entry.result.details).filter((item) => item.status === 'succeeded').length;
-}
-
-function historyTargetLabel(entry: ActivityRecord) {
-  const details = entry.result.details;
-
-  if (entry.kind === 'Cleanup') {
-    const projects = Array.from(
-      new Set(
-        (details.items ?? [])
-          .map((item) => item.project)
-          .filter((project): project is string => Boolean(project)),
-      ),
-    );
-    if (projects.length === 1) {
-      return projects[0];
-    }
-    if (projects.length > 1) {
-      return `${projects[0]} + ${projects.length - 1}`;
-    }
-  }
-
-  return conciseTargetName(details.target ?? details.path ?? firstCleanupPath(details));
-}
-
-function firstCleanupPath(details: ActivityDetails) {
-  return details.deleted?.[0] ?? details.failed?.[0]?.path ?? 'Unknown';
-}
-
-function conciseTargetName(path: string) {
-  return path === 'Unknown' ? path : leafName(path);
 }
 
 function securityEcosystemLabel(ecosystems: string[] | undefined) {
@@ -437,33 +400,6 @@ function securityEcosystemLabel(ecosystems: string[] | undefined) {
   return ecosystems.length ? ecosystems.join(', ') : 'None';
 }
 
-function historyResultLabel(entry: ActivityRecord) {
-  const details = entry.result.details;
-
-  switch (entry.kind) {
-    case 'Scan': {
-      const count = details.artifacts ?? 0;
-      const failures = details.accessSummary?.failures ?? 0;
-      return `${count} artifact${count === 1 ? '' : 's'} · ${formatBytes(details.size ?? 0)}${
-        failures ? ` · ${failures} failure${failures === 1 ? '' : 's'}` : ''
-      }`;
-    }
-    case 'Cleanup': {
-      const items = cleanupItems(details);
-      const succeeded = items.filter((item) => item.status === 'succeeded').length;
-      const failed = items.filter((item) => item.status === 'failed').length;
-      const verb = details.mode === 'trash' ? 'moved to Trash' : 'deleted';
-      const result = `${succeeded} item${succeeded === 1 ? '' : 's'} · ${formatBytes(
-        details.freed ?? 0,
-      )} ${verb}`;
-      return failed ? `${result} · ${failed} failed` : result;
-    }
-    case 'Security': {
-      const count = details.findingCount ?? details.findings?.length ?? 0;
-      return `${count} finding${count === 1 ? '' : 's'} · ${details.highestRisk ?? 'None'} risk`;
-    }
-  }
-}
 
 function formatHistoryDate(timestampMs: number) {
   return new Intl.DateTimeFormat(undefined, {
