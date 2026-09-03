@@ -93,6 +93,7 @@ export type CleanupCandidate = {
 export type ArtifactSelection = Pick<Artifact, 'path' | 'ecosystem'>;
 
 export type CleanupPlanResponse = {
+  analysisId: string;
   candidates: CleanupCandidate[];
   reclaimableSizeBytes: number;
 };

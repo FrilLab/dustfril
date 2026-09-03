@@ -17,7 +17,18 @@ use super::plan::normalize_candidates;
 pub fn execute_cleanup(plan: &CleanupPlan, mode: DeleteMode) -> DustResult<CleanupResult> {
     let mut result = CleanupResult::default();
 
-    let mut candidates = plan.candidates.clone();
+    let mut candidates = Vec::with_capacity(plan.candidates.len());
+    for candidate in &plan.candidates {
+        if let Err(reason) = validate_candidate(candidate) {
+            result.failed_paths.push(CleanupFailure {
+                path: candidate.path.clone(),
+                reason,
+            });
+        } else {
+            candidates.push(candidate.clone());
+        }
+    }
+
     normalize_candidates(&mut candidates);
 
     for candidate in &candidates {

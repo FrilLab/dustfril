@@ -233,6 +233,7 @@ export function useAppState() {
       const result = await executeCleanup(
         root,
         [...ecosystems],
+        cleanupPlan.analysisId,
         candidates.map(({ path, ecosystem }) => ({ path, ecosystem })),
         deleteMode,
       );

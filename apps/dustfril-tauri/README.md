@@ -34,14 +34,16 @@ case-sensitive.
 | `build_cleanup_plan` | `{ options: RunOptions }` | `CleanupPlanResponse` |
 | `audit` | `{ options: RunOptions }` | `LifecycleScript[]` |
 | `security_scan` | `{ options: RunOptions }` | `SecurityScanResponse` (may include additive `historyWarning`) |
-| `execute_cleanup` | `{ request: { root, ecosystems, selectedArtifacts, mode } }` | `CleanupResultResponse` (may include additive `historyWarning`) |
+| `execute_cleanup` | `{ request: { root, ecosystems, analysisId, selectedArtifacts, mode } }` | `CleanupResultResponse` (may include additive `historyWarning`) |
 | `load_activity_history` | none | `ActivityRecord[]` |
 | `load_cleanup_history` | none | `CleanupHistoryEntry[]` |
 
 Contract changes must preserve existing command names, nullability, and enum wire
 values for v0.0.1. Cleanup execution intentionally accepts analyzed artifact
 identities rather than client-created deletion candidates; Core reconstructs and
-validates the cleanup plan from the analysis cache.
+validates the cleanup plan from the immutable analysis identified by
+`analysisId`. The token preserves the exact preview analysis through execution,
+including visible NotFound failures when a selected target disappears.
 
 ## v0.0.1 Features
 

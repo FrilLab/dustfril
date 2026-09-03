@@ -69,11 +69,12 @@ export function securityScan(options: RunOptions) {
 export function executeCleanup(
   root: string,
   ecosystems: RunOptions['ecosystems'],
+  analysisId: string,
   selectedArtifacts: ArtifactSelection[],
   mode: DeleteMode,
 ) {
   return invoke<CleanupResultResponse>(commands.executeCleanup, {
-    request: { root, ecosystems, selectedArtifacts, mode },
+    request: { root, ecosystems, analysisId, selectedArtifacts, mode },
   });
 }
 

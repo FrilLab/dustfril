@@ -25,6 +25,7 @@ pub(crate) struct RunOptions {
 pub(crate) struct ExecuteCleanupRequest {
     pub(crate) root: String,
     pub(crate) ecosystems: Vec<EcosystemDto>,
+    pub(crate) analysis_id: String,
     pub(crate) selected_artifacts: Vec<ArtifactSelectionInput>,
     pub(crate) mode: DeleteModeDto,
 }
@@ -191,6 +192,8 @@ pub(crate) struct CleanupPlanResponse {
     pub(crate) candidates: Vec<CleanupCandidateDto>,
     /// Bytes selected by the recommendation-driven default selection.
     pub(crate) reclaimable_size_bytes: u64,
+    /// Opaque Core-owned analysis identity required to execute this selection.
+    pub(crate) analysis_id: String,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -571,6 +574,7 @@ mod tests {
         let request: ExecuteCleanupRequest = serde_json::from_value(json!({
             "root": "/workspace",
             "ecosystems": ["Rust", "Node"],
+            "analysisId": "analysis-1",
             "selectedArtifacts": [{
                 "path": "/workspace/target",
                 "ecosystem": "Rust"
@@ -585,6 +589,7 @@ mod tests {
             request.ecosystems,
             vec![EcosystemDto::Rust, EcosystemDto::Node]
         );
+        assert_eq!(request.analysis_id, "analysis-1");
         assert_eq!(request.selected_artifacts[0].path, "/workspace/target");
     }
 
@@ -637,6 +642,7 @@ mod tests {
                     selected_by_default: true,
                 }],
                 reclaimable_size_bytes: 42,
+                analysis_id: "analysis-1".to_string(),
             },
             artifact_snapshot: None,
             artifact_snapshot_warning: None,
@@ -658,7 +664,8 @@ mod tests {
                     "recommendation": "SafeToClean",
                     "selectedByDefault": true
                     }],
-                    "reclaimableSizeBytes": 42
+                    "reclaimableSizeBytes": 42,
+                    "analysisId": "analysis-1"
                 }
             })
         );
@@ -720,6 +727,7 @@ mod tests {
                 selected_by_default: true,
             }],
             reclaimable_size_bytes: 42,
+            analysis_id: "analysis-1".to_string(),
         };
         let result = CleanupResultResponse {
             deleted_paths: vec!["/workspace/target".to_string()],
@@ -742,7 +750,8 @@ mod tests {
                     "recommendation": "SafeToClean",
                     "selectedByDefault": true
                 }],
-                "reclaimableSizeBytes": 42
+                "reclaimableSizeBytes": 42,
+                "analysisId": "analysis-1"
             })
         );
         assert_eq!(

@@ -199,6 +199,45 @@ fn execute_cleanup_skips_a_covered_child_candidate() {
 }
 
 #[test]
+fn execute_cleanup_validates_candidates_before_collapsing_paths() {
+    let temp_dir = TempDir::new().unwrap();
+    let target = temp_dir.path().join("target");
+    fs::create_dir(&target).unwrap();
+    fs::write(target.join("artifact.bin"), b"valid target").unwrap();
+
+    let plan = CleanupPlan {
+        candidates: vec![
+            CleanupCandidate {
+                path: target.clone(),
+                ecosystem: Ecosystem::Node,
+                size_bytes: 0,
+                age_days: None,
+                recommendation: CleanupRecommendation::SafeToClean,
+            },
+            CleanupCandidate {
+                path: target.clone(),
+                ecosystem: Ecosystem::Rust,
+                size_bytes: 12,
+                age_days: None,
+                recommendation: CleanupRecommendation::SafeToClean,
+            },
+        ],
+    };
+
+    let result = execute_cleanup(&plan, DeleteMode::Permanent).unwrap();
+
+    assert!(!target.exists());
+    assert_eq!(result.deleted_paths, vec![target.clone()]);
+    assert_eq!(result.freed_size_bytes, 12);
+    assert_eq!(result.failed_paths.len(), 1);
+    assert_eq!(result.failed_paths[0].path, target);
+    assert_eq!(
+        result.failed_paths[0].reason,
+        CleanupFailureReason::UnsafePath
+    );
+}
+
+#[test]
 fn create_cleanup_plan_filters_safe_to_clean() {
     let analysis = AnalysisResult {
         artifacts: vec![
