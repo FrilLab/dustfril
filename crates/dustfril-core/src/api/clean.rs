@@ -1,7 +1,9 @@
 use crate::{
     analyzer, cleaner,
     error::DustResult,
-    models::{AnalysisResult, CleanupPlan, CleanupResult, DeleteMode, ScanResult},
+    models::{
+        AnalysisResult, ArtifactSelection, CleanupPlan, CleanupResult, DeleteMode, ScanResult,
+    },
 };
 
 /// Builds a cleanup plan from scanned artifacts using analyzer recommendations.
@@ -15,6 +17,17 @@ pub fn build_plan_from_analysis(analysis: AnalysisResult) -> DustResult<CleanupP
     cleaner::create_cleanup_plan(analysis)
 }
 
+/// Builds a cleanup plan from explicit identities in an analyzed result.
+///
+/// The selection is validated against Core's analyzed scanner-owned artifacts;
+/// it cannot introduce a raw filesystem path or alter recommendation metadata.
+pub fn build_plan_from_analysis_with_selection(
+    analysis: &AnalysisResult,
+    selected: &[ArtifactSelection],
+) -> DustResult<CleanupPlan> {
+    cleaner::create_cleanup_plan_from_selection(analysis, selected)
+}
+
 /// Executes a cleanup plan and reports deleted and failed paths.
 pub fn execute(plan: &CleanupPlan, mode: DeleteMode) -> DustResult<CleanupResult> {
     cleaner::execute_cleanup(plan, mode)
@@ -24,7 +37,10 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
-    use crate::models::{Artifact, CleanupCandidate, Ecosystem};
+    use crate::models::{
+        Artifact, ArtifactAnalysis, ArtifactSelection, CleanupCandidate, CleanupRecommendation,
+        Ecosystem,
+    };
 
     #[test]
     fn build_plan_returns_empty_when_artifact_is_recent() {
@@ -63,6 +79,39 @@ mod tests {
     }
 
     #[test]
+    fn explicit_selection_builds_a_plan_for_a_keep_artifact() {
+        let temp_dir = TempDir::new().unwrap();
+        let node_modules = temp_dir.path().join("node_modules");
+        std::fs::create_dir(&node_modules).unwrap();
+        let analysis = AnalysisResult {
+            artifacts: vec![ArtifactAnalysis {
+                artifact: Artifact::new(node_modules.clone(), Ecosystem::Node),
+                size_bytes: 42,
+                last_modified: None,
+                age_days: Some(5),
+                recommendation: CleanupRecommendation::Keep,
+            }],
+            total_size_bytes: 42,
+        };
+
+        let plan = build_plan_from_analysis_with_selection(
+            &analysis,
+            &[ArtifactSelection {
+                path: node_modules.clone(),
+                ecosystem: Ecosystem::Node,
+            }],
+        )
+        .unwrap();
+
+        assert_eq!(plan.candidates.len(), 1);
+        assert_eq!(plan.candidates[0].path, node_modules);
+        assert_eq!(
+            plan.candidates[0].recommendation,
+            CleanupRecommendation::Keep
+        );
+    }
+
+    #[test]
     fn execute_removes_candidate_path() {
         let temp_dir = TempDir::new().unwrap();
         let target = temp_dir.path().join("target");
@@ -75,6 +124,7 @@ mod tests {
                 ecosystem: Ecosystem::Rust,
                 size_bytes: 5,
                 age_days: Some(120),
+                recommendation: crate::models::CleanupRecommendation::SafeToClean,
             }],
         };
 

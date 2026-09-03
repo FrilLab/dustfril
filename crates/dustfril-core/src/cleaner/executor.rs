@@ -11,11 +11,16 @@ use crate::{
     scanner::detector_for,
 };
 
+use super::plan::normalize_candidates;
+
 /// Deletes all paths in a cleanup plan and summarizes reclaimed space.
 pub fn execute_cleanup(plan: &CleanupPlan, mode: DeleteMode) -> DustResult<CleanupResult> {
     let mut result = CleanupResult::default();
 
-    for candidate in &plan.candidates {
+    let mut candidates = plan.candidates.clone();
+    normalize_candidates(&mut candidates);
+
+    for candidate in &candidates {
         if let Err(reason) = validate_candidate(candidate) {
             result.failed_paths.push(CleanupFailure {
                 path: candidate.path.clone(),

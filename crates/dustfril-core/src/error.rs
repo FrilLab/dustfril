@@ -21,6 +21,9 @@ pub enum DustError {
     AnalysisFailed,
     /// Indicates an unrecoverable cleanup failure.
     CleanupFailed,
+    /// Indicates that a cleanup selection was not present in the analyzed
+    /// scanner-owned artifact set.
+    InvalidCleanupSelection(String),
     /// Indicates that Git status could not be read for an integrity check.
     Git(String),
     /// Indicates that a project manifest could not be parsed for an integrity check.
@@ -56,6 +59,9 @@ impl fmt::Display for DustError {
             }
             DustError::CleanupFailed => {
                 write!(f, "Cleanup failed")
+            }
+            DustError::InvalidCleanupSelection(message) => {
+                write!(f, "Invalid cleanup selection: {message}")
             }
             DustError::Git(message) => {
                 write!(f, "Git error: {message}")

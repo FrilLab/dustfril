@@ -190,7 +190,11 @@ export function useAppState() {
 
       setAnalysisResult(response.analysis);
       setCleanupPlan(response.cleanupPlan);
-      setSelectedCleanupPaths(response.cleanupPlan.candidates.map((candidate) => candidate.path));
+      setSelectedCleanupPaths(
+        response.cleanupPlan.candidates
+          .filter((candidate) => candidate.selectedByDefault)
+          .map((candidate) => candidate.path),
+      );
       setSelectedItemId(response.analysis.artifacts[0]?.path ?? null);
       setCleanupResult(null);
       setLastAnalysisAtMs(Date.now());
@@ -226,7 +230,12 @@ export function useAppState() {
     );
 
     await runAction('cleanup-execute', async () => {
-      const result = await executeCleanup(candidates, deleteMode);
+      const result = await executeCleanup(
+        root,
+        [...ecosystems],
+        candidates.map(({ path, ecosystem }) => ({ path, ecosystem })),
+        deleteMode,
+      );
 
       setCleanupResult(result);
       setError(
@@ -242,7 +251,10 @@ export function useAppState() {
                 (candidate) => !result.deletedPaths.includes(candidate.path),
               ),
               reclaimableSizeBytes: current.candidates
-                .filter((candidate) => !result.deletedPaths.includes(candidate.path))
+                .filter(
+                  (candidate) =>
+                    candidate.selectedByDefault && !result.deletedPaths.includes(candidate.path),
+                )
                 .reduce((total, candidate) => total + candidate.sizeBytes, 0),
             }
           : current,
@@ -279,6 +291,9 @@ export function useAppState() {
     error,
     analysisResult,
     cleanupPlan,
+    selectedCleanupItems: cleanupCandidates.filter((candidate) =>
+      selectedCleanupPaths.includes(candidate.path),
+    ),
     selectedCleanupPaths,
     selectedCandidateBytes,
     sidebarEntries,

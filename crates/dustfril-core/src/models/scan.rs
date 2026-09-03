@@ -61,7 +61,7 @@ pub(crate) fn effective_security_ecosystems(selected: &[Ecosystem]) -> Vec<Ecosy
 pub struct ScanAccessSummary {
     /// Workspace root used for the scan.
     pub root: PathBuf,
-    /// Directories successfully returned by the existing directory traversal.
+    /// Directories successfully visited by the directory traversal.
     pub directories_visited: u64,
     /// Regular files whose metadata/content was actually inspected by a
     /// detector.
@@ -182,6 +182,26 @@ impl Artifact {
     pub fn new(path: PathBuf, ecosystem: Ecosystem) -> Self {
         Self { path, ecosystem }
     }
+}
+
+/// Removes duplicate and covered artifacts while retaining the shallowest
+/// artifact that represents each filesystem subtree.
+pub(crate) fn normalize_artifacts(mut artifacts: Vec<Artifact>) -> Vec<Artifact> {
+    artifacts.sort_by_key(|artifact| artifact.path.components().count());
+
+    let mut normalized = Vec::with_capacity(artifacts.len());
+    for artifact in artifacts {
+        if normalized
+            .iter()
+            .any(|selected: &Artifact| crate::models::path_contains(&selected.path, &artifact.path))
+        {
+            continue;
+        }
+
+        normalized.push(artifact);
+    }
+
+    normalized
 }
 
 #[cfg(test)]

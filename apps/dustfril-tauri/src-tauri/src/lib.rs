@@ -2,11 +2,13 @@ mod contract;
 mod history;
 
 use std::{
+    collections::HashMap,
     env,
     fmt::Display,
     fs,
     io::ErrorKind,
     path::{Path, PathBuf},
+    sync::{Mutex, OnceLock},
     time::UNIX_EPOCH,
 };
 
@@ -19,8 +21,54 @@ use contract::{
 use dustfril_core::{
     api,
     error::DustError,
-    models::{CleanupCandidate, CleanupPlan},
+    models::{AnalysisResult, ArtifactAnalysis, ArtifactSelection},
 };
+
+static ANALYSIS_CACHE: OnceLock<Mutex<HashMap<PathBuf, AnalysisResult>>> = OnceLock::new();
+
+fn analysis_cache() -> &'static Mutex<HashMap<PathBuf, AnalysisResult>> {
+    ANALYSIS_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn cache_analysis(root: &Path, analysis: &AnalysisResult) {
+    if let Ok(mut cache) = analysis_cache().lock() {
+        cache.insert(root.to_path_buf(), analysis.clone());
+    }
+}
+
+fn cached_analysis(root: &Path) -> Option<AnalysisResult> {
+    analysis_cache()
+        .lock()
+        .ok()
+        .and_then(|cache| cache.get(root).cloned())
+}
+
+fn cleanup_candidate_from_analysis(
+    artifact: &ArtifactAnalysis,
+    selected_by_default: bool,
+) -> CleanupCandidateDto {
+    CleanupCandidateDto {
+        path: artifact_path(&artifact.artifact.path),
+        ecosystem: artifact.artifact.ecosystem.into(),
+        size_bytes: artifact.size_bytes,
+        age_days: artifact.age_days,
+        recommendation: artifact.recommendation.into(),
+        selected_by_default,
+    }
+}
+
+fn cleanup_candidate_from_core_candidate(
+    candidate: dustfril_core::models::CleanupCandidate,
+) -> CleanupCandidateDto {
+    CleanupCandidateDto {
+        path: artifact_path(&candidate.path),
+        ecosystem: candidate.ecosystem.into(),
+        size_bytes: candidate.size_bytes,
+        age_days: candidate.age_days,
+        recommendation: candidate.recommendation.into(),
+        selected_by_default: candidate.recommendation.selected_by_default(),
+    }
+}
 
 fn resolve_root(root: Option<String>) -> Result<PathBuf, String> {
     match root.map(|value| value.trim().to_string()) {
@@ -229,6 +277,7 @@ async fn analyze_workspace(options: RunOptions) -> Result<WorkspaceAnalysisRespo
             }
         };
         let analysis = api::analyze(scan_result.clone()).map_err(|error| error.to_string())?;
+        cache_analysis(&root, &analysis);
         let plan = api::clean::build_plan_from_analysis(analysis.clone())
             .map_err(|error| error.to_string())?;
 
@@ -261,7 +310,7 @@ async fn analyze_workspace(options: RunOptions) -> Result<WorkspaceAnalysisRespo
             history_warning,
             artifacts: analysis
                 .artifacts
-                .into_iter()
+                .iter()
                 .map(|artifact| ArtifactAnalysisDto {
                     path: artifact_path(&artifact.artifact.path),
                     ecosystem: artifact.artifact.ecosystem.into(),
@@ -274,14 +323,14 @@ async fn analyze_workspace(options: RunOptions) -> Result<WorkspaceAnalysisRespo
         };
         let cleanup_plan = CleanupPlanResponse {
             reclaimable_size_bytes: plan.reclaimable_size_bytes(),
-            candidates: plan
-                .candidates
-                .into_iter()
-                .map(|candidate| CleanupCandidateDto {
-                    path: artifact_path(&candidate.path),
-                    ecosystem: candidate.ecosystem.into(),
-                    size_bytes: candidate.size_bytes,
-                    age_days: candidate.age_days,
+            candidates: analysis
+                .artifacts
+                .iter()
+                .map(|artifact| {
+                    cleanup_candidate_from_analysis(
+                        artifact,
+                        artifact.recommendation.selected_by_default(),
+                    )
                 })
                 .collect(),
         };
@@ -313,12 +362,7 @@ async fn build_cleanup_plan(options: RunOptions) -> Result<CleanupPlanResponse, 
             candidates: plan
                 .candidates
                 .into_iter()
-                .map(|candidate| CleanupCandidateDto {
-                    path: artifact_path(&candidate.path),
-                    ecosystem: candidate.ecosystem.into(),
-                    size_bytes: candidate.size_bytes,
-                    age_days: candidate.age_days,
-                })
+                .map(cleanup_candidate_from_core_candidate)
                 .collect(),
         })
     })
@@ -329,19 +373,27 @@ async fn build_cleanup_plan(options: RunOptions) -> Result<CleanupPlanResponse, 
 #[tauri::command]
 async fn execute_cleanup(request: ExecuteCleanupRequest) -> Result<CleanupResultResponse, String> {
     let mode = request.mode.into();
-    let candidates: Vec<_> = request
-        .candidates
+    let root = resolve_root(Some(request.root))?;
+    let ecosystems: Vec<_> = request.ecosystems.into_iter().map(Into::into).collect();
+    let selected: Vec<_> = request
+        .selected_artifacts
         .into_iter()
-        .map(|candidate| CleanupCandidate {
-            path: PathBuf::from(candidate.path),
-            ecosystem: candidate.ecosystem.into(),
-            size_bytes: candidate.size_bytes,
-            age_days: candidate.age_days,
+        .map(|selection| ArtifactSelection {
+            path: PathBuf::from(selection.path),
+            ecosystem: selection.ecosystem.into(),
         })
         .collect();
 
     tokio::task::spawn_blocking(move || {
-        let plan = CleanupPlan { candidates };
+        let analysis = match cached_analysis(&root) {
+            Some(analysis) => analysis,
+            None => {
+                let scan = api::scan(&root, &ecosystems).map_err(|error| error.to_string())?;
+                api::analyze(scan).map_err(|error| error.to_string())?
+            }
+        };
+        let plan = api::clean::build_plan_from_analysis_with_selection(&analysis, &selected)
+            .map_err(|error| error.to_string())?;
         let result = match api::clean::execute(&plan, mode) {
             Ok(result) => result,
             Err(error) => {

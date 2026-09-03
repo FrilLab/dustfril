@@ -27,6 +27,24 @@ pub fn walk_dirs_with_summary(
     root: &Path,
     summary: &mut ScanAccessSummary,
 ) -> DustResult<Vec<PathBuf>> {
+    walk_dirs_with_summary_and_boundary(root, summary, |_| false)
+}
+
+/// Collects directories while pruning directories that are opaque to the
+/// caller's discovery policy.
+///
+/// Boundary directories are visited and counted, but are not returned and
+/// their descendants are never enumerated. This lets a scanner report an
+/// artifact found in a parent project without discovering projects inside the
+/// artifact itself.
+pub fn walk_dirs_with_summary_and_boundary<F>(
+    root: &Path,
+    summary: &mut ScanAccessSummary,
+    mut is_boundary: F,
+) -> DustResult<Vec<PathBuf>>
+where
+    F: FnMut(&Path) -> bool,
+{
     match fs::symlink_metadata(root) {
         Ok(metadata) if metadata.file_type().is_symlink() => {
             return Err(DustError::InvalidPath(root.to_path_buf()));
@@ -41,7 +59,9 @@ pub fn walk_dirs_with_summary(
 
     let mut directories = Vec::new();
 
-    for entry in WalkDir::new(root).into_iter() {
+    let mut entries = WalkDir::new(root).into_iter();
+    while let Some(next_entry) = entries.next() {
+        let entry = next_entry;
         let entry = match entry {
             Ok(entry) => entry,
             Err(error) => {
@@ -64,7 +84,11 @@ pub fn walk_dirs_with_summary(
 
         if file_type.is_dir() {
             summary.record_directory();
-            directories.push(entry.path().to_path_buf());
+            if is_boundary(entry.path()) {
+                entries.skip_current_dir();
+            } else {
+                directories.push(entry.path().to_path_buf());
+            }
         }
     }
 

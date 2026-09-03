@@ -30,3 +30,24 @@ pub struct AnalysisResult {
     /// Sum of all analyzed artifact sizes.
     pub total_size_bytes: u64,
 }
+
+/// Removes duplicate and covered analysis records before any aggregate is
+/// calculated or cleanup selection is exposed.
+pub(crate) fn normalize_artifact_analyses(
+    mut artifacts: Vec<ArtifactAnalysis>,
+) -> Vec<ArtifactAnalysis> {
+    artifacts.sort_by_key(|artifact| artifact.artifact.path.components().count());
+
+    let mut normalized = Vec::with_capacity(artifacts.len());
+    for artifact in artifacts {
+        if normalized.iter().any(|selected: &ArtifactAnalysis| {
+            crate::models::path_contains(&selected.artifact.path, &artifact.artifact.path)
+        }) {
+            continue;
+        }
+
+        normalized.push(artifact);
+    }
+
+    normalized
+}

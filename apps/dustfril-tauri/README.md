@@ -34,13 +34,14 @@ case-sensitive.
 | `build_cleanup_plan` | `{ options: RunOptions }` | `CleanupPlanResponse` |
 | `audit` | `{ options: RunOptions }` | `LifecycleScript[]` |
 | `security_scan` | `{ options: RunOptions }` | `SecurityScanResponse` (may include additive `historyWarning`) |
-| `execute_cleanup` | `{ request: { candidates, mode } }` | `CleanupResultResponse` (may include additive `historyWarning`) |
+| `execute_cleanup` | `{ request: { root, ecosystems, selectedArtifacts, mode } }` | `CleanupResultResponse` (may include additive `historyWarning`) |
 | `load_activity_history` | none | `ActivityRecord[]` |
 | `load_cleanup_history` | none | `CleanupHistoryEntry[]` |
 
-Contract changes must preserve existing command names, field names, nullability,
-and enum wire values for v0.0.1. Intentional breaking changes require a versioned
-boundary and matching Rust serialization tests and TypeScript updates.
+Contract changes must preserve existing command names, nullability, and enum wire
+values for v0.0.1. Cleanup execution intentionally accepts analyzed artifact
+identities rather than client-created deletion candidates; Core reconstructs and
+validates the cleanup plan from the analysis cache.
 
 ## v0.0.1 Features
 

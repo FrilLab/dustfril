@@ -5,20 +5,33 @@ use serde::{Deserialize, Serialize};
 
 use crate::models::{ArtifactAnalysis, Ecosystem};
 
-/// Plan containing artifact paths that are safe to remove.
+/// Plan containing artifact paths selected for removal.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct CleanupPlan {
-    /// Individual removal candidates.
+    /// Individual removal candidates validated by Core.
     pub candidates: Vec<CleanupCandidate>,
 }
 
 impl CleanupPlan {
     /// Returns the total number of bytes that can be reclaimed by this plan.
     pub fn reclaimable_size_bytes(&self) -> u64 {
-        self.candidates
-            .iter()
+        let mut candidates: Vec<_> = self.candidates.iter().collect();
+        candidates.sort_by_key(|candidate| candidate.path.components().count());
+
+        let mut paths: Vec<PathBuf> = Vec::new();
+        candidates
+            .into_iter()
+            .filter(|candidate| {
+                let covered = paths
+                    .iter()
+                    .any(|path| crate::models::path_contains(path, &candidate.path));
+                if !covered {
+                    paths.push(candidate.path.clone());
+                }
+                !covered
+            })
             .map(|candidate| candidate.size_bytes)
-            .sum()
+            .fold(0, u64::saturating_add)
     }
 }
 
@@ -68,11 +81,20 @@ pub enum DeleteMode {
 }
 
 /// Suggested user action for an analyzed artifact.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CleanupRecommendation {
+    #[default]
     Keep,
     NeedsReview,
     SafeToClean,
+}
+
+impl CleanupRecommendation {
+    /// Returns whether this advisory recommendation selects an artifact by
+    /// default in a fresh cleanup review.
+    pub fn selected_by_default(self) -> bool {
+        self == Self::SafeToClean
+    }
 }
 
 impl fmt::Display for CleanupRecommendation {
@@ -88,7 +110,7 @@ impl fmt::Display for CleanupRecommendation {
 }
 
 /// A single artifact selected for removal.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CleanupCandidate {
     /// Filesystem path to remove.
     pub path: PathBuf,
@@ -98,6 +120,20 @@ pub struct CleanupCandidate {
     pub size_bytes: u64,
     /// Age in days when known.
     pub age_days: Option<u64>,
+    /// Recommendation retained when an artifact is manually selected.
+    #[serde(default)]
+    pub recommendation: CleanupRecommendation,
+}
+
+/// Identity of an analyzed artifact that a user explicitly selected.
+///
+/// This is intentionally smaller than `CleanupCandidate`: callers can select
+/// only an artifact that Core has already analyzed, while Core supplies the
+/// filesystem path, metadata, and recommendation for the cleanup plan.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ArtifactSelection {
+    pub path: PathBuf,
+    pub ecosystem: Ecosystem,
 }
 
 impl From<ArtifactAnalysis> for CleanupCandidate {
@@ -107,6 +143,7 @@ impl From<ArtifactAnalysis> for CleanupCandidate {
             ecosystem: analysis.artifact.ecosystem,
             size_bytes: analysis.size_bytes,
             age_days: analysis.age_days,
+            recommendation: analysis.recommendation,
         }
     }
 }
@@ -132,6 +169,13 @@ mod tests {
     }
 
     #[test]
+    fn only_safe_to_clean_is_selected_by_default() {
+        assert!(!CleanupRecommendation::Keep.selected_by_default());
+        assert!(!CleanupRecommendation::NeedsReview.selected_by_default());
+        assert!(CleanupRecommendation::SafeToClean.selected_by_default());
+    }
+
+    #[test]
     fn cleanup_candidate_from_analysis_preserves_expected_fields() {
         let analysis = ArtifactAnalysis {
             artifact: Artifact::new(PathBuf::from("target"), Ecosystem::Rust),
@@ -147,5 +191,6 @@ mod tests {
         assert_eq!(candidate.ecosystem, Ecosystem::Rust);
         assert_eq!(candidate.size_bytes, 42);
         assert_eq!(candidate.age_days, Some(120));
+        assert_eq!(candidate.recommendation, CleanupRecommendation::SafeToClean);
     }
 }

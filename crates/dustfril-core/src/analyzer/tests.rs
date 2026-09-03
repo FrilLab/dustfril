@@ -142,3 +142,27 @@ fn analyze_does_not_count_files_reached_through_symbolic_links() {
     assert_eq!(analysis.artifacts[0].size_bytes, 0);
     assert_eq!(analysis.total_size_bytes, 0);
 }
+
+#[test]
+fn analyze_does_not_double_count_a_covered_artifact() {
+    let root = TempDir::new().unwrap();
+    let outer = root.path().join("node_modules");
+    let nested = outer.join("package-a").join("node_modules");
+
+    fs::create_dir_all(&nested).unwrap();
+    fs::write(outer.join("outer.txt"), b"outer").unwrap();
+    fs::write(nested.join("nested.txt"), b"nested").unwrap();
+
+    let analysis = Analyzer::analyze(ScanResult {
+        artifacts: vec![
+            Artifact::new(outer.clone(), Ecosystem::Node),
+            Artifact::new(nested, Ecosystem::Node),
+        ],
+        ..ScanResult::default()
+    })
+    .unwrap();
+
+    assert_eq!(analysis.artifacts.len(), 1);
+    assert_eq!(analysis.artifacts[0].artifact.path, outer);
+    assert_eq!(analysis.total_size_bytes, 11);
+}

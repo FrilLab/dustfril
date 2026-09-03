@@ -23,17 +23,17 @@ pub(crate) struct RunOptions {
 #[derive(Debug, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct ExecuteCleanupRequest {
-    pub(crate) candidates: Vec<CleanupCandidateInput>,
+    pub(crate) root: String,
+    pub(crate) ecosystems: Vec<EcosystemDto>,
+    pub(crate) selected_artifacts: Vec<ArtifactSelectionInput>,
     pub(crate) mode: DeleteModeDto,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct CleanupCandidateInput {
+pub(crate) struct ArtifactSelectionInput {
     pub(crate) path: String,
     pub(crate) ecosystem: EcosystemDto,
-    pub(crate) size_bytes: u64,
-    pub(crate) age_days: Option<u64>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -187,7 +187,9 @@ pub(crate) struct ArtifactAnalysisDto {
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CleanupPlanResponse {
+    /// All scanner-owned analyzed artifacts available for user selection.
     pub(crate) candidates: Vec<CleanupCandidateDto>,
+    /// Bytes selected by the recommendation-driven default selection.
     pub(crate) reclaimable_size_bytes: u64,
 }
 
@@ -198,6 +200,10 @@ pub(crate) struct CleanupCandidateDto {
     pub(crate) ecosystem: EcosystemDto,
     pub(crate) size_bytes: u64,
     pub(crate) age_days: Option<u64>,
+    /// Advisory status retained even after a user manually selects the item.
+    pub(crate) recommendation: RecommendationDto,
+    /// Whether the recommendation selects this item in a fresh review.
+    pub(crate) selected_by_default: bool,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -563,19 +569,23 @@ mod tests {
     #[test]
     fn cleanup_request_wire_format_is_stable() {
         let request: ExecuteCleanupRequest = serde_json::from_value(json!({
-            "candidates": [{
+            "root": "/workspace",
+            "ecosystems": ["Rust", "Node"],
+            "selectedArtifacts": [{
                 "path": "/workspace/target",
-                "ecosystem": "Rust",
-                "sizeBytes": 42,
-                "ageDays": null
+                "ecosystem": "Rust"
             }],
             "mode": "Trash"
         }))
         .unwrap();
 
         assert_eq!(request.mode, DeleteModeDto::Trash);
-        assert_eq!(request.candidates[0].size_bytes, 42);
-        assert_eq!(request.candidates[0].age_days, None);
+        assert_eq!(request.root, "/workspace");
+        assert_eq!(
+            request.ecosystems,
+            vec![EcosystemDto::Rust, EcosystemDto::Node]
+        );
+        assert_eq!(request.selected_artifacts[0].path, "/workspace/target");
     }
 
     #[test]
@@ -623,6 +633,8 @@ mod tests {
                     ecosystem: EcosystemDto::Rust,
                     size_bytes: 42,
                     age_days: Some(120),
+                    recommendation: RecommendationDto::SafeToClean,
+                    selected_by_default: true,
                 }],
                 reclaimable_size_bytes: 42,
             },
@@ -641,8 +653,10 @@ mod tests {
                     "candidates": [{
                         "path": "/workspace/target",
                         "ecosystem": "Rust",
-                        "sizeBytes": 42,
-                        "ageDays": 120
+                    "sizeBytes": 42,
+                    "ageDays": 120,
+                    "recommendation": "SafeToClean",
+                    "selectedByDefault": true
                     }],
                     "reclaimableSizeBytes": 42
                 }
@@ -702,6 +716,8 @@ mod tests {
                 ecosystem: EcosystemDto::Rust,
                 size_bytes: 42,
                 age_days: None,
+                recommendation: RecommendationDto::SafeToClean,
+                selected_by_default: true,
             }],
             reclaimable_size_bytes: 42,
         };
@@ -722,7 +738,9 @@ mod tests {
                     "path": "/workspace/target",
                     "ecosystem": "Rust",
                     "sizeBytes": 42,
-                    "ageDays": null
+                    "ageDays": null,
+                    "recommendation": "SafeToClean",
+                    "selectedByDefault": true
                 }],
                 "reclaimableSizeBytes": 42
             })

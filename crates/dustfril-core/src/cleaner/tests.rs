@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use tempfile::TempDir;
 
 use crate::{
-    cleaner::{create_cleanup_plan, execute_cleanup},
+    cleaner::{create_cleanup_plan, create_cleanup_plan_from_selection, execute_cleanup},
     models::*,
 };
 
@@ -36,12 +36,14 @@ fn reclaimable_size_bytes_returns_sum() {
                 ecosystem: Ecosystem::Rust,
                 size_bytes: 10,
                 age_days: None,
+                recommendation: CleanupRecommendation::SafeToClean,
             },
             CleanupCandidate {
                 path: PathBuf::from("b"),
                 ecosystem: Ecosystem::Node,
                 size_bytes: 20,
                 age_days: None,
+                recommendation: CleanupRecommendation::SafeToClean,
             },
         ],
     };
@@ -117,6 +119,7 @@ fn execute_cleanup_deletes_directory() {
             ecosystem: Ecosystem::Rust,
             size_bytes: size,
             age_days: Some(365),
+            recommendation: CleanupRecommendation::SafeToClean,
         }],
     };
 
@@ -146,6 +149,7 @@ fn execute_cleanup_removes_target_directory() {
         ecosystem: Ecosystem::Rust,
         size_bytes: 5,
         age_days: Some(100),
+        recommendation: CleanupRecommendation::SafeToClean,
     };
 
     let plan = CleanupPlan {
@@ -157,6 +161,41 @@ fn execute_cleanup_removes_target_directory() {
     assert!(!target_dir.exists());
     assert_eq!(result.deleted_paths.len(), 1);
     assert_eq!(result.failed_paths.len(), 0);
+}
+
+#[test]
+fn execute_cleanup_skips_a_covered_child_candidate() {
+    let temp_dir = TempDir::new().unwrap();
+    let outer = temp_dir.path().join("node_modules");
+    let nested = outer.join("package-a").join("node_modules");
+    fs::create_dir_all(&nested).unwrap();
+    fs::write(nested.join("artifact.bin"), b"nested").unwrap();
+
+    let plan = CleanupPlan {
+        candidates: vec![
+            CleanupCandidate {
+                path: nested,
+                ecosystem: Ecosystem::Node,
+                size_bytes: 6,
+                age_days: None,
+                recommendation: CleanupRecommendation::SafeToClean,
+            },
+            CleanupCandidate {
+                path: outer.clone(),
+                ecosystem: Ecosystem::Node,
+                size_bytes: 6,
+                age_days: None,
+                recommendation: CleanupRecommendation::SafeToClean,
+            },
+        ],
+    };
+
+    let result = execute_cleanup(&plan, DeleteMode::Permanent).unwrap();
+
+    assert!(!outer.exists());
+    assert_eq!(result.deleted_paths, vec![outer]);
+    assert!(result.failed_paths.is_empty());
+    assert_eq!(result.freed_size_bytes, 6);
 }
 
 #[test]
@@ -176,6 +215,140 @@ fn create_cleanup_plan_filters_safe_to_clean() {
 }
 
 #[test]
+fn recommendation_controls_default_selection_not_eligibility() {
+    let analysis = AnalysisResult {
+        artifacts: vec![
+            ArtifactAnalysis {
+                artifact: Artifact::new("/project/target".into(), Ecosystem::Rust),
+                size_bytes: 100,
+                last_modified: None,
+                age_days: Some(100),
+                recommendation: CleanupRecommendation::SafeToClean,
+            },
+            ArtifactAnalysis {
+                artifact: Artifact::new("/project/node_modules".into(), Ecosystem::Node),
+                size_bytes: 20,
+                last_modified: None,
+                age_days: Some(60),
+                recommendation: CleanupRecommendation::NeedsReview,
+            },
+            ArtifactAnalysis {
+                artifact: Artifact::new("/project/build".into(), Ecosystem::Java),
+                size_bytes: 30,
+                last_modified: None,
+                age_days: Some(5),
+                recommendation: CleanupRecommendation::Keep,
+            },
+        ],
+        total_size_bytes: 150,
+    };
+
+    let default_plan = create_cleanup_plan(analysis.clone()).unwrap();
+    assert_eq!(default_plan.candidates.len(), 1);
+    assert_eq!(
+        default_plan.candidates[0].recommendation,
+        CleanupRecommendation::SafeToClean
+    );
+
+    let selected_plan = create_cleanup_plan_from_selection(
+        &analysis,
+        &analysis
+            .artifacts
+            .iter()
+            .map(|artifact| ArtifactSelection {
+                path: artifact.artifact.path.clone(),
+                ecosystem: artifact.artifact.ecosystem,
+            })
+            .collect::<Vec<_>>(),
+    )
+    .unwrap();
+
+    assert_eq!(selected_plan.candidates.len(), 3);
+}
+
+#[test]
+fn explicit_selection_allows_review_and_keep_recommendations() {
+    let root = TempDir::new().unwrap();
+    let review = root.path().join("review").join("node_modules");
+    let keep = root.path().join("keep").join("node_modules");
+    fs::create_dir_all(&review).unwrap();
+    fs::create_dir_all(&keep).unwrap();
+
+    let analysis = AnalysisResult {
+        artifacts: vec![
+            ArtifactAnalysis {
+                artifact: Artifact::new(review.clone(), Ecosystem::Node),
+                size_bytes: 20,
+                last_modified: None,
+                age_days: None,
+                recommendation: CleanupRecommendation::NeedsReview,
+            },
+            ArtifactAnalysis {
+                artifact: Artifact::new(keep.clone(), Ecosystem::Node),
+                size_bytes: 30,
+                last_modified: None,
+                age_days: None,
+                recommendation: CleanupRecommendation::Keep,
+            },
+        ],
+        total_size_bytes: 50,
+    };
+
+    let plan = create_cleanup_plan_from_selection(
+        &analysis,
+        &[
+            ArtifactSelection {
+                path: review,
+                ecosystem: Ecosystem::Node,
+            },
+            ArtifactSelection {
+                path: keep,
+                ecosystem: Ecosystem::Node,
+            },
+        ],
+    )
+    .unwrap();
+
+    assert_eq!(plan.candidates.len(), 2);
+    assert_eq!(plan.reclaimable_size_bytes(), 50);
+    assert_eq!(
+        plan.candidates[0].recommendation,
+        CleanupRecommendation::NeedsReview
+    );
+    assert_eq!(
+        plan.candidates[1].recommendation,
+        CleanupRecommendation::Keep
+    );
+}
+
+#[test]
+fn cleanup_plan_normalizes_ancestor_and_descendant_candidates() {
+    let outer = PathBuf::from("/workspace/project/node_modules");
+    let nested = outer.join("foo").join("node_modules");
+    let mut candidates = vec![
+        CleanupCandidate {
+            path: nested,
+            ecosystem: Ecosystem::Node,
+            size_bytes: 20,
+            age_days: None,
+            recommendation: CleanupRecommendation::SafeToClean,
+        },
+        CleanupCandidate {
+            path: outer.clone(),
+            ecosystem: Ecosystem::Node,
+            size_bytes: 100,
+            age_days: None,
+            recommendation: CleanupRecommendation::SafeToClean,
+        },
+    ];
+
+    super::plan::normalize_candidates(&mut candidates);
+
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].path, outer);
+}
+
+#[test]
 fn cleanup_reports_failed_path() {
     let temp_dir = TempDir::new().unwrap();
     let missing = temp_dir.path().join("missing");
@@ -185,6 +358,7 @@ fn cleanup_reports_failed_path() {
         ecosystem: Ecosystem::Rust,
         size_bytes: 100,
         age_days: None,
+        recommendation: CleanupRecommendation::SafeToClean,
     };
 
     let plan = CleanupPlan {
@@ -210,6 +384,7 @@ fn execute_cleanup_reports_missing_path() {
             ecosystem: Ecosystem::Rust,
             size_bytes: 100,
             age_days: Some(365),
+            recommendation: CleanupRecommendation::SafeToClean,
         }],
     };
 
@@ -238,6 +413,7 @@ fn execute_cleanup_rejects_unsafe_path() {
             ecosystem: Ecosystem::Rust,
             size_bytes: 0,
             age_days: None,
+            recommendation: CleanupRecommendation::SafeToClean,
         }],
     };
 
@@ -267,6 +443,7 @@ fn execute_cleanup_rejects_a_regular_file_with_an_artifact_name() {
             ecosystem: Ecosystem::Rust,
             size_bytes: 0,
             age_days: None,
+            recommendation: CleanupRecommendation::SafeToClean,
         }],
     };
 
@@ -296,6 +473,7 @@ fn execute_cleanup_rejects_symbolic_link_candidates() {
             ecosystem: Ecosystem::Rust,
             size_bytes: 0,
             age_days: None,
+            recommendation: CleanupRecommendation::SafeToClean,
         }],
     };
 

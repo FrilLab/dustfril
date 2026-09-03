@@ -4,6 +4,7 @@ use std::{fs, path::Path};
 use crate::error::DustResult;
 use crate::models::{
     AnalysisResult, Artifact, ArtifactAnalysis, CleanupRecommendation, ScanResult,
+    normalize_artifacts,
 };
 use rayon::prelude::*;
 use walkdir::WalkDir;
@@ -13,8 +14,7 @@ pub struct Analyzer;
 impl Analyzer {
     /// Computes per-artifact size and freshness metadata for a scan result.
     pub fn analyze(scan_result: ScanResult) -> DustResult<AnalysisResult> {
-        let mut artifacts: Vec<ArtifactAnalysis> = scan_result
-            .artifacts
+        let mut artifacts: Vec<ArtifactAnalysis> = normalize_artifacts(scan_result.artifacts)
             .into_par_iter()
             .map(Self::analyze_artifact)
             .collect();
