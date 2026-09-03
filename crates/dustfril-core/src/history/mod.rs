@@ -12,8 +12,8 @@ use serde_json::Value;
 use crate::{
     error::{DustError, DustResult},
     models::{
-        ActivityRecord, CleanupHistoryEntry, CleanupResult, DeleteMode, Ecosystem,
-        ScanAccessSummary, ScanResult, SecurityReport,
+        ActivityRecord, CleanupCandidate, CleanupHistoryEntry, CleanupResult, DeleteMode,
+        Ecosystem, ScanAccessSummary, ScanResult, SecurityReport,
     },
 };
 
@@ -44,6 +44,22 @@ pub fn record(activity: ActivityRecord) -> DustResult<()> {
 /// Records a cleanup operation in the unified activity history.
 pub fn record_cleanup(mode: DeleteMode, result: &CleanupResult) -> DustResult<()> {
     record(ActivityRecord::cleanup(mode, result))
+}
+
+/// Records a cleanup operation together with the workspace and analyzed item
+/// metadata that make the event useful when reviewing history later.
+pub fn record_cleanup_with_context(
+    target_path: &Path,
+    candidates: &[CleanupCandidate],
+    mode: DeleteMode,
+    result: &CleanupResult,
+) -> DustResult<()> {
+    record(ActivityRecord::cleanup_with_context(
+        target_path,
+        mode,
+        candidates,
+        result,
+    ))
 }
 
 /// Records a scan operation in the unified activity history.
@@ -77,6 +93,19 @@ pub fn record_scan_failure_with_summary(
 /// Records a cleanup that failed before producing a cleanup result.
 pub fn record_cleanup_failure(mode: DeleteMode, reason: &str) -> DustResult<()> {
     record(ActivityRecord::cleanup_failure(mode, reason))
+}
+
+/// Records a cleanup preparation failure while retaining its workspace target.
+pub fn record_cleanup_failure_with_context(
+    target_path: &Path,
+    mode: DeleteMode,
+    reason: &str,
+) -> DustResult<()> {
+    record(ActivityRecord::cleanup_failure_with_context(
+        target_path,
+        mode,
+        reason,
+    ))
 }
 
 /// Records one explicit security scan in the unified activity history.
@@ -223,8 +252,9 @@ mod tests {
 
     use super::*;
     use crate::models::{
-        ActivityKind, ActivityResult, Artifact, CleanupFailure, CleanupFailureReason, Ecosystem,
-        RiskLevel, ScanAccessSummary, SecurityFinding, SecurityFindingKind, SecurityReport,
+        ActivityKind, ActivityResult, Artifact, CleanupCandidate, CleanupFailure,
+        CleanupFailureReason, CleanupRecommendation, Ecosystem, ProjectIdentity, RiskLevel,
+        ScanAccessSummary, SecurityFinding, SecurityFindingKind, SecurityReport,
     };
 
     fn cleanup_result() -> CleanupResult {
@@ -453,6 +483,45 @@ mod tests {
         assert!(!activity.result.success);
         assert_eq!(activity.result.details["deleted"][0], "target");
         assert_eq!(activity.result.details["failed"][0]["path"], "node_modules");
+    }
+
+    #[test]
+    fn contextual_cleanup_details_survive_history_reload() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("history.json");
+        let candidate = CleanupCandidate {
+            path: temp.path().join("dustfril/target"),
+            ecosystem: Ecosystem::Rust,
+            project: ProjectIdentity::new(temp.path().join("dustfril"), Ecosystem::Rust),
+            size_bytes: 4096,
+            age_days: Some(90),
+            recommendation: CleanupRecommendation::SafeToClean,
+        };
+        let result = CleanupResult {
+            deleted_paths: vec![candidate.path.clone()],
+            failed_paths: Vec::new(),
+            freed_size_bytes: candidate.size_bytes,
+        };
+
+        record_to(
+            &path,
+            ActivityRecord::cleanup_with_context(
+                temp.path(),
+                DeleteMode::Trash,
+                &[candidate],
+                &result,
+            ),
+        )
+        .unwrap();
+
+        let records = load_unlocked(&path).unwrap();
+
+        assert_eq!(
+            records[0].result.details["target"],
+            temp.path().display().to_string()
+        );
+        assert_eq!(records[0].result.details["items"][0]["size"], 4096);
+        assert_eq!(records[0].result.details["items"][0]["status"], "succeeded");
     }
 
     #[test]

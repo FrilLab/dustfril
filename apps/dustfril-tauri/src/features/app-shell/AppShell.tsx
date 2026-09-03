@@ -60,7 +60,6 @@ export function AppShell() {
               lastAnalysisAtMs={app.lastAnalysisAtMs}
               busy={app.busyAction !== null}
               analysisReady={app.analysisResult !== null}
-              statusMessage={app.statusMessage}
               error={app.error}
               onSelectItem={app.setSelectedItemId}
               onCloseInspector={() => app.setSelectedItemId(null)}

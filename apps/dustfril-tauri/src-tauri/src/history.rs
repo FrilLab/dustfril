@@ -3,8 +3,8 @@ use std::path::Path;
 use dustfril_core::{
     api,
     models::{
-        ActivityKind, ActivityRecord, CleanupResult, DeleteMode, Ecosystem, ScanResult,
-        SecurityReport,
+        ActivityKind, ActivityRecord, CleanupCandidate, CleanupResult, DeleteMode, Ecosystem,
+        ScanResult, SecurityReport,
     },
 };
 use serde::Serialize;
@@ -20,9 +20,25 @@ pub struct ActivityRecordDto {
     pub result: dustfril_core::models::ActivityResult,
 }
 
-/// Records a cleanup operation for the desktop activity log.
-pub fn record(mode: DeleteMode, result: &CleanupResult) -> Result<(), String> {
-    api::history::record_cleanup(mode, result).map_err(|error| error.to_string())
+/// Records cleanup history with the workspace and analyzed candidates used by
+/// the desktop cleanup review.
+pub fn record_with_context(
+    target_path: &Path,
+    candidates: &[CleanupCandidate],
+    mode: DeleteMode,
+    result: &CleanupResult,
+) -> Result<(), String> {
+    api::history::record_cleanup_with_context(target_path, candidates, mode, result)
+        .map_err(|error| error.to_string())
+}
+
+pub fn record_failure_with_context(
+    target_path: &Path,
+    mode: DeleteMode,
+    reason: &str,
+) -> Result<(), String> {
+    api::history::record_cleanup_failure_with_context(target_path, mode, reason)
+        .map_err(|error| error.to_string())
 }
 
 /// Records a completed scan for the desktop activity log.
@@ -51,10 +67,6 @@ pub fn record_scan_failure_with_summary(
 }
 
 /// Records a cleanup that failed before producing a cleanup result.
-pub fn record_cleanup_failure(mode: DeleteMode, reason: &str) -> Result<(), String> {
-    api::history::record_cleanup_failure(mode, reason).map_err(|error| error.to_string())
-}
-
 /// Records one explicit security scan for the desktop activity log.
 pub fn record_security_scan(
     target_path: &Path,

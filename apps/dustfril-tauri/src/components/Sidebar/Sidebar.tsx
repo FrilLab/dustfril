@@ -37,10 +37,6 @@ export function Sidebar(props: SidebarProps) {
         })}
       </nav>
 
-      <div className="sidebar-note">
-        <span className="sidebar-note-dot" aria-hidden="true" />
-        <span>Trash is the default cleanup mode.</span>
-      </div>
     </aside>
   );
 }

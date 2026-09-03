@@ -164,6 +164,16 @@ export type ActivityFailure = {
   reason?: string;
 };
 
+export type CleanupActivityItem = {
+  path: string;
+  status: 'succeeded' | 'failed';
+  project?: string;
+  projectRoot?: string;
+  ecosystem?: Ecosystem;
+  size?: number;
+  reason?: string;
+};
+
 export type ScanAccessFailure = {
   path: string;
   reason: string;
@@ -182,6 +192,7 @@ export type ScanAccessSummary = {
 
 export type ActivityDetails = {
   path?: string;
+  target?: string;
   artifacts?: number;
   size?: number;
   accessSummary?: ScanAccessSummary;
@@ -189,6 +200,7 @@ export type ActivityDetails = {
   deleted?: string[];
   failed?: ActivityFailure[];
   freed?: number;
+  items?: CleanupActivityItem[];
   ecosystems?: Ecosystem[];
   findingCount?: number;
   highestRisk?: RiskLevel;

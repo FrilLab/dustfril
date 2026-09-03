@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::models::{
-    CleanupResult, DeleteMode, Ecosystem, RiskLevel, ScanAccessSummary, ScanResult, SecurityReport,
-    effective_security_ecosystems,
+    CleanupCandidate, CleanupResult, DeleteMode, Ecosystem, RiskLevel, ScanAccessSummary,
+    ScanResult, SecurityReport, effective_security_ecosystems,
 };
 
 /// The kind of operation represented by an activity record.
@@ -118,6 +118,30 @@ impl ActivityResult {
         )
     }
 
+    /// Builds a cleanup result with the workspace and analyzed item identity
+    /// that was available at execution time. The additional fields are
+    /// additive JSON details so older history records remain valid.
+    pub fn from_cleanup_with_context(
+        target_path: &Path,
+        mode: DeleteMode,
+        candidates: &[CleanupCandidate],
+        result: &CleanupResult,
+    ) -> Self {
+        let mut details = Self::from_cleanup(mode, result).details;
+        if let Value::Object(object) = &mut details {
+            object.insert(
+                "target".to_owned(),
+                Value::String(sanitize_path(target_path)),
+            );
+            object.insert(
+                "items".to_owned(),
+                Value::Array(cleanup_item_details(candidates, result)),
+            );
+        }
+
+        Self::new(result.failed_paths.is_empty(), details)
+    }
+
     /// Builds the result payload for a cleanup that failed before a result
     /// could be produced.
     pub fn from_cleanup_failure(mode: DeleteMode, reason: &str) -> Self {
@@ -131,6 +155,25 @@ impl ActivityResult {
                 "reason": sanitize_text(reason),
             }),
         )
+    }
+
+    /// Builds a failed cleanup result with the workspace target retained when
+    /// preparation failed before any analyzed candidates were available.
+    pub fn from_cleanup_failure_with_context(
+        target_path: &Path,
+        mode: DeleteMode,
+        reason: &str,
+    ) -> Self {
+        let mut details = Self::from_cleanup_failure(mode, reason).details;
+        if let Value::Object(object) = &mut details {
+            object.insert(
+                "target".to_owned(),
+                Value::String(sanitize_path(target_path)),
+            );
+            object.insert("items".to_owned(), Value::Array(Vec::new()));
+        }
+
+        Self::new(false, details)
     }
 
     /// Builds a safe, structured result payload for a completed security scan.
@@ -248,10 +291,33 @@ impl ActivityRecord {
         )
     }
 
+    pub fn cleanup_with_context(
+        target_path: &Path,
+        mode: DeleteMode,
+        candidates: &[CleanupCandidate],
+        result: &CleanupResult,
+    ) -> Self {
+        Self::new(
+            ActivityKind::Cleanup,
+            ActivityResult::from_cleanup_with_context(target_path, mode, candidates, result),
+        )
+    }
+
     pub fn cleanup_failure(mode: DeleteMode, reason: &str) -> Self {
         Self::new(
             ActivityKind::Cleanup,
             ActivityResult::from_cleanup_failure(mode, reason),
+        )
+    }
+
+    pub fn cleanup_failure_with_context(
+        target_path: &Path,
+        mode: DeleteMode,
+        reason: &str,
+    ) -> Self {
+        Self::new(
+            ActivityKind::Cleanup,
+            ActivityResult::from_cleanup_failure_with_context(target_path, mode, reason),
         )
     }
 
@@ -321,6 +387,65 @@ fn paths_to_values(paths: &[PathBuf]) -> Vec<Value> {
         .iter()
         .map(|path| Value::String(path.display().to_string()))
         .collect()
+}
+
+fn cleanup_item_details(candidates: &[CleanupCandidate], result: &CleanupResult) -> Vec<Value> {
+    let mut items = Vec::with_capacity(result.deleted_paths.len() + result.failed_paths.len());
+
+    for path in &result.deleted_paths {
+        items.push(cleanup_item_detail(
+            candidates.iter().find(|candidate| candidate.path == *path),
+            path,
+            "succeeded",
+            None,
+        ));
+    }
+
+    for failure in &result.failed_paths {
+        items.push(cleanup_item_detail(
+            candidates
+                .iter()
+                .find(|candidate| candidate.path == failure.path),
+            &failure.path,
+            "failed",
+            Some(failure.reason.to_string()),
+        ));
+    }
+
+    items
+}
+
+fn cleanup_item_detail(
+    candidate: Option<&CleanupCandidate>,
+    path: &Path,
+    status: &str,
+    reason: Option<String>,
+) -> Value {
+    let mut detail = serde_json::Map::new();
+    detail.insert("path".to_owned(), Value::String(sanitize_path(path)));
+    detail.insert("status".to_owned(), Value::String(status.to_owned()));
+
+    if let Some(candidate) = candidate {
+        detail.insert(
+            "project".to_owned(),
+            Value::String(sanitize_text(&candidate.project.display_name)),
+        );
+        detail.insert(
+            "projectRoot".to_owned(),
+            Value::String(sanitize_path(&candidate.project.root)),
+        );
+        detail.insert(
+            "ecosystem".to_owned(),
+            Value::String(candidate.ecosystem.to_string()),
+        );
+        detail.insert("size".to_owned(), Value::from(candidate.size_bytes));
+    }
+
+    if let Some(reason) = reason {
+        detail.insert("reason".to_owned(), Value::String(sanitize_text(&reason)));
+    }
+
+    Value::Object(detail)
 }
 
 fn ecosystem_labels(ecosystems: &[Ecosystem]) -> Vec<&'static str> {
@@ -664,5 +789,58 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn cleanup_activity_context_preserves_workspace_project_and_item_metadata() {
+        let candidate = CleanupCandidate {
+            path: "/workspace/dustfril/target".into(),
+            ecosystem: Ecosystem::Rust,
+            project: crate::models::ProjectIdentity::new(
+                "/workspace/dustfril".into(),
+                Ecosystem::Rust,
+            ),
+            size_bytes: 2048,
+            age_days: Some(60),
+            recommendation: crate::models::CleanupRecommendation::SafeToClean,
+        };
+        let result = CleanupResult {
+            deleted_paths: vec![candidate.path.clone()],
+            failed_paths: Vec::new(),
+            freed_size_bytes: candidate.size_bytes,
+        };
+
+        let activity = ActivityRecord::cleanup_with_context(
+            Path::new("/workspace"),
+            DeleteMode::Trash,
+            &[candidate],
+            &result,
+        );
+
+        assert_eq!(activity.result.details["target"], "/workspace");
+        assert_eq!(activity.result.details["items"][0]["project"], "dustfril");
+        assert_eq!(
+            activity.result.details["items"][0]["projectRoot"],
+            "/workspace/dustfril"
+        );
+        assert_eq!(activity.result.details["items"][0]["size"], 2048);
+        assert_eq!(activity.result.details["items"][0]["status"], "succeeded");
+    }
+
+    #[test]
+    fn failed_cleanup_context_retains_workspace_target() {
+        let activity = ActivityRecord::cleanup_failure_with_context(
+            Path::new("/workspace"),
+            DeleteMode::Permanent,
+            "analysis expired",
+        );
+
+        assert!(!activity.result.success);
+        assert_eq!(activity.result.details["target"], "/workspace");
+        assert_eq!(
+            activity.result.details["items"].as_array().unwrap().len(),
+            0
+        );
+        assert_eq!(activity.result.details["reason"], "analysis expired");
     }
 }

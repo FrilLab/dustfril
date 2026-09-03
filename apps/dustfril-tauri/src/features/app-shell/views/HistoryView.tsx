@@ -13,7 +13,6 @@ export function HistoryView(props: HistoryViewProps) {
         <div className="min-width-zero">
           <p className="eyebrow">History</p>
           <h1>Activity</h1>
-          <p className="heading-path">Scans, cleanup operations, results, and failures.</p>
         </div>
       </div>
       <div className="history-list-scroll">

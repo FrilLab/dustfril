@@ -29,7 +29,6 @@ type WorkspaceViewProps = {
   lastAnalysisAtMs: number | null;
   busy: boolean;
   analysisReady: boolean;
-  statusMessage: string;
   error: string | null;
   onSelectItem: (path: string) => void;
   onCloseInspector: () => void;
@@ -95,12 +94,6 @@ export function WorkspaceView(props: WorkspaceViewProps) {
         </div>
       ) : null}
 
-      {!props.error && props.analysisReady ? (
-        <div className="workspace-notice" role="status">
-          {props.statusMessage}
-        </div>
-      ) : null}
-
       <div className="workspace-layout">
         <section className="results-pane" aria-label="Workspace artifacts">
           <div className="results-toolbar">
@@ -159,6 +152,7 @@ export function WorkspaceView(props: WorkspaceViewProps) {
                 key={mode}
                 type="button"
                 className={props.deleteMode === mode ? 'mode-active' : ''}
+                aria-pressed={props.deleteMode === mode}
                 onClick={() => props.onDeleteModeChange(mode)}
               >
                 {mode === 'Trash' ? 'Move to Trash' : 'Delete permanently'}
