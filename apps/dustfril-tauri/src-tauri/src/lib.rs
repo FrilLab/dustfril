@@ -16,8 +16,8 @@ use std::{
 };
 
 use contract::{
-    artifact_path, artifact_snapshot_to_dto, cleanup_failure_reason, AnalysisResponse,
-    ArtifactAnalysisDto, ArtifactDto, CleanupCandidateDto, CleanupFailureDto,
+    artifact_path, artifact_snapshot_to_dto, cleanup_failure_reason, project_identity_to_dto,
+    AnalysisResponse, ArtifactAnalysisDto, ArtifactDto, CleanupCandidateDto, CleanupFailureDto,
     CleanupHistoryEntryDto, CleanupPlanResponse, CleanupResultResponse, ExecuteCleanupRequest,
     LifecycleScriptDto, RunOptions, ScanResponse, SecurityScanResponse, WorkspaceAnalysisResponse,
 };
@@ -96,6 +96,7 @@ fn cleanup_candidate_from_analysis(
     CleanupCandidateDto {
         path: artifact_path(&artifact.artifact.path),
         ecosystem: artifact.artifact.ecosystem.into(),
+        project: project_identity_to_dto(&artifact.artifact.project),
         size_bytes: artifact.size_bytes,
         age_days: artifact.age_days,
         recommendation: artifact.recommendation.into(),
@@ -109,6 +110,7 @@ fn cleanup_candidate_from_core_candidate(
     CleanupCandidateDto {
         path: artifact_path(&candidate.path),
         ecosystem: candidate.ecosystem.into(),
+        project: project_identity_to_dto(&candidate.project),
         size_bytes: candidate.size_bytes,
         age_days: candidate.age_days,
         recommendation: candidate.recommendation.into(),
@@ -245,6 +247,7 @@ async fn scan(options: RunOptions) -> Result<ScanResponse, String> {
                 .map(|artifact| ArtifactDto {
                     path: artifact_path(&artifact.path),
                     ecosystem: artifact.ecosystem.into(),
+                    project: project_identity_to_dto(&artifact.project),
                 })
                 .collect(),
             history_warning,
@@ -291,6 +294,7 @@ async fn analyze(options: RunOptions) -> Result<AnalysisResponse, String> {
                 .map(|artifact| ArtifactAnalysisDto {
                     path: artifact_path(&artifact.artifact.path),
                     ecosystem: artifact.artifact.ecosystem.into(),
+                    project: project_identity_to_dto(&artifact.artifact.project),
                     size_bytes: artifact.size_bytes,
                     last_modified_ms: artifact.last_modified.and_then(system_time_to_ms),
                     age_days: artifact.age_days,
@@ -360,6 +364,7 @@ async fn analyze_workspace(options: RunOptions) -> Result<WorkspaceAnalysisRespo
                 .map(|artifact| ArtifactAnalysisDto {
                     path: artifact_path(&artifact.artifact.path),
                     ecosystem: artifact.artifact.ecosystem.into(),
+                    project: project_identity_to_dto(&artifact.artifact.project),
                     size_bytes: artifact.size_bytes,
                     last_modified_ms: artifact.last_modified.and_then(system_time_to_ms),
                     age_days: artifact.age_days,

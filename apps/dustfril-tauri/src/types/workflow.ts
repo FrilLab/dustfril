@@ -14,6 +14,13 @@ export type ScriptType =
 export type Artifact = {
   path: string;
   ecosystem: Ecosystem;
+  project: ProjectIdentity;
+};
+
+export type ProjectIdentity = {
+  root: string;
+  displayName: string;
+  ecosystem: Ecosystem;
 };
 
 export type ScanResponse = {
@@ -62,6 +69,7 @@ export type ArtifactSnapshotResult = {
 export type ArtifactAnalysis = {
   path: string;
   ecosystem: Ecosystem;
+  project: ProjectIdentity;
   sizeBytes: number;
   lastModifiedMs: number | null;
   ageDays: number | null;
@@ -84,6 +92,7 @@ export type WorkspaceAnalysisResponse = {
 export type CleanupCandidate = {
   path: string;
   ecosystem: Ecosystem;
+  project: ProjectIdentity;
   sizeBytes: number;
   ageDays: number | null;
   recommendation: Recommendation;

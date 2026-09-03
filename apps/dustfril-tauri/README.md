@@ -45,6 +45,11 @@ validates the cleanup plan from the immutable analysis identified by
 `analysisId`. The token preserves the exact preview analysis through execution,
 including visible NotFound failures when a selected target disappears.
 
+Scan, analysis, and cleanup candidate payloads also include the discovered
+project identity (`root`, `displayName`, and `ecosystem`). The workspace UI uses
+that identity as the primary label and keeps the artifact name and full path
+visible for safe cleanup decisions.
+
 ## v0.0.1 Features
 
 - Workspace-first Finder-like shell with native folder selection

@@ -47,6 +47,14 @@ as removed or spuriously new by later snapshots.
 Cleanup execution validates artifact type and protected paths, refuses
 symbolic links, and never falls back from Trash mode to permanent deletion.
 
+Artifact discovery returns an explicit `ProjectIdentity` with the discovered
+project root, directory-based display name, and ecosystem. That identity is
+retained by `Artifact`, `ArtifactAnalysis`, and `CleanupCandidate`; analysis and
+cleanup do not reconstruct ownership from artifact path names. Current
+detectors recognize Cargo manifests, Node project/workspace metadata, Maven
+POMs, and Gradle settings/module build files. Gradle modules use the nearest
+discovered settings root when one is available.
+
 ## Supported Coverage
 
 - Rust: `target/`

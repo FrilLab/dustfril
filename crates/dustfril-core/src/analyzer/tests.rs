@@ -6,7 +6,7 @@ use crate::{analyzer::Analyzer, models::*};
 
 fn scan_result(path: PathBuf, ecosystem: Ecosystem) -> ScanResult {
     ScanResult {
-        artifacts: vec![Artifact { path, ecosystem }],
+        artifacts: vec![Artifact::new(path, ecosystem)],
         ..ScanResult::default()
     }
 }
@@ -90,14 +90,8 @@ fn analyze_multiple_artifacts() {
 
     let analysis = Analyzer::analyze(ScanResult {
         artifacts: vec![
-            Artifact {
-                path: rust,
-                ecosystem: Ecosystem::Rust,
-            },
-            Artifact {
-                path: node,
-                ecosystem: Ecosystem::Node,
-            },
+            Artifact::new(rust, Ecosystem::Rust),
+            Artifact::new(node, Ecosystem::Node),
         ],
         ..ScanResult::default()
     })
@@ -164,5 +158,9 @@ fn analyze_does_not_double_count_a_covered_artifact() {
 
     assert_eq!(analysis.artifacts.len(), 1);
     assert_eq!(analysis.artifacts[0].artifact.path, outer);
+    assert_eq!(
+        analysis.artifacts[0].artifact.project.root,
+        outer.parent().unwrap()
+    );
     assert_eq!(analysis.total_size_bytes, 11);
 }

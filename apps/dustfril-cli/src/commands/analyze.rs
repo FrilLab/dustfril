@@ -121,6 +121,14 @@ pub fn execute(args: PathArgs) -> bool {
             .unwrap_or_else(|| "Unknown".to_string());
         println!("----------------------------------------");
         println!("[{}]", artifact.artifact.ecosystem);
+        println!(
+            "  Project:        {}",
+            artifact.artifact.project.display_name
+        );
+        println!(
+            "  Project root:   {}",
+            artifact.artifact.project.root.display()
+        );
         println!("  Path:           {}", artifact.artifact.path.display());
         println!(
             "  Size:           {}",

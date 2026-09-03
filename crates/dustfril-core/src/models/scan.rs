@@ -1,7 +1,9 @@
 use core::fmt;
 use std::path::PathBuf;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+
+use super::ProjectIdentity;
 
 /// Maximum number of representative scan failures retained in an access
 /// summary. The total failure count remains authoritative when more failures
@@ -170,18 +172,66 @@ pub struct ScanResult {
 }
 
 /// A removable artifact discovered for a supported ecosystem.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Artifact {
     /// Filesystem path to the removable artifact.
     pub path: PathBuf,
     /// Ecosystem that owns the artifact.
     pub ecosystem: Ecosystem,
+    /// Project discovered as the owner of this artifact.
+    #[serde(default, skip_serializing_if = "ProjectIdentity::is_empty")]
+    pub project: ProjectIdentity,
+}
+
+impl<'de> Deserialize<'de> for Artifact {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct ArtifactPayload {
+            path: PathBuf,
+            ecosystem: Ecosystem,
+            #[serde(default)]
+            project: Option<ProjectIdentity>,
+        }
+
+        let payload = ArtifactPayload::deserialize(deserializer)?;
+        let project = payload.project.unwrap_or_else(|| {
+            ProjectIdentity::from_artifact_path(&payload.path, payload.ecosystem)
+        });
+
+        Ok(Self {
+            path: payload.path,
+            ecosystem: payload.ecosystem,
+            project,
+        })
+    }
 }
 
 impl Artifact {
-    /// Creates a scanned artifact entry for the given path and ecosystem.
+    /// Creates an artifact for a manually supplied path.
+    ///
+    /// Detector code should use [`Self::for_project`] so project ownership is
+    /// always sourced from project discovery. This constructor remains as a
+    /// compatibility convenience for callers that build domain values by
+    /// hand.
     pub fn new(path: PathBuf, ecosystem: Ecosystem) -> Self {
-        Self { path, ecosystem }
+        let project = ProjectIdentity::from_artifact_path(&path, ecosystem);
+        Self {
+            path,
+            ecosystem,
+            project,
+        }
+    }
+
+    /// Creates an artifact with the project identity returned by discovery.
+    pub fn for_project(path: PathBuf, project: ProjectIdentity) -> Self {
+        Self {
+            ecosystem: project.ecosystem,
+            path,
+            project,
+        }
     }
 }
 
@@ -222,6 +272,15 @@ mod tests {
 
         assert_eq!(artifact.path, PathBuf::from("target"));
         assert_eq!(artifact.ecosystem, Ecosystem::Rust);
+        let absolute_root = std::path::absolute(".").unwrap();
+        assert_eq!(artifact.project.root, absolute_root);
+        assert_eq!(
+            artifact.project.display_name,
+            absolute_root
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or_else(|| absolute_root.to_str().unwrap())
+        );
     }
 
     #[test]
@@ -233,6 +292,23 @@ mod tests {
 
         assert!(result.artifacts.is_empty());
         assert_eq!(result.access_summary, ScanAccessSummary::default());
+    }
+
+    #[test]
+    fn legacy_artifacts_get_a_compatibility_project_identity() {
+        let result: ScanResult = serde_json::from_value(serde_json::json!({
+            "artifacts": [{
+                "path": "/workspace/dustfril/target",
+                "ecosystem": "Rust"
+            }]
+        }))
+        .unwrap();
+
+        assert_eq!(
+            result.artifacts[0].project.root,
+            PathBuf::from("/workspace/dustfril")
+        );
+        assert_eq!(result.artifacts[0].project.display_name, "dustfril");
     }
 
     #[test]
