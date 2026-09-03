@@ -334,6 +334,11 @@ button:disabled {
   padding: 0 24px 14px;
 }
 
+.overview-view {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
 .content-heading {
   display: flex;
   align-items: center;
