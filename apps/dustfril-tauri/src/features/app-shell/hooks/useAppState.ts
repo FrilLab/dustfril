@@ -16,7 +16,12 @@ import type {
   CleanupResultResponse,
   DeleteMode,
 } from '../../../types/workflow';
-import { deleteModes, ecosystems } from '../../../types/workflow';
+import {
+  cleanupAgeOptions,
+  defaultCleanupAgeDays,
+  deleteModes,
+  ecosystems,
+} from '../../../types/workflow';
 import { createWorkspaceSummary, filterArtifacts } from '../../../model/presentation';
 
 export function useAppState() {
@@ -32,6 +37,7 @@ export function useAppState() {
   const [cleanupResult, setCleanupResult] = useState<CleanupResultResponse | null>(null);
   const [historyEntries, setHistoryEntries] = useState<ActivityRecord[]>([]);
   const [selectedCleanupPaths, setSelectedCleanupPaths] = useState<string[]>([]);
+  const [cleanupAgeDays, setCleanupAgeDays] = useState<number>(defaultCleanupAgeDays);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [lastAnalysisAtMs, setLastAnalysisAtMs] = useState<number | null>(null);
   const workspaceRequestRef = useRef(0);
@@ -55,13 +61,12 @@ export function useAppState() {
   );
 
   useEffect(() => {
-    if (!filteredArtifacts.length) {
-      setSelectedItemId(null);
+    if (!selectedItemId) {
       return;
     }
 
-    if (!selectedItemId || !filteredArtifacts.some((artifact) => artifact.path === selectedItemId)) {
-      setSelectedItemId(filteredArtifacts[0].path);
+    if (!filteredArtifacts.some((artifact) => artifact.path === selectedItemId)) {
+      setSelectedItemId(null);
     }
   }, [filteredArtifacts, selectedItemId]);
 
@@ -102,10 +107,10 @@ export function useAppState() {
 
   const statusMessage = error
     ? error
-    : cleanupResult
+      : cleanupResult
       ? `Last cleanup freed ${formatBytes(cleanupResult.freedSizeBytes)} across ${cleanupResult.deletedPaths.length} path(s).`
       : analysisResult
-        ? 'Review the recommendations below. Trash is the default cleanup mode.'
+        ? 'Review recommendations based on inactivity age. Trash is the default cleanup mode.'
         : 'Choose a workspace folder, then analyze it to find development artifacts.';
 
   const canAnalyze = busyAction === null && root.length > 0;
@@ -176,12 +181,22 @@ export function useAppState() {
       return;
     }
 
+    await analyzeWorkspaceWithPolicy(cleanupAgeDays, true, true);
+  }
+
+  async function analyzeWorkspaceWithPolicy(
+    policyAgeDays: number,
+    recordHistory: boolean,
+    recordArtifactSnapshot: boolean,
+  ) {
     await runAction('analyze-workspace', async () => {
       const requestId = ++workspaceRequestRef.current;
       const response = await analyzeWorkspace({
         root,
         ecosystems: [...ecosystems],
-        recordHistory: true,
+        cleanupAgeDays: policyAgeDays,
+        recordHistory,
+        recordArtifactSnapshot,
       });
 
       if (requestId !== workspaceRequestRef.current) {
@@ -190,13 +205,21 @@ export function useAppState() {
 
       setAnalysisResult(response.analysis);
       setCleanupPlan(response.cleanupPlan);
+      // Rebuild the default cleanup selection from the new policy. This
+      // conservatively drops items that are no longer recommended and never
+      // broadens the selection without a new recommendation.
       setSelectedCleanupPaths(
         response.cleanupPlan.candidates
           .filter((candidate) => candidate.selectedByDefault)
           .map((candidate) => candidate.path),
       );
-      setSelectedItemId(response.analysis.artifacts[0]?.path ?? null);
+      setSelectedItemId((current) =>
+        current && response.analysis.artifacts.some((artifact) => artifact.path === current)
+          ? current
+          : null,
+      );
       setCleanupResult(null);
+      setCleanupAgeDays(policyAgeDays);
       setLastAnalysisAtMs(Date.now());
       setError(
         [response.analysis.historyWarning, response.artifactSnapshotWarning]
@@ -206,6 +229,23 @@ export function useAppState() {
       setHistoryEntries(await loadActivityHistory());
       setActiveCategory('workspace');
     });
+  }
+
+  async function handleCleanupAgeChange(nextAgeDays: number) {
+    if (!cleanupAgeOptions.includes(nextAgeDays as (typeof cleanupAgeOptions)[number])) {
+      return;
+    }
+
+    if (nextAgeDays === cleanupAgeDays) {
+      return;
+    }
+
+    if (!analysisResult) {
+      setCleanupAgeDays(nextAgeDays);
+      return;
+    }
+
+    await analyzeWorkspaceWithPolicy(nextAgeDays, false, false);
   }
 
   function toggleCleanupPath(path: string) {
@@ -297,6 +337,7 @@ export function useAppState() {
     ),
     selectedCleanupPaths,
     selectedCandidateBytes,
+    cleanupAgeDays,
     sidebarEntries,
     filteredArtifacts,
     historyEntries,
@@ -318,6 +359,7 @@ export function useAppState() {
     handleRootChange,
     handleChooseWorkspace,
     handleAnalyzeWorkspace,
+    handleCleanupAgeChange,
     handleRequestCleanup,
     handleConfirmCleanup,
   };

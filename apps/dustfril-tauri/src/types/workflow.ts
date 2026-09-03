@@ -223,7 +223,11 @@ export type RunOptions = {
   root: string;
   ecosystems: Ecosystem[];
   recordHistory?: boolean;
+  cleanupAgeDays?: number;
+  recordArtifactSnapshot?: boolean;
 };
 
 export const ecosystems: Ecosystem[] = ['Rust', 'Node', 'Java'];
 export const deleteModes: DeleteMode[] = ['Trash', 'Permanent'];
+export const cleanupAgeOptions = [7, 14, 30, 60, 90] as const;
+export const defaultCleanupAgeDays = cleanupAgeOptions[2];

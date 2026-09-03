@@ -50,6 +50,12 @@ project identity (`root`, `displayName`, and `ecosystem`). The workspace UI uses
 that identity as the primary label and keeps the artifact name and full path
 visible for safe cleanup decisions.
 
+Analysis requests may include the optional `cleanupAgeDays` field. It must be
+positive and defaults to 30 days; the selected age is applied by Core to both
+artifact recommendations and the cleanup plan. Workspace analysis also accepts
+the optional `recordArtifactSnapshot` field, which defaults to `true`; policy-only
+refreshes set it to `false` so they do not change the generated-artifact baseline.
+
 ## v0.0.1 Features
 
 - Workspace-first Finder-like shell with native folder selection

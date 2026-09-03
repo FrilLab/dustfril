@@ -106,7 +106,7 @@ pub(super) fn normalize_candidates(candidates: &mut Vec<CleanupCandidate>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Artifact, CleanupRecommendation, Ecosystem};
+    use crate::models::{Artifact, CleanupRecommendation, Ecosystem, RecommendationPolicy};
 
     fn analysis(path: &str, recommendation: CleanupRecommendation) -> ArtifactAnalysis {
         ArtifactAnalysis {
@@ -116,6 +116,41 @@ mod tests {
             age_days: None,
             recommendation,
         }
+    }
+
+    fn policy_analysis(policy: RecommendationPolicy) -> AnalysisResult {
+        let artifacts = [
+            ("/workspace/node_modules", 10, 20),
+            ("/workspace/other/node_modules", 20, 40),
+        ]
+        .into_iter()
+        .map(|(path, size_bytes, age_days)| ArtifactAnalysis {
+            artifact: Artifact::new(PathBuf::from(path), Ecosystem::Node),
+            size_bytes,
+            last_modified: None,
+            age_days: Some(age_days),
+            recommendation: policy.recommendation(Some(age_days)),
+        })
+        .collect();
+
+        AnalysisResult {
+            artifacts,
+            total_size_bytes: 30,
+        }
+    }
+
+    #[test]
+    fn recommendation_policy_drives_reclaimable_total_once() {
+        let default_plan =
+            create_cleanup_plan(policy_analysis(RecommendationPolicy::default())).unwrap();
+        let sixty_day_plan =
+            create_cleanup_plan(policy_analysis(RecommendationPolicy::new(60).unwrap())).unwrap();
+        let seven_day_plan =
+            create_cleanup_plan(policy_analysis(RecommendationPolicy::new(7).unwrap())).unwrap();
+
+        assert_eq!(default_plan.reclaimable_size_bytes(), 20);
+        assert_eq!(sixty_day_plan.reclaimable_size_bytes(), 0);
+        assert_eq!(seven_day_plan.reclaimable_size_bytes(), 30);
     }
 
     #[test]

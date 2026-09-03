@@ -7,8 +7,8 @@ use dustfril_core::models::{
     ArtifactChangeKind, ArtifactSizeChange, ArtifactSnapshot, ArtifactSnapshotArtifact,
     ArtifactSnapshotResult, ArtifactSnapshotStatus, CleanupFailureReason, CleanupRecommendation,
     DeleteMode, Ecosystem, LifecycleScript, LockfileCheck, LockfileKind, LockfileStatus,
-    PackageManager, ProjectIdentity, RiskLevel, ScriptType, SecurityFinding, SecurityReport,
-    SecurityWarning,
+    PackageManager, ProjectIdentity, RecommendationPolicy, RiskLevel, ScriptType, SecurityFinding,
+    SecurityReport, SecurityWarning, DEFAULT_CLEANUP_AGE_DAYS,
 };
 use serde::{Deserialize, Serialize};
 
@@ -19,6 +19,19 @@ pub(crate) struct RunOptions {
     pub(crate) ecosystems: Vec<EcosystemDto>,
     #[serde(default)]
     pub(crate) record_history: Option<bool>,
+    #[serde(default)]
+    pub(crate) cleanup_age_days: Option<u64>,
+    #[serde(default)]
+    pub(crate) record_artifact_snapshot: Option<bool>,
+}
+
+impl RunOptions {
+    pub(crate) fn recommendation_policy(&self) -> Result<RecommendationPolicy, String> {
+        let cleanup_age_days = self.cleanup_age_days.unwrap_or(DEFAULT_CLEANUP_AGE_DAYS);
+
+        RecommendationPolicy::new(cleanup_age_days)
+            .ok_or_else(|| "Cleanup age must be greater than zero days.".to_owned())
+    }
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq)]
@@ -579,6 +592,8 @@ mod tests {
             vec![EcosystemDto::Rust, EcosystemDto::Node, EcosystemDto::Java]
         );
         assert_eq!(options.record_history, None);
+        assert_eq!(options.cleanup_age_days, None);
+        assert_eq!(options.record_artifact_snapshot, None);
 
         let explicit_analysis_options: RunOptions = serde_json::from_value(json!({
             "root": "/workspace",
@@ -587,6 +602,34 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(explicit_analysis_options.record_history, Some(true));
+        assert_eq!(explicit_analysis_options.cleanup_age_days, None);
+        assert_eq!(explicit_analysis_options.record_artifact_snapshot, None);
+
+        let configured_analysis_options: RunOptions = serde_json::from_value(json!({
+            "root": "/workspace",
+            "ecosystems": ["Rust"],
+            "cleanupAgeDays": 60
+        }))
+        .unwrap();
+        assert_eq!(configured_analysis_options.cleanup_age_days, Some(60));
+        assert_eq!(configured_analysis_options.record_artifact_snapshot, None);
+        assert_eq!(
+            configured_analysis_options
+                .recommendation_policy()
+                .unwrap()
+                .cleanup_age_days(),
+            60
+        );
+
+        let refresh_options: RunOptions = serde_json::from_value(json!({
+            "root": "/workspace",
+            "ecosystems": ["Rust"],
+            "recordHistory": false,
+            "recordArtifactSnapshot": false
+        }))
+        .unwrap();
+        assert_eq!(refresh_options.record_history, Some(false));
+        assert_eq!(refresh_options.record_artifact_snapshot, Some(false));
     }
 
     #[test]
@@ -988,6 +1031,14 @@ mod tests {
             "ecosystems": [],
             "global": true
         }))
+        .is_err());
+        assert!(serde_json::from_value::<RunOptions>(json!({
+            "root": null,
+            "ecosystems": [],
+            "cleanupAgeDays": 0
+        }))
+        .unwrap()
+        .recommendation_policy()
         .is_err());
     }
 }
