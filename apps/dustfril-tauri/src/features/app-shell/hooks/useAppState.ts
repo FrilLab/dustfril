@@ -181,10 +181,14 @@ export function useAppState() {
       return;
     }
 
-    await analyzeWorkspaceWithPolicy(cleanupAgeDays, true);
+    await analyzeWorkspaceWithPolicy(cleanupAgeDays, true, true);
   }
 
-  async function analyzeWorkspaceWithPolicy(policyAgeDays: number, recordHistory: boolean) {
+  async function analyzeWorkspaceWithPolicy(
+    policyAgeDays: number,
+    recordHistory: boolean,
+    recordArtifactSnapshot: boolean,
+  ) {
     await runAction('analyze-workspace', async () => {
       const requestId = ++workspaceRequestRef.current;
       const response = await analyzeWorkspace({
@@ -192,6 +196,7 @@ export function useAppState() {
         ecosystems: [...ecosystems],
         cleanupAgeDays: policyAgeDays,
         recordHistory,
+        recordArtifactSnapshot,
       });
 
       if (requestId !== workspaceRequestRef.current) {
@@ -240,7 +245,7 @@ export function useAppState() {
       return;
     }
 
-    await analyzeWorkspaceWithPolicy(nextAgeDays, false);
+    await analyzeWorkspaceWithPolicy(nextAgeDays, false, false);
   }
 
   function toggleCleanupPath(path: string) {

@@ -181,6 +181,28 @@ fn record_failed_scan_activity(root: &Path, error: &DustError) {
     }
 }
 
+fn record_artifact_snapshot_if_enabled(
+    enabled: bool,
+    root: &Path,
+    analysis: &AnalysisResult,
+    ecosystems: &[Ecosystem],
+) -> (Option<contract::ArtifactSnapshotResultDto>, Option<String>) {
+    if !enabled {
+        return (None, None);
+    }
+
+    match api::artifact_snapshot::record_artifact_snapshot_with_ecosystems(
+        root, analysis, ecosystems,
+    ) {
+        Ok(snapshot) => (Some(artifact_snapshot_to_dto(snapshot)), None),
+        Err(error) => {
+            let warning = format!("Failed to record artifact snapshot: {error}");
+            eprintln!("{warning}");
+            (None, Some(warning))
+        }
+    }
+}
+
 #[tauri::command]
 async fn default_root() -> Result<String, String> {
     tokio::task::spawn_blocking(|| default_root_path().map(|path| path.display().to_string()))
@@ -316,6 +338,7 @@ async fn analyze(options: RunOptions) -> Result<AnalysisResponse, String> {
 async fn analyze_workspace(options: RunOptions) -> Result<WorkspaceAnalysisResponse, String> {
     let policy = options.recommendation_policy()?;
     let record_history = options.record_history.unwrap_or(true);
+    let record_artifact_snapshot = options.record_artifact_snapshot.unwrap_or(true);
     let root = resolve_root(options.root)?;
     let ecosystems: Vec<_> = options.ecosystems.into_iter().map(Into::into).collect();
 
@@ -335,20 +358,12 @@ async fn analyze_workspace(options: RunOptions) -> Result<WorkspaceAnalysisRespo
         let plan = api::clean::build_plan_from_analysis(analysis.clone())
             .map_err(|error| error.to_string())?;
 
-        let mut artifact_snapshot = None;
-        let mut artifact_snapshot_warning = None;
-        match api::artifact_snapshot::record_artifact_snapshot_with_ecosystems(
+        let (artifact_snapshot, artifact_snapshot_warning) = record_artifact_snapshot_if_enabled(
+            record_artifact_snapshot,
             &root,
             &analysis,
             &ecosystems,
-        ) {
-            Ok(snapshot) => artifact_snapshot = Some(artifact_snapshot_to_dto(snapshot)),
-            Err(error) => {
-                let warning = format!("Failed to record artifact snapshot: {error}");
-                eprintln!("{warning}");
-                artifact_snapshot_warning = Some(warning);
-            }
-        }
+        );
 
         let history_warning = if record_history {
             match history::record_scan(&root, &scan_result, analysis.total_size_bytes) {
@@ -658,5 +673,18 @@ mod tests {
                 .total_size_bytes,
             3
         );
+    }
+
+    #[test]
+    fn disabled_artifact_snapshot_recording_does_not_touch_snapshot_state() {
+        let (snapshot, warning) = record_artifact_snapshot_if_enabled(
+            false,
+            Path::new("/workspace/snapshot-refresh-test"),
+            &AnalysisResult::default(),
+            &[Ecosystem::Rust],
+        );
+
+        assert!(snapshot.is_none());
+        assert!(warning.is_none());
     }
 }

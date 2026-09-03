@@ -21,6 +21,8 @@ pub(crate) struct RunOptions {
     pub(crate) record_history: Option<bool>,
     #[serde(default)]
     pub(crate) cleanup_age_days: Option<u64>,
+    #[serde(default)]
+    pub(crate) record_artifact_snapshot: Option<bool>,
 }
 
 impl RunOptions {
@@ -591,6 +593,7 @@ mod tests {
         );
         assert_eq!(options.record_history, None);
         assert_eq!(options.cleanup_age_days, None);
+        assert_eq!(options.record_artifact_snapshot, None);
 
         let explicit_analysis_options: RunOptions = serde_json::from_value(json!({
             "root": "/workspace",
@@ -600,6 +603,7 @@ mod tests {
         .unwrap();
         assert_eq!(explicit_analysis_options.record_history, Some(true));
         assert_eq!(explicit_analysis_options.cleanup_age_days, None);
+        assert_eq!(explicit_analysis_options.record_artifact_snapshot, None);
 
         let configured_analysis_options: RunOptions = serde_json::from_value(json!({
             "root": "/workspace",
@@ -608,6 +612,7 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(configured_analysis_options.cleanup_age_days, Some(60));
+        assert_eq!(configured_analysis_options.record_artifact_snapshot, None);
         assert_eq!(
             configured_analysis_options
                 .recommendation_policy()
@@ -615,6 +620,16 @@ mod tests {
                 .cleanup_age_days(),
             60
         );
+
+        let refresh_options: RunOptions = serde_json::from_value(json!({
+            "root": "/workspace",
+            "ecosystems": ["Rust"],
+            "recordHistory": false,
+            "recordArtifactSnapshot": false
+        }))
+        .unwrap();
+        assert_eq!(refresh_options.record_history, Some(false));
+        assert_eq!(refresh_options.record_artifact_snapshot, Some(false));
     }
 
     #[test]

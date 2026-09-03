@@ -224,6 +224,7 @@ export type RunOptions = {
   ecosystems: Ecosystem[];
   recordHistory?: boolean;
   cleanupAgeDays?: number;
+  recordArtifactSnapshot?: boolean;
 };
 
 export const ecosystems: Ecosystem[] = ['Rust', 'Node', 'Java'];
