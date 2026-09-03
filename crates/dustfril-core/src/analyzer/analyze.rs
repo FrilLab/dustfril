@@ -3,7 +3,7 @@ use std::{fs, path::Path};
 
 use crate::error::DustResult;
 use crate::models::{
-    AnalysisResult, Artifact, ArtifactAnalysis, CleanupRecommendation, ScanResult,
+    AnalysisResult, Artifact, ArtifactAnalysis, RecommendationPolicy, ScanResult,
     normalize_artifacts,
 };
 use rayon::prelude::*;
@@ -14,9 +14,17 @@ pub struct Analyzer;
 impl Analyzer {
     /// Computes per-artifact size and freshness metadata for a scan result.
     pub fn analyze(scan_result: ScanResult) -> DustResult<AnalysisResult> {
+        Self::analyze_with_policy(scan_result, RecommendationPolicy::default())
+    }
+
+    /// Computes per-artifact metadata using the supplied cleanup policy.
+    pub fn analyze_with_policy(
+        scan_result: ScanResult,
+        policy: RecommendationPolicy,
+    ) -> DustResult<AnalysisResult> {
         let mut artifacts: Vec<ArtifactAnalysis> = normalize_artifacts(scan_result.artifacts)
             .into_par_iter()
-            .map(Self::analyze_artifact)
+            .map(|artifact| Self::analyze_artifact(artifact, policy))
             .collect();
 
         artifacts.sort_by_key(|artifact| std::cmp::Reverse(artifact.size_bytes));
@@ -32,10 +40,10 @@ impl Analyzer {
         })
     }
 
-    fn analyze_artifact(artifact: Artifact) -> ArtifactAnalysis {
+    fn analyze_artifact(artifact: Artifact, policy: RecommendationPolicy) -> ArtifactAnalysis {
         let (size_bytes, last_modified) = calculate_artifact_metadata(&artifact.path);
         let age_days = calculate_age_days(last_modified);
-        let recommendation = recommend_cleanup(age_days);
+        let recommendation = policy.recommendation(age_days);
 
         ArtifactAnalysis {
             artifact,
@@ -54,23 +62,6 @@ fn calculate_age_days(modified: Option<SystemTime>) -> Option<u64> {
     const SECONDS_PER_DAY: u64 = 60 * 60 * 24;
 
     Some(duration.as_secs() / SECONDS_PER_DAY)
-}
-
-fn recommend_cleanup(age_days: Option<u64>) -> CleanupRecommendation {
-    let Some(days) = age_days else {
-        return CleanupRecommendation::NeedsReview;
-    };
-
-    const KEEP_DAYS: u64 = 30;
-    const REVIEW_DAYS: u64 = 90;
-
-    if days <= KEEP_DAYS {
-        CleanupRecommendation::Keep
-    } else if days <= REVIEW_DAYS {
-        CleanupRecommendation::NeedsReview
-    } else {
-        CleanupRecommendation::SafeToClean
-    }
 }
 
 fn calculate_artifact_metadata(path: &Path) -> (u64, Option<SystemTime>) {
@@ -101,23 +92,28 @@ fn calculate_artifact_metadata(path: &Path) -> (u64, Option<SystemTime>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{calculate_age_days, recommend_cleanup};
-    use crate::models::CleanupRecommendation;
+    use super::calculate_age_days;
+    use crate::models::{CleanupRecommendation, RecommendationPolicy};
 
     #[test]
     fn cleanup_recommendations_use_documented_age_boundaries() {
-        assert_eq!(recommend_cleanup(None), CleanupRecommendation::NeedsReview);
-        assert_eq!(recommend_cleanup(Some(30)), CleanupRecommendation::Keep);
+        let policy = RecommendationPolicy::default();
+
         assert_eq!(
-            recommend_cleanup(Some(31)),
+            policy.recommendation(None),
+            CleanupRecommendation::NeedsReview
+        );
+        assert_eq!(policy.recommendation(Some(14)), CleanupRecommendation::Keep);
+        assert_eq!(
+            policy.recommendation(Some(15)),
             CleanupRecommendation::NeedsReview
         );
         assert_eq!(
-            recommend_cleanup(Some(90)),
+            policy.recommendation(Some(29)),
             CleanupRecommendation::NeedsReview
         );
         assert_eq!(
-            recommend_cleanup(Some(91)),
+            policy.recommendation(Some(30)),
             CleanupRecommendation::SafeToClean
         );
     }

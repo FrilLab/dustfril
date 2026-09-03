@@ -1,12 +1,20 @@
 use crate::{
     analyzer,
     error::DustResult,
-    models::{AnalysisResult, ScanResult},
+    models::{AnalysisResult, RecommendationPolicy, ScanResult},
 };
 
 /// Analyzes scanned artifacts and returns size, age, and cleanup hints.
 pub fn analyze(scan_result: ScanResult) -> DustResult<AnalysisResult> {
     analyzer::Analyzer::analyze(scan_result)
+}
+
+/// Analyzes scanned artifacts with an explicit cleanup recommendation policy.
+pub fn analyze_with_policy(
+    scan_result: ScanResult,
+    policy: RecommendationPolicy,
+) -> DustResult<AnalysisResult> {
+    analyzer::Analyzer::analyze_with_policy(scan_result, policy)
 }
 
 #[cfg(test)]

@@ -190,6 +190,11 @@ returned by discovery, including its root directory and ecosystem. The scanned
 workspace remains the traversal boundary and is not replaced by an artifact's
 own project root.
 
+Cleanup recommendations in the desktop analysis flow use a configurable
+inactivity age. The default is 30 days; artifacts at least that old are
+recommended for cleanup, while the review boundary is the ceiling of half the
+configured age.
+
 Start the frontend app from `apps/dustfril-tauri`:
 
 ```bash

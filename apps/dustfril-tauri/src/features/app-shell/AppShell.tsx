@@ -48,24 +48,25 @@ export function AppShell() {
 
           {app.activeCategory === 'workspace' ? (
             <WorkspaceView
-              root={app.root}
               artifacts={app.filteredArtifacts}
+              artifactCount={app.summary.artifactCount}
               candidates={app.cleanupPlan?.candidates ?? []}
               reclaimableBytes={app.cleanupPlan?.reclaimableSizeBytes ?? 0}
               selectedItemId={app.selectedItemId}
               selectedPaths={app.selectedCleanupPaths}
-              selectedBytes={app.selectedCandidateBytes}
               deleteMode={app.deleteMode}
               deleteModes={app.deleteModes}
+              cleanupAgeDays={app.cleanupAgeDays}
               lastAnalysisAtMs={app.lastAnalysisAtMs}
               busy={app.busyAction !== null}
               analysisReady={app.analysisResult !== null}
               statusMessage={app.statusMessage}
               error={app.error}
-              discoveredEcosystems={app.discoveredEcosystems}
               onSelectItem={app.setSelectedItemId}
+              onCloseInspector={() => app.setSelectedItemId(null)}
               onTogglePath={app.toggleCleanupPath}
               onDeleteModeChange={app.setDeleteMode}
+              onCleanupAgeChange={app.handleCleanupAgeChange}
             />
           ) : null}
 
@@ -87,9 +88,7 @@ export function AppShell() {
           )}
         </div>
         <div className="statusbar-selection">
-          <span>
-            Selected {app.selectedCleanupPaths.length} · {formatBytes(app.selectedCandidateBytes)}
-          </span>
+          <span>Selected size {formatBytes(app.selectedCandidateBytes)}</span>
           <button
             type="button"
             className="review-button"

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { EmptyState } from '../../../components/EmptyState/EmptyState';
 import { FolderIcon, ItemIcon } from '../../../components/icons';
 import { formatAge, formatBytes, formatCount, formatDate } from '../../../lib/format';
@@ -12,28 +13,29 @@ import type {
   ArtifactAnalysis,
   CleanupCandidate,
   DeleteMode,
-  Ecosystem,
 } from '../../../types/workflow';
+import { cleanupAgeOptions } from '../../../types/workflow';
 
 type WorkspaceViewProps = {
-  root: string;
   artifacts: ArtifactAnalysis[];
+  artifactCount: number;
   candidates: CleanupCandidate[];
   reclaimableBytes: number;
   selectedItemId: string | null;
   selectedPaths: string[];
-  selectedBytes: number;
   deleteMode: DeleteMode;
   deleteModes: DeleteMode[];
+  cleanupAgeDays: number;
   lastAnalysisAtMs: number | null;
   busy: boolean;
   analysisReady: boolean;
   statusMessage: string;
   error: string | null;
-  discoveredEcosystems: Ecosystem[];
   onSelectItem: (path: string) => void;
+  onCloseInspector: () => void;
   onTogglePath: (path: string) => void;
   onDeleteModeChange: (mode: DeleteMode) => void;
+  onCleanupAgeChange: (days: number) => void | Promise<void>;
 };
 
 export function WorkspaceView(props: WorkspaceViewProps) {
@@ -41,30 +43,29 @@ export function WorkspaceView(props: WorkspaceViewProps) {
   const selectedArtifact =
     props.artifacts.find((artifact) => artifact.path === props.selectedItemId) ?? null;
 
+  useEffect(() => {
+    if (!selectedArtifact) {
+      return;
+    }
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        props.onCloseInspector();
+      }
+    }
+
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [props.onCloseInspector, props.selectedItemId]);
+
   return (
     <div className="workspace-view">
-      <div className="content-heading">
-        <div className="heading-icon">
-          <FolderIcon />
-        </div>
-        <div className="min-width-zero">
-          <p className="eyebrow">Workspace</p>
-          <h1>{props.root ? leafName(props.root) : 'Choose a workspace'}</h1>
-          <p className="heading-path" title={props.root}>
-            {props.root || 'Select a folder to discover supported project artifacts.'}
-          </p>
-        </div>
-        {props.lastAnalysisAtMs ? (
-          <p className="last-analysis">Analyzed {formatDate(props.lastAnalysisAtMs)}</p>
-        ) : null}
-      </div>
-
       <div className="workspace-summary-strip" aria-live="polite">
         {props.analysisReady ? (
           <>
             <span>
-              <strong>{formatCount(props.artifacts.length)}</strong> artifact
-              {props.artifacts.length === 1 ? '' : 's'}
+              <strong>{formatCount(props.artifactCount)}</strong> artifact
+              {props.artifactCount === 1 ? '' : 's'}
             </span>
             <span className="summary-separator">·</span>
             <span>
@@ -77,17 +78,15 @@ export function WorkspaceView(props: WorkspaceViewProps) {
             <span>
               <strong>{formatCount(props.selectedPaths.length)}</strong> selected
             </span>
+            {props.lastAnalysisAtMs ? (
+              <span className="summary-last-analysis">
+                Analyzed {formatDate(props.lastAnalysisAtMs)}
+              </span>
+            ) : null}
           </>
         ) : (
           <span>Analyze this workspace to load artifacts and cleanup recommendations.</span>
         )}
-        <div className="ecosystem-list">
-          {props.discoveredEcosystems.map((ecosystem) => (
-            <span key={ecosystem} className="ecosystem-pill">
-              {ecosystem}
-            </span>
-          ))}
-        </div>
       </div>
 
       {props.error ? (
@@ -113,9 +112,21 @@ export function WorkspaceView(props: WorkspaceViewProps) {
                   : 'Analyze the workspace to load recommendations.'}
               </p>
             </div>
-            {props.analysisReady ? (
-              <span className="results-count">{formatCount(props.artifacts.length)} visible</span>
-            ) : null}
+            <label className="cleanup-age-control">
+              <span>Cleanup age</span>
+              <select
+                value={props.cleanupAgeDays}
+                onChange={(event) => void props.onCleanupAgeChange(Number(event.currentTarget.value))}
+                disabled={props.busy}
+                aria-label="Cleanup age"
+              >
+                {cleanupAgeOptions.map((days) => (
+                  <option key={days} value={days}>
+                    {days} days
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
 
           <WorkspaceResults
@@ -129,7 +140,14 @@ export function WorkspaceView(props: WorkspaceViewProps) {
           />
         </section>
 
-        <Inspector artifact={selectedArtifact} candidate={selectedArtifact ? candidatesByPath.get(selectedArtifact.path) : undefined} selectedPaths={props.selectedPaths} />
+        {selectedArtifact ? (
+          <Inspector
+            artifact={selectedArtifact}
+            candidate={candidatesByPath.get(selectedArtifact.path)}
+            selectedPaths={props.selectedPaths}
+            onClose={props.onCloseInspector}
+          />
+        ) : null}
       </div>
 
       <div className="workspace-controls">
@@ -148,11 +166,6 @@ export function WorkspaceView(props: WorkspaceViewProps) {
             ))}
           </div>
         </div>
-        <p className="workspace-control-note">
-          {props.busy
-            ? 'Analysis in progress…'
-            : `${formatCount(props.selectedPaths.length)} selected · ${formatBytes(props.selectedBytes)}`}
-        </p>
       </div>
     </div>
   );
@@ -226,6 +239,7 @@ function WorkspaceResults(props: WorkspaceResultsProps) {
                     checked={selected}
                     onChange={() => props.onTogglePath(candidate.path)}
                     onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
                     aria-label={`Select ${artifactLabel(artifact)} in ${artifact.project.displayName} for cleanup`}
                   />
                 ) : (
@@ -273,48 +287,55 @@ function Inspector({
   artifact,
   candidate,
   selectedPaths,
+  onClose,
 }: {
   artifact: ArtifactAnalysis | null;
   candidate: CleanupCandidate | undefined;
   selectedPaths: string[];
+  onClose: () => void;
 }) {
+  if (!artifact) {
+    return null;
+  }
+
   return (
-    <aside className="inspector-pane" aria-label="Artifact inspector">
+    <aside className="inspector-pane workspace-drawer" aria-label="Artifact inspector">
       <div className="inspector-header">
         <span className="eyebrow">Inspector</span>
+        <button type="button" className="inspector-close" onClick={onClose} aria-label="Close inspector">
+          ×
+        </button>
       </div>
-      {artifact ? (
-        <div className="inspector-content">
-          {candidate && selectedPaths.includes(candidate.path) &&
-          artifact.recommendation !== 'SafeToClean' ? (
-            <p className="recommendation-guidance" role="status">
-              {recommendationGuidance(artifact.recommendation)}
-            </p>
-          ) : null}
-          <div className="inspector-title-row">
-            <ItemIcon kind="folder" large />
-            <div className="min-width-zero">
-              <strong className="inspector-title">{artifact.project.displayName}</strong>
-              <span className="inspector-artifact">{artifactLabel(artifact)}</span>
-              <span className={recommendationClass(artifact.recommendation)}>
-                {recommendationLabel(artifact.recommendation)}
-              </span>
-            </div>
+      <div className="inspector-content">
+        {candidate && selectedPaths.includes(candidate.path) &&
+        artifact.recommendation !== 'SafeToClean' ? (
+          <p className="recommendation-guidance" role="status">
+            {recommendationGuidance(artifact.recommendation)}
+          </p>
+        ) : null}
+        <div className="inspector-title-row">
+          <ItemIcon kind="folder" large />
+          <div className="min-width-zero">
+            <strong className="inspector-title">{artifact.project.displayName}</strong>
+            <span className="inspector-artifact">{artifactLabel(artifact)}</span>
+            <span className={recommendationClass(artifact.recommendation)}>
+              {recommendationLabel(artifact.recommendation)}
+            </span>
           </div>
-          <dl className="inspector-details">
-            {artifactDetailLines(artifact, candidate, candidate ? selectedPaths.includes(candidate.path) : false).map(
-              ([label, value]) => (
-                <div key={label}>
-                  <dt>{label}</dt>
-                  <dd title={value}>{value}</dd>
-                </div>
-              ),
-            )}
-          </dl>
         </div>
-      ) : (
-        <EmptyState compact message="Select an artifact to inspect its path, size, and recommendation." />
-      )}
+        <dl className="inspector-details">
+          {artifactDetailLines(
+            artifact,
+            candidate,
+            candidate ? selectedPaths.includes(candidate.path) : false,
+          ).map(([label, value]) => (
+            <div key={label}>
+              <dt>{label}</dt>
+              <dd title={value}>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
     </aside>
   );
 }

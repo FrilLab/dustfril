@@ -7,7 +7,9 @@ This crate contains the filesystem scanners, analyzers, cleanup planner and exec
 ## Public API Areas
 
 - `api::scan`: detect supported artifacts under a root path
-- `api::analyze`: compute size, age, and cleanup recommendation
+- `api::analyze`: compute size, age, and default cleanup recommendation
+- `api::analyze_with_policy`: compute size, age, and recommendation from an
+  explicit inactivity-age policy
 - `api::artifact_snapshot`: build and persist generated-artifact snapshots from an existing `AnalysisResult`
 - `api::clean::build_plan`: build cleanup candidates from scan results
 - `api::clean::build_plan_from_analysis_with_selection`: validate explicit
@@ -46,6 +48,11 @@ as removed or spuriously new by later snapshots.
 
 Cleanup execution validates artifact type and protected paths, refuses
 symbolic links, and never falls back from Trash mode to permanent deletion.
+
+`RecommendationPolicy` is the canonical cleanup recommendation rule. Its
+default cleanup age is 30 days; the review boundary is the ceiling of half
+that age. A positive configured age is required, and unknown artifact ages
+remain `NeedsReview`.
 
 Artifact discovery returns an explicit `ProjectIdentity` with the discovered
 project root, directory-based display name, and ecosystem. That identity is

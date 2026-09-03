@@ -261,6 +261,7 @@ async fn scan(options: RunOptions) -> Result<ScanResponse, String> {
 
 #[tauri::command]
 async fn analyze(options: RunOptions) -> Result<AnalysisResponse, String> {
+    let policy = options.recommendation_policy()?;
     let record_history = options.record_history.unwrap_or(false);
     let root = resolve_root(options.root)?;
     let ecosystems: Vec<_> = options.ecosystems.into_iter().map(Into::into).collect();
@@ -275,7 +276,8 @@ async fn analyze(options: RunOptions) -> Result<AnalysisResponse, String> {
                 return Err(error.to_string());
             }
         };
-        let analysis = api::analyze(scan_result.clone()).map_err(|error| error.to_string())?;
+        let analysis = api::analyze_with_policy(scan_result.clone(), policy)
+            .map_err(|error| error.to_string())?;
         let history_warning = if record_history {
             match history::record_scan(&root, &scan_result, analysis.total_size_bytes) {
                 Ok(()) => None,
@@ -312,6 +314,7 @@ async fn analyze(options: RunOptions) -> Result<AnalysisResponse, String> {
 /// selected folder again.
 #[tauri::command]
 async fn analyze_workspace(options: RunOptions) -> Result<WorkspaceAnalysisResponse, String> {
+    let policy = options.recommendation_policy()?;
     let record_history = options.record_history.unwrap_or(true);
     let root = resolve_root(options.root)?;
     let ecosystems: Vec<_> = options.ecosystems.into_iter().map(Into::into).collect();
@@ -326,7 +329,8 @@ async fn analyze_workspace(options: RunOptions) -> Result<WorkspaceAnalysisRespo
                 return Err(error.to_string());
             }
         };
-        let analysis = api::analyze(scan_result.clone()).map_err(|error| error.to_string())?;
+        let analysis = api::analyze_with_policy(scan_result.clone(), policy)
+            .map_err(|error| error.to_string())?;
         let analysis_id = cache_analysis(&root, &ecosystems, &analysis);
         let plan = api::clean::build_plan_from_analysis(analysis.clone())
             .map_err(|error| error.to_string())?;
@@ -400,12 +404,14 @@ async fn analyze_workspace(options: RunOptions) -> Result<WorkspaceAnalysisRespo
 
 #[tauri::command]
 async fn build_cleanup_plan(options: RunOptions) -> Result<CleanupPlanResponse, String> {
+    let policy = options.recommendation_policy()?;
     let root = resolve_root(options.root)?;
     let ecosystems: Vec<_> = options.ecosystems.into_iter().map(Into::into).collect();
 
     tokio::task::spawn_blocking(move || {
         let scan_result = api::scan(&root, &ecosystems).map_err(|error| error.to_string())?;
-        let analysis = api::analyze(scan_result).map_err(|error| error.to_string())?;
+        let analysis =
+            api::analyze_with_policy(scan_result, policy).map_err(|error| error.to_string())?;
         let analysis_id = cache_analysis(&root, &ecosystems, &analysis);
         let plan =
             api::clean::build_plan_from_analysis(analysis).map_err(|error| error.to_string())?;
