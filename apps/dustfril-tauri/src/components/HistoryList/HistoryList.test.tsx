@@ -72,18 +72,56 @@ const permanentCleanupEntry: ActivityRecord = {
   },
 };
 
+const failedCleanupEntry: ActivityRecord = {
+  ...cleanupEntry,
+  id: 'cleanup-failed',
+  result: {
+    success: false,
+    details: {
+      ...cleanupEntry.result.details,
+      items: cleanupEntry.result.details.items?.slice(1) ?? [],
+      deleted: [],
+      failed: [{ path: '/Users/mars112/code/project/node_modules', reason: 'NotFound' }],
+    },
+  },
+};
+
+const securityEntry: ActivityRecord = {
+  id: 'security-1',
+  timestampMs: Date.UTC(2026, 8, 3, 4, 20),
+  kind: 'Security',
+  result: {
+    success: true,
+    details: {
+      path: '/Users/mars112/code/dustfril',
+      ecosystems: [],
+      findingCount: 0,
+      highestRisk: 'None',
+      findings: [],
+    },
+  },
+};
+
 describe('HistoryList', () => {
   it('renders compact operation rows and keeps diagnostics in the drawer', () => {
     render(<HistoryList entries={[scanEntry]} />);
 
-    expect(screen.getByText('Sep 3, 1:05 PM')).toBeInTheDocument();
+    const expectedTime = new Intl.DateTimeFormat(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(new Date(scanEntry.timestampMs));
+    expect(screen.getByText(expectedTime)).toBeInTheDocument();
     expect(screen.getByText('Scan')).toBeInTheDocument();
     expect(screen.getByText('dustfril')).toBeInTheDocument();
     expect(screen.getByText(/2 artifacts · 11 GB/)).toBeInTheDocument();
     expect(screen.getByText('Success')).toBeInTheDocument();
     expect(screen.queryByText('Directories')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Inspect Scan activity/ }));
+    const row = screen.getByRole('row', { name: /Inspect Scan activity/ });
+    expect(row).toHaveAttribute('tabindex', '0');
+    fireEvent.keyDown(row, { key: 'Enter' });
 
     expect(screen.getByRole('heading', { name: 'Scan details' })).toBeInTheDocument();
     expect(screen.getByText('/Users/mars112/code/dustfril')).toBeInTheDocument();
@@ -100,8 +138,8 @@ describe('HistoryList', () => {
     render(<HistoryList entries={[scanEntry, cleanupEntry]} />);
 
     expect(screen.getByText('Partial failure')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Inspect Scan activity/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Inspect Cleanup activity/ }));
+    fireEvent.click(screen.getByRole('row', { name: /Inspect Scan activity/ }));
+    fireEvent.click(screen.getByRole('row', { name: /Inspect Cleanup activity/ }));
 
     expect(screen.getByRole('heading', { name: 'Cleanup details' })).toBeInTheDocument();
     expect(screen.getByText('Move to Trash')).toBeInTheDocument();
@@ -113,7 +151,7 @@ describe('HistoryList', () => {
     expect(screen.queryByRole('heading', { name: 'Cleanup details' })).not.toBeInTheDocument();
     expect(screen.getByText('Partial failure')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Inspect Scan activity/ }));
+    fireEvent.click(screen.getByRole('row', { name: /Inspect Scan activity/ }));
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.queryByRole('heading', { name: 'Scan details' })).not.toBeInTheDocument();
   });
@@ -121,10 +159,26 @@ describe('HistoryList', () => {
   it('labels permanent cleanup details distinctly from Trash cleanup', () => {
     render(<HistoryList entries={[permanentCleanupEntry]} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Inspect Cleanup activity/ }));
+    fireEvent.click(screen.getByRole('row', { name: /Inspect Cleanup activity/ }));
 
     expect(screen.getByText('Delete permanently')).toBeInTheDocument();
     expect(screen.queryByText('Move to Trash')).not.toBeInTheDocument();
     expect(screen.getByText('Deleted permanently')).toBeInTheDocument();
+  });
+
+  it('keeps all-failed cleanup operations distinct from partial failures', () => {
+    render(<HistoryList entries={[failedCleanupEntry]} />);
+
+    expect(screen.getByText('Failed')).toBeInTheDocument();
+    expect(screen.queryByText('Partial failure')).not.toBeInTheDocument();
+  });
+
+  it('preserves the recorded empty security ecosystem scope', () => {
+    render(<HistoryList entries={[securityEntry]} />);
+
+    fireEvent.click(screen.getByRole('row', { name: /Inspect Security activity/ }));
+
+    expect(screen.getByText('Ecosystems').parentElement).toHaveTextContent('None');
+    expect(screen.queryByText('All')).not.toBeInTheDocument();
   });
 });

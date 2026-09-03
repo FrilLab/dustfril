@@ -45,25 +45,27 @@ export function HistoryList(props: HistoryListProps) {
   }
 
   return (
-    <div className="history-list-container">
-      <div className="history-table" role="table" aria-label="Activity history">
-        <div className="history-row history-row-header" role="row">
-          <span role="columnheader">Time</span>
-          <span role="columnheader">Action</span>
-          <span role="columnheader">Target</span>
-          <span role="columnheader">Result</span>
-          <span role="columnheader">Status</span>
-          <span aria-hidden="true" />
-        </div>
-        <div className="history-table-body">
-          {props.entries.map((entry, index) => (
-            <HistoryRow
-              key={`${entry.id}-${index}`}
-              entry={entry}
-              selected={entry.id === selectedEntryId}
-              onSelect={() => setSelectedEntryId(entry.id)}
-            />
-          ))}
+    <div className="history-list-layout">
+      <div className="history-list-scroll">
+        <div className="history-table" role="table" aria-label="Activity history">
+          <div className="history-row history-row-header" role="row">
+            <span role="columnheader">Time</span>
+            <span role="columnheader">Action</span>
+            <span role="columnheader">Target</span>
+            <span role="columnheader">Result</span>
+            <span role="columnheader">Status</span>
+            <span aria-hidden="true" />
+          </div>
+          <div className="history-table-body">
+            {props.entries.map((entry, index) => (
+              <HistoryRow
+                key={`${entry.id}-${index}`}
+                entry={entry}
+                selected={entry.id === selectedEntryId}
+                onSelect={() => setSelectedEntryId(entry.id)}
+              />
+            ))}
+          </div>
         </div>
       </div>
 
@@ -89,28 +91,39 @@ function HistoryRow({
   const status = historyStatusLabel(entry);
 
   return (
-    <button
-      type="button"
-      className={`history-row history-row-button${selected ? ' history-row-active' : ''}`}
+    <div
+      className={`history-row history-row-interactive${selected ? ' history-row-active' : ''}`}
+      role="row"
+      tabIndex={0}
       onClick={onSelect}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onSelect();
+        }
+      }}
       aria-label={`Inspect ${entry.kind} activity for ${historyTargetLabel(entry)}`}
     >
-      <span className="history-time">{formatHistoryDate(entry.timestampMs)}</span>
-      <span className={`history-kind history-kind-${entry.kind.toLowerCase()}`}>
+      <span className="history-time" role="cell">
+        {formatHistoryDate(entry.timestampMs)}
+      </span>
+      <span className={`history-kind history-kind-${entry.kind.toLowerCase()}`} role="cell">
         <span className="history-kind-mark" aria-hidden="true" />
         {entry.kind}
       </span>
-      <span className="history-target" title={historyTargetLabel(entry)}>
+      <span className="history-target" role="cell" title={historyTargetLabel(entry)}>
         {historyTargetLabel(entry)}
       </span>
-      <span className="history-result" title={historyResultLabel(entry)}>
+      <span className="history-result" role="cell" title={historyResultLabel(entry)}>
         {historyResultLabel(entry)}
       </span>
-      <span className={`history-status ${historyStatusClass(status)}`}>{status}</span>
-      <span className="history-chevron" aria-hidden="true">
+      <span className={`history-status ${historyStatusClass(status)}`} role="cell">
+        {status}
+      </span>
+      <span className="history-chevron" role="cell" aria-hidden="true">
         ›
       </span>
-    </button>
+    </div>
   );
 }
 
@@ -269,10 +282,7 @@ function SecurityDetails({ details }: { details: ActivityDetails }) {
     <>
       <dl className="inspector-details history-drawer-details">
         <Detail label="Target" value={details.path ?? 'Unknown'} />
-        <Detail
-          label="Ecosystems"
-          value={details.ecosystems?.length ? details.ecosystems.join(', ') : 'All'}
-        />
+        <Detail label="Ecosystems" value={securityEcosystemLabel(details.ecosystems)} />
         <Detail label="Findings" value={String(details.findingCount ?? findings.length)} />
         <Detail label="Highest risk" value={details.highestRisk ?? 'None'} />
       </dl>
@@ -354,7 +364,8 @@ function cleanupModeLabel(mode: ActivityDetails['mode']) {
 }
 
 export function historyStatusLabel(entry: ActivityRecord) {
-  if (historyFailureCount(entry) > 0) {
+  const failureCount = historyFailureCount(entry);
+  if (failureCount > 0 && (entry.kind !== 'Cleanup' || cleanupSuccessCount(entry) > 0)) {
     return 'Partial failure';
   }
 
@@ -378,6 +389,14 @@ function historyFailureCount(entry: ActivityRecord) {
   }
 
   return 0;
+}
+
+function cleanupSuccessCount(entry: ActivityRecord) {
+  if (entry.kind !== 'Cleanup') {
+    return 0;
+  }
+
+  return cleanupItems(entry.result.details).filter((item) => item.status === 'succeeded').length;
 }
 
 function historyTargetLabel(entry: ActivityRecord) {
@@ -408,6 +427,14 @@ function firstCleanupPath(details: ActivityDetails) {
 
 function conciseTargetName(path: string) {
   return path === 'Unknown' ? path : leafName(path);
+}
+
+function securityEcosystemLabel(ecosystems: string[] | undefined) {
+  if (ecosystems === undefined) {
+    return 'All';
+  }
+
+  return ecosystems.length ? ecosystems.join(', ') : 'None';
 }
 
 function historyResultLabel(entry: ActivityRecord) {

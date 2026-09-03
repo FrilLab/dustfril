@@ -15,9 +15,7 @@ export function HistoryView(props: HistoryViewProps) {
           <h1>Activity</h1>
         </div>
       </div>
-      <div className="history-list-scroll">
-        <HistoryList entries={props.entries} />
-      </div>
+      <HistoryList entries={props.entries} />
     </div>
   );
 }

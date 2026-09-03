@@ -988,16 +988,15 @@ button:disabled {
 }
 
 .history-list-scroll {
-  position: relative;
-  min-height: 0;
-  flex: 1;
+  position: absolute;
+  inset: 0;
   overflow: auto;
 }
 
-.history-list-container {
+.history-list-layout {
   position: relative;
-  height: 100%;
-  min-height: 100%;
+  min-height: 0;
+  flex: 1;
 }
 
 .history-table {
@@ -1035,20 +1034,20 @@ button:disabled {
   text-transform: uppercase;
 }
 
-.history-row-button {
+.history-row-interactive {
   width: 100%;
   border: 0;
   background: #222427;
-  font: inherit;
+  cursor: pointer;
   text-align: left;
 }
 
-.history-row-button:hover,
+.history-row-interactive:hover,
 .history-row-active {
   background: rgba(102, 185, 220, 0.1);
 }
 
-.history-row-button:focus-visible {
+.history-row-interactive:focus-visible {
   box-shadow: inset 0 0 0 1px #6ac9ec;
 }
 
