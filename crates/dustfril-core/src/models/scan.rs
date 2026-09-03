@@ -53,15 +53,16 @@ pub(crate) fn effective_security_ecosystems(selected: &[Ecosystem]) -> Vec<Ecosy
 /// `files_inspected` counts regular metadata files that the artifact detector
 /// actually checked. It intentionally does not count every unrelated file
 /// encountered by directory enumeration. At present the artifact detector
-/// checks supported project metadata files, so `metadata_files_inspected` is
-/// the same count; the separate fields leave room for future content-aware
+/// checks supported project metadata files, including the metadata probes used
+/// to identify traversal boundaries, so `metadata_files_inspected` is the
+/// same count; the separate fields leave room for future content-aware
 /// detectors without changing the contract.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ScanAccessSummary {
     /// Workspace root used for the scan.
     pub root: PathBuf,
-    /// Directories successfully returned by the existing directory traversal.
+    /// Directories successfully visited by the directory traversal.
     pub directories_visited: u64,
     /// Regular files whose metadata/content was actually inspected by a
     /// detector.
@@ -182,6 +183,26 @@ impl Artifact {
     pub fn new(path: PathBuf, ecosystem: Ecosystem) -> Self {
         Self { path, ecosystem }
     }
+}
+
+/// Removes duplicate and covered artifacts while retaining the shallowest
+/// artifact that represents each filesystem subtree.
+pub(crate) fn normalize_artifacts(mut artifacts: Vec<Artifact>) -> Vec<Artifact> {
+    artifacts.sort_by_key(|artifact| artifact.path.components().count());
+
+    let mut normalized = Vec::with_capacity(artifacts.len());
+    for artifact in artifacts {
+        if normalized
+            .iter()
+            .any(|selected: &Artifact| crate::models::path_contains(&selected.path, &artifact.path))
+        {
+            continue;
+        }
+
+        normalized.push(artifact);
+    }
+
+    normalized
 }
 
 #[cfg(test)]

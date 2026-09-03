@@ -106,7 +106,7 @@ export function AppShell() {
         itemCount={app.selectedCleanupPaths.length}
         totalBytes={app.selectedCandidateBytes}
         deleteMode={app.deleteMode}
-        samplePaths={app.confirmSamplePaths}
+        selectedItems={app.selectedCleanupItems}
         busy={app.busyAction === 'cleanup-execute'}
         onCancel={() => app.setConfirmDialogOpen(false)}
         onConfirm={app.handleConfirmCleanup}

@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import type {
   AnalysisResponse,
-  CleanupCandidate,
+  ArtifactSelection,
   ActivityRecord,
   CleanupPlanResponse,
   CleanupResultResponse,
@@ -66,9 +66,15 @@ export function securityScan(options: RunOptions) {
   return invoke<SecurityScanResponse>(commands.securityScan, { options });
 }
 
-export function executeCleanup(candidates: CleanupCandidate[], mode: DeleteMode) {
+export function executeCleanup(
+  root: string,
+  ecosystems: RunOptions['ecosystems'],
+  analysisId: string,
+  selectedArtifacts: ArtifactSelection[],
+  mode: DeleteMode,
+) {
   return invoke<CleanupResultResponse>(commands.executeCleanup, {
-    request: { candidates, mode },
+    request: { root, ecosystems, analysisId, selectedArtifacts, mode },
   });
 }
 

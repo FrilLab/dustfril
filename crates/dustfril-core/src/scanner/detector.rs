@@ -2,6 +2,24 @@ use std::{fs, path::Path};
 
 use crate::models::{Artifact, Ecosystem, ScanAccessSummary};
 
+pub(crate) fn metadata_file_exists_with_summary(
+    path: &Path,
+    summary: &mut ScanAccessSummary,
+) -> bool {
+    match fs::metadata(path) {
+        Ok(metadata) if metadata.is_file() => {
+            summary.record_metadata_file();
+            true
+        }
+        Ok(_) => false,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+        Err(error) => {
+            summary.record_failure(path, &error.to_string());
+            false
+        }
+    }
+}
+
 /// Registered detectors for all supported ecosystems.
 pub static DETECTORS: &[&dyn Detector] = &[&RustDetector, &NodeDetector, &JavaDetector];
 
@@ -23,21 +41,9 @@ pub trait Detector: Sync {
     /// Matches a project while recording only metadata files actually found
     /// and inspected by the detector.
     fn matches_with_summary(&self, root: &Path, summary: &mut ScanAccessSummary) -> bool {
-        self.metadata_paths().iter().any(|name| {
-            let path = root.join(name);
-            match fs::metadata(&path) {
-                Ok(metadata) if metadata.is_file() => {
-                    summary.record_metadata_file();
-                    true
-                }
-                Ok(_) => false,
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
-                Err(error) => {
-                    summary.record_failure(&path, &error.to_string());
-                    false
-                }
-            }
-        })
+        self.metadata_paths()
+            .iter()
+            .any(|name| metadata_file_exists_with_summary(&root.join(name), summary))
     }
 
     /// Finds removable artifacts inside the project.

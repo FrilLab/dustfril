@@ -1,12 +1,12 @@
 import { formatBytes } from '../../lib/format';
-import type { DeleteMode } from '../../types/workflow';
+import type { CleanupCandidate, DeleteMode, Recommendation } from '../../types/workflow';
 
 type CleanupDialogProps = {
   open: boolean;
   itemCount: number;
   totalBytes: number;
   deleteMode: DeleteMode;
-  samplePaths: string[];
+  selectedItems: CleanupCandidate[];
   busy: boolean;
   onCancel: () => void;
   onConfirm: () => void | Promise<void>;
@@ -19,6 +19,12 @@ export function CleanupDialog(props: CleanupDialogProps) {
 
   const isTrash = props.deleteMode === 'Trash';
   const actionLabel = isTrash ? 'Move to Trash' : 'Delete Permanently';
+  const recommendedItems = props.selectedItems.filter(
+    (item) => item.recommendation === 'SafeToClean',
+  );
+  const manuallySelectedItems = props.selectedItems.filter(
+    (item) => item.recommendation !== 'SafeToClean',
+  );
 
   return (
     <div className="dialog-backdrop">
@@ -41,19 +47,14 @@ export function CleanupDialog(props: CleanupDialogProps) {
           <strong>{formatBytes(props.totalBytes)}</strong>
         </div>
 
-        {props.samplePaths.length ? (
+        {props.selectedItems.length ? (
           <div className="dialog-paths">
-            <p className="eyebrow">Selected paths</p>
-            <ul>
-              {props.samplePaths.map((path) => (
-                <li key={path} title={path}>
-                  {path}
-                </li>
-              ))}
-              {props.itemCount > props.samplePaths.length ? (
-                <li className="dialog-more">+ {props.itemCount - props.samplePaths.length} more</li>
-              ) : null}
-            </ul>
+            {recommendedItems.length ? (
+              <ReviewGroup title="Recommended" items={recommendedItems} />
+            ) : null}
+            {manuallySelectedItems.length ? (
+              <ReviewGroup title="Manually selected" items={manuallySelectedItems} />
+            ) : null}
           </div>
         ) : null}
 
@@ -73,4 +74,34 @@ export function CleanupDialog(props: CleanupDialogProps) {
       </div>
     </div>
   );
+}
+
+function ReviewGroup({ title, items }: { title: string; items: CleanupCandidate[] }) {
+  return (
+    <div className="dialog-review-group">
+      <p className="eyebrow">{title}</p>
+      <ul>
+        {items.slice(0, 5).map((item) => (
+          <li key={item.path} title={item.path}>
+            <span>{item.path}</span>
+            {item.recommendation !== 'SafeToClean' ? (
+              <small>{recommendationLabel(item.recommendation)}</small>
+            ) : null}
+          </li>
+        ))}
+        {items.length > 5 ? <li className="dialog-more">+ {items.length - 5} more</li> : null}
+      </ul>
+    </div>
+  );
+}
+
+function recommendationLabel(recommendation: Recommendation) {
+  switch (recommendation) {
+    case 'NeedsReview':
+      return 'Needs review';
+    case 'Keep':
+      return 'Keep';
+    case 'SafeToClean':
+      return 'Recommended';
+  }
 }

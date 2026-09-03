@@ -10,6 +10,8 @@ This crate contains the filesystem scanners, analyzers, cleanup planner and exec
 - `api::analyze`: compute size, age, and cleanup recommendation
 - `api::artifact_snapshot`: build and persist generated-artifact snapshots from an existing `AnalysisResult`
 - `api::clean::build_plan`: build cleanup candidates from scan results
+- `api::clean::build_plan_from_analysis_with_selection`: validate explicit
+  selections against an analyzed scanner-owned artifact set
 - `api::clean::execute`: execute cleanup in Trash or permanent mode
 - `api::audit`: inspect supported lifecycle scripts; malformed manifests are
   returned as errors instead of being silently ignored

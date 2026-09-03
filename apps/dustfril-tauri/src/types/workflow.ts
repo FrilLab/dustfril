@@ -86,9 +86,14 @@ export type CleanupCandidate = {
   ecosystem: Ecosystem;
   sizeBytes: number;
   ageDays: number | null;
+  recommendation: Recommendation;
+  selectedByDefault: boolean;
 };
 
+export type ArtifactSelection = Pick<Artifact, 'path' | 'ecosystem'>;
+
 export type CleanupPlanResponse = {
+  analysisId: string;
   candidates: CleanupCandidate[];
   reclaimableSizeBytes: number;
 };

@@ -60,8 +60,8 @@ fn scan_detects_rust_project() {
     assert_eq!(artifact.ecosystem, Ecosystem::Rust);
     assert_eq!(artifact.path, target);
     assert_eq!(result.access_summary.directories_visited, 2);
-    assert_eq!(result.access_summary.files_inspected, 1);
-    assert_eq!(result.access_summary.metadata_files_inspected, 1);
+    assert_eq!(result.access_summary.files_inspected, 2);
+    assert_eq!(result.access_summary.metadata_files_inspected, 2);
     assert_eq!(result.access_summary.artifact_candidates, 1);
 }
 
@@ -77,9 +77,25 @@ fn scan_detects_node_project() {
     assert_eq!(result.artifacts[0].ecosystem, Ecosystem::Node);
     assert_eq!(result.artifacts[0].path, node_modules);
     assert_eq!(result.access_summary.directories_visited, 2);
+    assert_eq!(result.access_summary.files_inspected, 2);
+    assert_eq!(result.access_summary.metadata_files_inspected, 2);
+    assert_eq!(result.access_summary.artifact_candidates, 1);
+}
+
+#[test]
+fn artifact_boundary_metadata_checks_are_recorded() {
+    let temp_dir = TempDir::new().unwrap();
+    let target = temp_dir.path().join("target");
+
+    std::fs::write(temp_dir.path().join("Cargo.toml"), "[package]").unwrap();
+    std::fs::create_dir(&target).unwrap();
+
+    let result = scan(temp_dir.path(), &[Ecosystem::Node]).unwrap();
+
+    assert!(result.artifacts.is_empty());
     assert_eq!(result.access_summary.files_inspected, 1);
     assert_eq!(result.access_summary.metadata_files_inspected, 1);
-    assert_eq!(result.access_summary.artifact_candidates, 1);
+    assert_eq!(result.access_summary.failures, 0);
 }
 
 #[test]
@@ -94,8 +110,8 @@ fn scan_detects_java_project() {
     assert_eq!(result.artifacts[0].ecosystem, Ecosystem::Java);
     assert_eq!(result.artifacts[0].path, build);
     assert_eq!(result.access_summary.directories_visited, 2);
-    assert_eq!(result.access_summary.files_inspected, 1);
-    assert_eq!(result.access_summary.metadata_files_inspected, 1);
+    assert_eq!(result.access_summary.files_inspected, 2);
+    assert_eq!(result.access_summary.metadata_files_inspected, 2);
     assert_eq!(result.access_summary.artifact_candidates, 1);
 }
 
@@ -161,8 +177,8 @@ fn scan_detects_multiple_projects() {
             .any(|a| a.ecosystem == Ecosystem::Java && a.path == java_build)
     );
     assert_eq!(result.access_summary.directories_visited, 7);
-    assert_eq!(result.access_summary.files_inspected, 3);
-    assert_eq!(result.access_summary.metadata_files_inspected, 3);
+    assert_eq!(result.access_summary.files_inspected, 6);
+    assert_eq!(result.access_summary.metadata_files_inspected, 6);
     assert_eq!(result.access_summary.artifact_candidates, 3);
 }
 
@@ -204,6 +220,92 @@ fn scan_filters_node_only() {
     assert_eq!(result.artifacts.len(), 1);
     assert_eq!(result.artifacts[0].ecosystem, Ecosystem::Node);
     assert_eq!(result.artifacts[0].path, node_modules);
+}
+
+#[test]
+fn node_modules_is_a_terminal_discovery_boundary() {
+    let temp_dir = TempDir::new().unwrap();
+    let outer_artifact = create_node_artifact(temp_dir.path());
+    let nested_package = outer_artifact.join("package-a");
+    let deeply_nested_package = nested_package.join("node_modules").join("package-b");
+
+    std::fs::create_dir_all(&deeply_nested_package).unwrap();
+    std::fs::write(nested_package.join("package.json"), "{}").unwrap();
+    std::fs::write(deeply_nested_package.join("package.json"), "{}").unwrap();
+
+    let result = scan(temp_dir.path(), &[Ecosystem::Node]).unwrap();
+
+    assert_eq!(result.artifacts.len(), 1);
+    assert_eq!(result.artifacts[0].path, outer_artifact);
+}
+
+#[test]
+fn independent_projects_and_projects_outside_artifacts_are_still_discovered() {
+    let temp_dir = TempDir::new().unwrap();
+    let first = temp_dir.path().join("first");
+    let second = temp_dir.path().join("workspace").join("second");
+    let third = temp_dir.path().join("build").join("legitimate-project");
+
+    std::fs::create_dir_all(&first).unwrap();
+    std::fs::create_dir_all(&second).unwrap();
+    std::fs::create_dir_all(&third).unwrap();
+    let first_artifact = create_node_artifact(&first);
+    let second_artifact = create_node_artifact(&second);
+    let third_artifact = create_node_artifact(&third);
+
+    let result = scan(temp_dir.path(), &[Ecosystem::Node]).unwrap();
+
+    assert_eq!(result.artifacts.len(), 3);
+    assert!(result.artifacts.iter().any(|artifact| {
+        artifact.path == first_artifact && artifact.ecosystem == Ecosystem::Node
+    }));
+    assert!(result.artifacts.iter().any(|artifact| {
+        artifact.path == second_artifact && artifact.ecosystem == Ecosystem::Node
+    }));
+    assert!(result.artifacts.iter().any(|artifact| {
+        artifact.path == third_artifact && artifact.ecosystem == Ecosystem::Node
+    }));
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn macos_application_bundles_are_opaque_to_workspace_discovery() {
+    let temp_dir = TempDir::new().unwrap();
+    let app = temp_dir
+        .path()
+        .join(".vscode-test")
+        .join("vscode-darwin-arm64-1.96.0")
+        .join("Visual Studio Code.app");
+    let app_contents = app.join("Contents").join("Resources").join("app");
+    let app_node_modules = app_contents.join("node_modules");
+
+    std::fs::create_dir_all(app_node_modules.join("package-a").join("node_modules")).unwrap();
+    std::fs::write(app_contents.join("package.json"), "{}").unwrap();
+    std::fs::write(
+        app_node_modules.join("package-a").join("package.json"),
+        "{}",
+    )
+    .unwrap();
+
+    let result = scan(temp_dir.path(), &[Ecosystem::Node]).unwrap();
+
+    assert!(result.artifacts.is_empty());
+    assert!(
+        result
+            .artifacts
+            .iter()
+            .all(|artifact| !artifact.path.starts_with(&app))
+    );
+
+    let analysis = crate::api::analyze(result).unwrap();
+    let selection = crate::models::ArtifactSelection {
+        path: app_contents.join("node_modules"),
+        ecosystem: Ecosystem::Node,
+    };
+    assert!(matches!(
+        crate::api::clean::build_plan_from_analysis_with_selection(&analysis, &[selection]),
+        Err(crate::error::DustError::InvalidCleanupSelection(_))
+    ));
 }
 
 #[test]
@@ -298,7 +400,7 @@ fn scanner_follows_symbolic_linked_project_manifests() {
 
     assert_eq!(result.artifacts.len(), 1);
     assert_eq!(result.artifacts[0].path, target);
-    assert_eq!(result.access_summary.files_inspected, 1);
-    assert_eq!(result.access_summary.metadata_files_inspected, 1);
+    assert_eq!(result.access_summary.files_inspected, 2);
+    assert_eq!(result.access_summary.metadata_files_inspected, 2);
     assert_eq!(result.access_summary.symlinks_skipped, 1);
 }

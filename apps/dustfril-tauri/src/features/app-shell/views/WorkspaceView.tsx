@@ -252,6 +252,11 @@ function WorkspaceResults(props: WorkspaceResultsProps) {
                 <span className={recommendationClass(artifact.recommendation)}>
                   {recommendationLabel(artifact.recommendation)}
                 </span>
+                {selected && artifact.recommendation !== 'SafeToClean' ? (
+                  <small className="recommendation-guidance">
+                    {recommendationGuidance(artifact.recommendation)}
+                  </small>
+                ) : null}
               </span>
             </div>
           );
@@ -277,6 +282,12 @@ function Inspector({
       </div>
       {artifact ? (
         <div className="inspector-content">
+          {candidate && selectedPaths.includes(candidate.path) &&
+          artifact.recommendation !== 'SafeToClean' ? (
+            <p className="recommendation-guidance" role="status">
+              {recommendationGuidance(artifact.recommendation)}
+            </p>
+          ) : null}
           <div className="inspector-title-row">
             <ItemIcon kind="folder" large />
             <div className="min-width-zero">
@@ -302,4 +313,10 @@ function Inspector({
       )}
     </aside>
   );
+}
+
+function recommendationGuidance(recommendation: ArtifactAnalysis['recommendation']) {
+  return recommendation === 'NeedsReview'
+    ? 'This artifact is relatively recent. DustFril did not recommend cleaning it automatically.'
+    : 'This artifact was recently modified. DustFril recommends keeping it.';
 }
