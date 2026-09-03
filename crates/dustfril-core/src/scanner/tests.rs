@@ -60,8 +60,8 @@ fn scan_detects_rust_project() {
     assert_eq!(artifact.ecosystem, Ecosystem::Rust);
     assert_eq!(artifact.path, target);
     assert_eq!(result.access_summary.directories_visited, 2);
-    assert_eq!(result.access_summary.files_inspected, 1);
-    assert_eq!(result.access_summary.metadata_files_inspected, 1);
+    assert_eq!(result.access_summary.files_inspected, 2);
+    assert_eq!(result.access_summary.metadata_files_inspected, 2);
     assert_eq!(result.access_summary.artifact_candidates, 1);
 }
 
@@ -77,9 +77,25 @@ fn scan_detects_node_project() {
     assert_eq!(result.artifacts[0].ecosystem, Ecosystem::Node);
     assert_eq!(result.artifacts[0].path, node_modules);
     assert_eq!(result.access_summary.directories_visited, 2);
+    assert_eq!(result.access_summary.files_inspected, 2);
+    assert_eq!(result.access_summary.metadata_files_inspected, 2);
+    assert_eq!(result.access_summary.artifact_candidates, 1);
+}
+
+#[test]
+fn artifact_boundary_metadata_checks_are_recorded() {
+    let temp_dir = TempDir::new().unwrap();
+    let target = temp_dir.path().join("target");
+
+    std::fs::write(temp_dir.path().join("Cargo.toml"), "[package]").unwrap();
+    std::fs::create_dir(&target).unwrap();
+
+    let result = scan(temp_dir.path(), &[Ecosystem::Node]).unwrap();
+
+    assert!(result.artifacts.is_empty());
     assert_eq!(result.access_summary.files_inspected, 1);
     assert_eq!(result.access_summary.metadata_files_inspected, 1);
-    assert_eq!(result.access_summary.artifact_candidates, 1);
+    assert_eq!(result.access_summary.failures, 0);
 }
 
 #[test]
@@ -94,8 +110,8 @@ fn scan_detects_java_project() {
     assert_eq!(result.artifacts[0].ecosystem, Ecosystem::Java);
     assert_eq!(result.artifacts[0].path, build);
     assert_eq!(result.access_summary.directories_visited, 2);
-    assert_eq!(result.access_summary.files_inspected, 1);
-    assert_eq!(result.access_summary.metadata_files_inspected, 1);
+    assert_eq!(result.access_summary.files_inspected, 2);
+    assert_eq!(result.access_summary.metadata_files_inspected, 2);
     assert_eq!(result.access_summary.artifact_candidates, 1);
 }
 
@@ -161,8 +177,8 @@ fn scan_detects_multiple_projects() {
             .any(|a| a.ecosystem == Ecosystem::Java && a.path == java_build)
     );
     assert_eq!(result.access_summary.directories_visited, 7);
-    assert_eq!(result.access_summary.files_inspected, 3);
-    assert_eq!(result.access_summary.metadata_files_inspected, 3);
+    assert_eq!(result.access_summary.files_inspected, 6);
+    assert_eq!(result.access_summary.metadata_files_inspected, 6);
     assert_eq!(result.access_summary.artifact_candidates, 3);
 }
 
@@ -384,7 +400,7 @@ fn scanner_follows_symbolic_linked_project_manifests() {
 
     assert_eq!(result.artifacts.len(), 1);
     assert_eq!(result.artifacts[0].path, target);
-    assert_eq!(result.access_summary.files_inspected, 1);
-    assert_eq!(result.access_summary.metadata_files_inspected, 1);
+    assert_eq!(result.access_summary.files_inspected, 2);
+    assert_eq!(result.access_summary.metadata_files_inspected, 2);
     assert_eq!(result.access_summary.symlinks_skipped, 1);
 }

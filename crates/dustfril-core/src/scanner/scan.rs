@@ -1,10 +1,10 @@
-use std::{fs, path::Path};
+use std::path::Path;
 
 use crate::{
     error::{DustError, DustResult},
     fs::walk_dirs_with_summary_and_boundary,
     models::{Ecosystem, ScanAccessSummary, ScanResult, normalize_artifacts},
-    scanner::detector::{self},
+    scanner::detector::{self, metadata_file_exists_with_summary},
 };
 
 pub fn scan(root: &Path, ecosystems: &[Ecosystem]) -> DustResult<ScanResult> {
@@ -50,7 +50,7 @@ pub fn scan(root: &Path, ecosystems: &[Ecosystem]) -> DustResult<ScanResult> {
     Ok(result)
 }
 
-fn is_discovery_boundary(path: &Path) -> bool {
+fn is_discovery_boundary(path: &Path, summary: &mut ScanAccessSummary) -> bool {
     let is_artifact_directory = path
         .file_name()
         .and_then(|name| name.to_str())
@@ -59,7 +59,7 @@ fn is_discovery_boundary(path: &Path) -> bool {
             detector::DETECTORS.iter().any(|detector| {
                 detector.artifact_paths().contains(&name)
                     && detector.metadata_paths().iter().any(|metadata| {
-                        fs::metadata(parent.join(metadata)).is_ok_and(|value| value.is_file())
+                        metadata_file_exists_with_summary(&parent.join(metadata), summary)
                     })
             })
         });

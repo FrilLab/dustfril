@@ -53,8 +53,9 @@ pub(crate) fn effective_security_ecosystems(selected: &[Ecosystem]) -> Vec<Ecosy
 /// `files_inspected` counts regular metadata files that the artifact detector
 /// actually checked. It intentionally does not count every unrelated file
 /// encountered by directory enumeration. At present the artifact detector
-/// checks supported project metadata files, so `metadata_files_inspected` is
-/// the same count; the separate fields leave room for future content-aware
+/// checks supported project metadata files, including the metadata probes used
+/// to identify traversal boundaries, so `metadata_files_inspected` is the
+/// same count; the separate fields leave room for future content-aware
 /// detectors without changing the contract.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]

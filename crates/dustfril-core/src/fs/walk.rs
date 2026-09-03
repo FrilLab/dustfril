@@ -27,7 +27,7 @@ pub fn walk_dirs_with_summary(
     root: &Path,
     summary: &mut ScanAccessSummary,
 ) -> DustResult<Vec<PathBuf>> {
-    walk_dirs_with_summary_and_boundary(root, summary, |_| false)
+    walk_dirs_with_summary_and_boundary(root, summary, |_, _| false)
 }
 
 /// Collects directories while pruning directories that are opaque to the
@@ -43,7 +43,7 @@ pub fn walk_dirs_with_summary_and_boundary<F>(
     mut is_boundary: F,
 ) -> DustResult<Vec<PathBuf>>
 where
-    F: FnMut(&Path) -> bool,
+    F: FnMut(&Path, &mut ScanAccessSummary) -> bool,
 {
     match fs::symlink_metadata(root) {
         Ok(metadata) if metadata.file_type().is_symlink() => {
@@ -84,7 +84,7 @@ where
 
         if file_type.is_dir() {
             summary.record_directory();
-            if is_boundary(entry.path()) {
+            if is_boundary(entry.path(), summary) {
                 entries.skip_current_dir();
             } else {
                 directories.push(entry.path().to_path_buf());

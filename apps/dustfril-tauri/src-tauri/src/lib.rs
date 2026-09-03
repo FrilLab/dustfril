@@ -21,26 +21,49 @@ use contract::{
 use dustfril_core::{
     api,
     error::DustError,
-    models::{AnalysisResult, ArtifactAnalysis, ArtifactSelection},
+    models::{AnalysisResult, ArtifactAnalysis, ArtifactSelection, Ecosystem},
 };
 
-static ANALYSIS_CACHE: OnceLock<Mutex<HashMap<PathBuf, AnalysisResult>>> = OnceLock::new();
-
-fn analysis_cache() -> &'static Mutex<HashMap<PathBuf, AnalysisResult>> {
-    ANALYSIS_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct AnalysisCacheKey {
+    root: PathBuf,
+    ecosystems: Vec<Ecosystem>,
 }
 
-fn cache_analysis(root: &Path, analysis: &AnalysisResult) {
-    if let Ok(mut cache) = analysis_cache().lock() {
-        cache.insert(root.to_path_buf(), analysis.clone());
+impl AnalysisCacheKey {
+    fn new(root: &Path, ecosystems: &[Ecosystem]) -> Self {
+        let mut ecosystems = if ecosystems.is_empty() {
+            vec![Ecosystem::Rust, Ecosystem::Node, Ecosystem::Java]
+        } else {
+            ecosystems.to_vec()
+        };
+        ecosystems.sort_unstable();
+        ecosystems.dedup();
+
+        Self {
+            root: root.to_path_buf(),
+            ecosystems,
+        }
     }
 }
 
-fn cached_analysis(root: &Path) -> Option<AnalysisResult> {
+static ANALYSIS_CACHE: OnceLock<Mutex<HashMap<AnalysisCacheKey, AnalysisResult>>> = OnceLock::new();
+
+fn analysis_cache() -> &'static Mutex<HashMap<AnalysisCacheKey, AnalysisResult>> {
+    ANALYSIS_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn cache_analysis(root: &Path, ecosystems: &[Ecosystem], analysis: &AnalysisResult) {
+    if let Ok(mut cache) = analysis_cache().lock() {
+        cache.insert(AnalysisCacheKey::new(root, ecosystems), analysis.clone());
+    }
+}
+
+fn cached_analysis(root: &Path, ecosystems: &[Ecosystem]) -> Option<AnalysisResult> {
     analysis_cache()
         .lock()
         .ok()
-        .and_then(|cache| cache.get(root).cloned())
+        .and_then(|cache| cache.get(&AnalysisCacheKey::new(root, ecosystems)).cloned())
 }
 
 fn cleanup_candidate_from_analysis(
@@ -227,6 +250,7 @@ async fn analyze(options: RunOptions) -> Result<AnalysisResponse, String> {
             }
         };
         let analysis = api::analyze(scan_result.clone()).map_err(|error| error.to_string())?;
+        cache_analysis(&root, &ecosystems, &analysis);
         let history_warning = if record_history {
             match history::record_scan(&root, &scan_result, analysis.total_size_bytes) {
                 Ok(()) => None,
@@ -277,7 +301,7 @@ async fn analyze_workspace(options: RunOptions) -> Result<WorkspaceAnalysisRespo
             }
         };
         let analysis = api::analyze(scan_result.clone()).map_err(|error| error.to_string())?;
-        cache_analysis(&root, &analysis);
+        cache_analysis(&root, &ecosystems, &analysis);
         let plan = api::clean::build_plan_from_analysis(analysis.clone())
             .map_err(|error| error.to_string())?;
 
@@ -354,6 +378,7 @@ async fn build_cleanup_plan(options: RunOptions) -> Result<CleanupPlanResponse, 
     tokio::task::spawn_blocking(move || {
         let scan_result = api::scan(&root, &ecosystems).map_err(|error| error.to_string())?;
         let analysis = api::analyze(scan_result).map_err(|error| error.to_string())?;
+        cache_analysis(&root, &ecosystems, &analysis);
         let plan =
             api::clean::build_plan_from_analysis(analysis).map_err(|error| error.to_string())?;
 
@@ -385,7 +410,7 @@ async fn execute_cleanup(request: ExecuteCleanupRequest) -> Result<CleanupResult
         .collect();
 
     tokio::task::spawn_blocking(move || {
-        let analysis = match cached_analysis(&root) {
+        let analysis = match cached_analysis(&root, &ecosystems) {
             Some(analysis) => analysis,
             None => {
                 let scan = api::scan(&root, &ecosystems).map_err(|error| error.to_string())?;
@@ -512,4 +537,88 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn analysis_cache_key_separates_scan_scopes() {
+        let root = Path::new("/workspace");
+
+        assert_ne!(
+            AnalysisCacheKey::new(root, &[Ecosystem::Node]),
+            AnalysisCacheKey::new(root, &[Ecosystem::Java])
+        );
+    }
+
+    #[test]
+    fn analysis_cache_key_canonicalizes_equivalent_scopes() {
+        let root = Path::new("/workspace");
+
+        assert_eq!(
+            AnalysisCacheKey::new(root, &[]),
+            AnalysisCacheKey::new(
+                root,
+                &[
+                    Ecosystem::Java,
+                    Ecosystem::Node,
+                    Ecosystem::Rust,
+                    Ecosystem::Node
+                ]
+            )
+        );
+    }
+
+    #[test]
+    fn analysis_cache_stores_and_refreshes_entries_per_scan_scope() {
+        let root = Path::new("/workspace/cache-scope-test");
+
+        cache_analysis(
+            root,
+            &[Ecosystem::Node],
+            &AnalysisResult {
+                artifacts: Vec::new(),
+                total_size_bytes: 1,
+            },
+        );
+        cache_analysis(
+            root,
+            &[Ecosystem::Java],
+            &AnalysisResult {
+                artifacts: Vec::new(),
+                total_size_bytes: 2,
+            },
+        );
+
+        assert_eq!(
+            cached_analysis(root, &[Ecosystem::Node])
+                .expect("node analysis should be cached")
+                .total_size_bytes,
+            1
+        );
+        assert_eq!(
+            cached_analysis(root, &[Ecosystem::Java])
+                .expect("java analysis should be cached")
+                .total_size_bytes,
+            2
+        );
+
+        cache_analysis(
+            root,
+            &[Ecosystem::Node],
+            &AnalysisResult {
+                artifacts: Vec::new(),
+                total_size_bytes: 3,
+            },
+        );
+
+        assert_eq!(
+            cached_analysis(root, &[Ecosystem::Node])
+                .expect("refreshed node analysis should be cached")
+                .total_size_bytes,
+            3
+        );
+    }
 }
