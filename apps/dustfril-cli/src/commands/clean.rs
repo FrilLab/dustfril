@@ -13,8 +13,8 @@ use crate::{
 };
 
 pub fn dry_run(args: &CleanArgs) -> bool {
-    let plan = match build_cleanup_plan(args) {
-        Ok(plan) => plan,
+    let (_, plan) = match build_cleanup_plan(args) {
+        Ok(result) => result,
         Err(e) => {
             eprintln!("Cleanup preview failed: {}", e);
             return false;
@@ -39,8 +39,8 @@ pub fn execute(args: &CleanArgs) -> bool {
         DeleteMode::default()
     };
 
-    let plan = match build_cleanup_plan(args) {
-        Ok(plan) => plan,
+    let (target_path, plan) = match build_cleanup_plan(args) {
+        Ok(result) => result,
         Err(e) => {
             if let Err(history_error) = history::record_cleanup_failure(mode, &e.to_string()) {
                 eprintln!("Failed to record cleanup failure history: {history_error}");
@@ -52,7 +52,7 @@ pub fn execute(args: &CleanArgs) -> bool {
 
     if plan.candidates.is_empty() {
         let result = CleanupResult::default();
-        history::record(mode, &result)
+        history::record_for_workspace(&target_path, &plan, mode, &result)
             .unwrap_or_else(|e| eprintln!("Failed to record cleanup history: {e}"));
         println!("No cleanup candidates found.");
         return true;
@@ -75,14 +75,16 @@ pub fn execute(args: &CleanArgs) -> bool {
     let result = match api::clean::execute(&plan, mode) {
         Ok(res) => res,
         Err(e) => {
-            if let Err(history_error) = history::record_cleanup_failure(mode, &e.to_string()) {
+            if let Err(history_error) =
+                history::record_failure_for_workspace(&target_path, mode, &e.to_string())
+            {
                 eprintln!("Failed to record cleanup failure history: {history_error}");
             }
             eprintln!("Cleanup failed: {}", e);
             return false;
         }
     };
-    history::record(mode, &result)
+    history::record_for_workspace(&target_path, &plan, mode, &result)
         .unwrap_or_else(|e| eprintln!("Failed to record cleanup history: {}", e));
 
     print_cleanup_result(&result);
@@ -94,7 +96,7 @@ fn cleanup_succeeded(result: &CleanupResult) -> bool {
     result.failed_paths.is_empty()
 }
 
-fn build_cleanup_plan(args: &CleanArgs) -> Result<CleanupPlan, DustError> {
+fn build_cleanup_plan(args: &CleanArgs) -> Result<(std::path::PathBuf, CleanupPlan), DustError> {
     let path = resolve_path(&args.path_args.path)?;
 
     if !validate_path(&path) {
@@ -107,7 +109,7 @@ fn build_cleanup_plan(args: &CleanArgs) -> Result<CleanupPlan, DustError> {
     let analysis = api::analyze(scan)?;
     let plan = api::clean::build_plan_from_analysis(analysis)?;
 
-    Ok(plan)
+    Ok((path, plan))
 }
 
 fn confirm_cleanup() -> io::Result<bool> {

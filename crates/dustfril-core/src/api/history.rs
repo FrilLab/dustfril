@@ -4,8 +4,8 @@ use crate::{
     error::DustResult,
     history,
     models::{
-        ActivityRecord, CleanupHistoryEntry, CleanupResult, DeleteMode, Ecosystem,
-        ScanAccessSummary, ScanResult, SecurityReport,
+        ActivityRecord, CleanupCandidate, CleanupHistoryEntry, CleanupResult, DeleteMode,
+        Ecosystem, ScanAccessSummary, ScanResult, SecurityReport,
     },
 };
 
@@ -22,6 +22,17 @@ pub fn record_activity(activity: ActivityRecord) -> DustResult<()> {
 /// Records a cleanup operation while preserving the original API shape.
 pub fn record_cleanup(mode: DeleteMode, result: &CleanupResult) -> DustResult<()> {
     history::record_cleanup(mode, result)
+}
+
+/// Records cleanup details with the workspace and analyzed candidates that
+/// were available to the caller at execution time.
+pub fn record_cleanup_with_context(
+    target_path: &Path,
+    candidates: &[CleanupCandidate],
+    mode: DeleteMode,
+    result: &CleanupResult,
+) -> DustResult<()> {
+    history::record_cleanup_with_context(target_path, candidates, mode, result)
 }
 
 /// Records a scan operation and its detected artifact summary.
@@ -50,6 +61,15 @@ pub fn record_scan_failure_with_summary(
 /// Records a cleanup that failed before producing a cleanup result.
 pub fn record_cleanup_failure(mode: DeleteMode, reason: &str) -> DustResult<()> {
     history::record_cleanup_failure(mode, reason)
+}
+
+/// Records a cleanup preparation failure with its workspace target.
+pub fn record_cleanup_failure_with_context(
+    target_path: &Path,
+    mode: DeleteMode,
+    reason: &str,
+) -> DustResult<()> {
+    history::record_cleanup_failure_with_context(target_path, mode, reason)
 }
 
 /// Records one explicit security scan in the unified activity history.

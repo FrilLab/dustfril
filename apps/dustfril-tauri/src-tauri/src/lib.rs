@@ -469,17 +469,18 @@ async fn execute_cleanup(request: ExecuteCleanupRequest) -> Result<CleanupResult
             Ok(result) => result,
             Err(error) => {
                 if let Err(history_error) =
-                    history::record_cleanup_failure(mode, &error.to_string())
+                    history::record_failure_with_context(&root, mode, &error.to_string())
                 {
                     report_failed_activity_record("cleanup", history_error);
                 }
                 return Err(error.to_string());
             }
         };
-        let history_warning = match history::record(mode, &result) {
-            Ok(()) => None,
-            Err(error) => Some(format_history_warning("cleanup", error)),
-        };
+        let history_warning =
+            match history::record_with_context(&root, &plan.candidates, mode, &result) {
+                Ok(()) => None,
+                Err(error) => Some(format_history_warning("cleanup", error)),
+            };
 
         Ok(CleanupResultResponse {
             deleted_paths: result
