@@ -1,6 +1,5 @@
 import { CleanupDialog } from '../../components/CleanupDialog/CleanupDialog';
 import { Sidebar } from '../../components/Sidebar/Sidebar';
-import { formatBytes } from '../../lib/format';
 import { pathBreadcrumb } from '../../model/presentation';
 import { AppHeader } from './components/AppHeader';
 import { useAppState } from './hooks/useAppState';
@@ -10,7 +9,6 @@ import { WorkspaceView } from './views/WorkspaceView';
 
 export function AppShell() {
   const app = useAppState();
-  const historyCount = app.sidebarEntries.find((entry) => entry.key === 'history')?.count ?? 0;
 
   return (
     <main className="app-shell">
@@ -36,13 +34,13 @@ export function AppShell() {
             <OverviewView
               root={app.root}
               analysisReady={app.analysisResult !== null}
-              artifactCount={app.summary.artifactCount}
-              reclaimableBytes={app.summary.reclaimableBytes}
-              lastAnalysisAtMs={app.lastAnalysisAtMs}
-              historyCount={historyCount}
-              discoveredEcosystems={app.discoveredEcosystems}
-              statusMessage={app.statusMessage}
+              artifacts={app.analysisResult?.artifacts ?? []}
+              candidates={app.cleanupPlan?.candidates ?? []}
+              reclaimableBytes={app.cleanupPlan?.reclaimableSizeBytes ?? 0}
+              historyEntries={app.historyEntries}
               error={app.error}
+              onInspectArtifact={app.openWorkspaceArtifact}
+              onOpenHistory={() => app.setActiveCategory('history')}
             />
           ) : null}
 
@@ -54,6 +52,8 @@ export function AppShell() {
               reclaimableBytes={app.cleanupPlan?.reclaimableSizeBytes ?? 0}
               selectedItemId={app.selectedItemId}
               selectedPaths={app.selectedCleanupPaths}
+              selectedCandidateBytes={app.selectedCandidateBytes}
+              canReviewCleanup={app.canReviewCleanup}
               deleteMode={app.deleteMode}
               deleteModes={app.deleteModes}
               cleanupAgeDays={app.cleanupAgeDays}
@@ -66,6 +66,7 @@ export function AppShell() {
               onTogglePath={app.toggleCleanupPath}
               onDeleteModeChange={app.setDeleteMode}
               onCleanupAgeChange={app.handleCleanupAgeChange}
+              onRequestCleanup={app.handleRequestCleanup}
             />
           ) : null}
 
@@ -85,17 +86,6 @@ export function AppShell() {
           ) : (
             <span>No workspace selected</span>
           )}
-        </div>
-        <div className="statusbar-selection">
-          <span>Selected size {formatBytes(app.selectedCandidateBytes)}</span>
-          <button
-            type="button"
-            className="review-button"
-            onClick={app.handleRequestCleanup}
-            disabled={!app.canReviewCleanup}
-          >
-            Review Cleanup
-          </button>
         </div>
       </footer>
 

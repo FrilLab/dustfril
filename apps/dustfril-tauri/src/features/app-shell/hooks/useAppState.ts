@@ -16,12 +16,7 @@ import type {
   CleanupResultResponse,
   DeleteMode,
 } from '../../../types/workflow';
-import {
-  cleanupAgeOptions,
-  defaultCleanupAgeDays,
-  deleteModes,
-  ecosystems,
-} from '../../../types/workflow';
+import { cleanupAgeOptions, defaultCleanupAgeDays, deleteModes, ecosystems } from '../../../types/workflow';
 import { createWorkspaceSummary, filterArtifacts } from '../../../model/presentation';
 
 export function useAppState() {
@@ -34,7 +29,6 @@ export function useAppState() {
   const [error, setError] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResponse | null>(null);
   const [cleanupPlan, setCleanupPlan] = useState<CleanupPlanResponse | null>(null);
-  const [cleanupResult, setCleanupResult] = useState<CleanupResultResponse | null>(null);
   const [historyEntries, setHistoryEntries] = useState<ActivityRecord[]>([]);
   const [selectedCleanupPaths, setSelectedCleanupPaths] = useState<string[]>([]);
   const [cleanupAgeDays, setCleanupAgeDays] = useState<number>(defaultCleanupAgeDays);
@@ -83,14 +77,6 @@ export function useAppState() {
     [workspaceArtifacts, cleanupPlan?.reclaimableSizeBytes],
   );
 
-  const discoveredEcosystems = useMemo(
-    () =>
-      ecosystems.filter((ecosystem) =>
-        workspaceArtifacts.some((artifact) => artifact.ecosystem === ecosystem),
-      ),
-    [workspaceArtifacts],
-  );
-
   const sidebarEntries = useMemo<SidebarEntry[]>(
     () =>
       categoryConfigs.map((config) => ({
@@ -104,14 +90,6 @@ export function useAppState() {
       })),
     [historyEntries.length, workspaceArtifacts.length],
   );
-
-  const statusMessage = error
-    ? error
-      : cleanupResult
-      ? `Last cleanup freed ${formatBytes(cleanupResult.freedSizeBytes)} across ${cleanupResult.deletedPaths.length} path(s).`
-      : analysisResult
-        ? 'Review recommendations based on inactivity age. Trash is the default cleanup mode.'
-        : 'Choose a workspace folder, then analyze it to find development artifacts.';
 
   const canAnalyze = busyAction === null && root.length > 0;
   const canReviewCleanup =
@@ -152,7 +130,6 @@ export function useAppState() {
     setError(null);
     setAnalysisResult(null);
     setCleanupPlan(null);
-    setCleanupResult(null);
     setSelectedCleanupPaths([]);
     setSelectedItemId(null);
     setConfirmDialogOpen(false);
@@ -218,7 +195,6 @@ export function useAppState() {
           ? current
           : null,
       );
-      setCleanupResult(null);
       setCleanupAgeDays(policyAgeDays);
       setLastAnalysisAtMs(Date.now());
       setError(
@@ -254,6 +230,12 @@ export function useAppState() {
     );
   }
 
+  function openWorkspaceArtifact(path: string) {
+    setSearch('');
+    setSelectedItemId(path);
+    setActiveCategory('workspace');
+  }
+
   function handleRequestCleanup() {
     if (canReviewCleanup) {
       setConfirmDialogOpen(true);
@@ -278,7 +260,6 @@ export function useAppState() {
         deleteMode,
       );
 
-      setCleanupResult(result);
       setError(
         result.failedPaths.length
           ? formatCleanupFailure(result, result.historyWarning)
@@ -346,9 +327,7 @@ export function useAppState() {
     lastAnalysisAtMs,
     canAnalyze,
     canReviewCleanup,
-    statusMessage,
     summary,
-    discoveredEcosystems,
     deleteModes,
     setSearch,
     setActiveCategory,
@@ -356,6 +335,7 @@ export function useAppState() {
     setDeleteMode,
     setConfirmDialogOpen,
     toggleCleanupPath,
+    openWorkspaceArtifact,
     handleRootChange,
     handleChooseWorkspace,
     handleAnalyzeWorkspace,
