@@ -6,10 +6,10 @@ The repository is split into a reusable Rust core crate, a CLI app, and a Tauri 
 
 ## Workspace Layout
 
-- `crates/dustfril-core`: shared scanning, analysis, cleanup, and audit logic
-- `apps/dustfril-cli`: `dfr` command-line interface
-- `apps/dustfril-tauri`: React + Tauri desktop app shell
-- `apps/dustfril-tauri/src-tauri`: Tauri Rust backend wired to `dustfril-core`
+- `crates/core`: shared scanning, analysis, cleanup, and audit logic
+- `apps/cli`: `dfr` command-line interface
+- `apps/tauri`: React + Tauri desktop app shell
+- `apps/tauri/src-tauri`: Tauri Rust backend wired to `dustfril-core`
 
 ## Current Capabilities
 
@@ -195,7 +195,7 @@ inactivity age. The default is 30 days; artifacts at least that old are
 recommended for cleanup, while the review boundary is the ceiling of half the
 configured age.
 
-Start the frontend app from `apps/dustfril-tauri`:
+Start the frontend app from `apps/tauri`:
 
 ```bash
 npm install

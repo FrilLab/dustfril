@@ -3,7 +3,7 @@
 ## Dev environment tips
 
 * Use `cargo metadata --no-deps` to inspect the Rust workspace before searching directories manually.
-* Shared behavior belongs in `crates/dustfril-core`; keep CLI and Tauri layers focused on integration and presentation.
+* Shared behavior belongs in `crates/core`; keep CLI and Tauri layers focused on integration and presentation.
 * Check existing modules and public APIs before introducing a new module, parser, persistence model, or abstraction.
 * Follow the related GitHub Issue for feature scope and project documentation for architecture and roadmap.
 

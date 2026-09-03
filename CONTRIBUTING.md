@@ -33,10 +33,10 @@ DustFril is organized as a Rust workspace.
 ```text
 dustfril/
 ├── crates/
-│   └── dustfril-core
+│   └── core
 │
 └── apps/
-    └── dustfril-cli
+    └── cli
 ```
 
 ### dustfril-core

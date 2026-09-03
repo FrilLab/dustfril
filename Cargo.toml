@@ -3,6 +3,6 @@ resolver = "2"
 
 members = [
     "crates/*",
-    "apps/dustfril-cli",
-    "apps/dustfril-tauri/src-tauri"
+    "apps/cli",
+    "apps/tauri/src-tauri"
 ]

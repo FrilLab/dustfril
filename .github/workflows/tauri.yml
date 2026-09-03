@@ -34,9 +34,9 @@ jobs:
             pkg-config
 
       - name: Install frontend deps ci
-        working-directory: apps/dustfril-tauri
+        working-directory: apps/tauri
         run: npm ci
 
       - name: Check Tauri build (no bundle)
-        working-directory: apps/dustfril-tauri/src-tauri
+        working-directory: apps/tauri/src-tauri
         run: cargo check

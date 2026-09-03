@@ -48,7 +48,7 @@ None.
 - `cargo clippy --workspace --all-targets -- -D warnings` — PASS
 - `cargo test --workspace` — PASS
 - `cargo llvm-cov --workspace --all-features --summary-only` — PASS
-- `npm run build` in `apps/dustfril-tauri` — PASS
+- `npm run build` in `apps/tauri` — PASS
 - `git diff --check` — PASS
 
 ## Epic #73 recommendation

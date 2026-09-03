@@ -6,10 +6,10 @@ DustFril은 개발 산출물을 스캔, 분석, 점검, 정리하기 위한 워�
 
 ## 워크스페이스 구성
 
-- `crates/dustfril-core`: 스캔, 분석, 정리, 점검 로직을 담은 공용 코어
-- `apps/dustfril-cli`: `dfr` 커맨드라인 인터페이스
-- `apps/dustfril-tauri`: React + Tauri 기반 데스크톱 앱 셸
-- `apps/dustfril-tauri/src-tauri`: `dustfril-core`와 연결된 Tauri Rust 백엔드
+- `crates/core`: 스캔, 분석, 정리, 점검 로직을 담은 공용 코어
+- `apps/cli`: `dfr` 커맨드라인 인터페이스
+- `apps/tauri`: React + Tauri 기반 데스크톱 앱 셸
+- `apps/tauri/src-tauri`: `dustfril-core`와 연결된 Tauri Rust 백엔드
 
 ## 현재 기능
 
@@ -145,7 +145,7 @@ partial 분석 notice로 출력합니다. 워크플로·action을 실행하거�
 - cleanup execution
 - lifecycle script audit
 
-`apps/dustfril-tauri`에서 실행합니다.
+`apps/tauri`에서 실행합니다.
 
 ```bash
 npm install
