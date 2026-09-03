@@ -24,6 +24,10 @@ pub struct ProjectIdentity {
 impl ProjectIdentity {
     /// Creates an identity using the discovered root directory name.
     pub fn new(root: PathBuf, ecosystem: Ecosystem) -> Self {
+        // Resolve relative roots without following symlinks. Project identity
+        // should be stable for `.` while retaining the path spelling used by
+        // the scan and cleanup boundaries.
+        let root = std::path::absolute(&root).unwrap_or(root);
         let display_name = root
             .file_name()
             .and_then(|name| name.to_str())
@@ -63,5 +67,25 @@ impl Default for ProjectIdentity {
             display_name: String::new(),
             ecosystem: Ecosystem::Rust,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dot_root_uses_the_absolute_directory_identity() {
+        let identity = ProjectIdentity::new(PathBuf::from("."), Ecosystem::Rust);
+        let absolute_root = std::path::absolute(".").unwrap();
+
+        assert_eq!(identity.root, absolute_root);
+        assert_eq!(
+            identity.display_name,
+            absolute_root
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or_else(|| absolute_root.to_str().unwrap())
+        );
     }
 }

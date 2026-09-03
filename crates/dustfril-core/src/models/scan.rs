@@ -272,8 +272,15 @@ mod tests {
 
         assert_eq!(artifact.path, PathBuf::from("target"));
         assert_eq!(artifact.ecosystem, Ecosystem::Rust);
-        assert_eq!(artifact.project.root, PathBuf::from("."));
-        assert_eq!(artifact.project.display_name, ".");
+        let absolute_root = std::path::absolute(".").unwrap();
+        assert_eq!(artifact.project.root, absolute_root);
+        assert_eq!(
+            artifact.project.display_name,
+            absolute_root
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or_else(|| absolute_root.to_str().unwrap())
+        );
     }
 
     #[test]
