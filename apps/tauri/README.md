@@ -1,4 +1,4 @@
-# dustfril-tauri
+# DustFril desktop app
 
 Official desktop application for DustFril.
 
@@ -20,7 +20,7 @@ All business rules remain in `dustfril-core`. The desktop layer handles presenta
 
 ## Tauri API Contract
 
-The v0.0.1 frontend/backend boundary is defined by the Rust DTOs in
+The v0.1.0 frontend/backend boundary is defined by the Rust DTOs in
 `src-tauri/src/contract.rs` and mirrored by TypeScript types in
 `src/types/workflow.ts`. Payload fields use `camelCase`; enum values are
 case-sensitive.
@@ -39,7 +39,7 @@ case-sensitive.
 | `load_cleanup_history` | none | `CleanupHistoryEntry[]` |
 
 Contract changes must preserve existing command names, nullability, and enum wire
-values for v0.0.1. Cleanup execution intentionally accepts analyzed artifact
+values for v0.1.0. Cleanup execution intentionally accepts analyzed artifact
 identities rather than client-created deletion candidates; Core reconstructs and
 validates the cleanup plan from the immutable analysis identified by
 `analysisId`. The token preserves the exact preview analysis through execution,
@@ -56,7 +56,7 @@ artifact recommendations and the cleanup plan. Workspace analysis also accepts
 the optional `recordArtifactSnapshot` field, which defaults to `true`; policy-only
 refreshes set it to `false` so they do not change the generated-artifact baseline.
 
-## v0.0.1 Features
+## v0.1.0 Features
 
 - Workspace-first Finder-like shell with native folder selection
 - One explicit Analyze Workspace action that discovers Rust, Node.js, and Java artifacts together

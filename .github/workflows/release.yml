@@ -1,0 +1,183 @@
+name: Publish macOS release
+
+on:
+  push:
+    tags:
+      - 'v0.1.0'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish DustFril macOS release
+    if: github.repository == 'FrilLab/dustfril'
+    runs-on: macos-14
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Validate release metadata
+        working-directory: apps/tauri
+        env:
+          EXPECTED_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          cargo metadata --no-deps --format-version 1 > "$RUNNER_TEMP/dustfril-cargo-metadata.json"
+          node - "$RUNNER_TEMP/dustfril-cargo-metadata.json" "$EXPECTED_TAG" <<'NODE'
+          const fs = require('node:fs');
+
+          const metadataPath = process.argv[2];
+          const expectedTag = process.argv[3];
+          const config = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
+          const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const packageLock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+          const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+          const tauriPackage = metadata.packages.find(({ name }) => name === 'dustfril-tauri');
+          const expectedVersion = '0.1.0';
+          const errors = [];
+
+          if (expectedTag !== `v${expectedVersion}`) {
+            errors.push(`release tag must be v${expectedVersion}, got ${expectedTag}`);
+          }
+          if (config.productName !== 'DustFril') {
+            errors.push(`Tauri productName must be DustFril, got ${config.productName}`);
+          }
+          if (config.identifier !== 'com.frillab.dustfril') {
+            errors.push(`Tauri identifier is not com.frillab.dustfril: ${config.identifier}`);
+          }
+          if (config.version !== expectedVersion) {
+            errors.push(`Tauri version is not ${expectedVersion}: ${config.version}`);
+          }
+          if (packageJson.version !== expectedVersion) {
+            errors.push(`frontend version is not ${expectedVersion}: ${packageJson.version}`);
+          }
+          if (packageLock.version !== expectedVersion || packageLock.packages[''].version !== expectedVersion) {
+            errors.push('package-lock.json version does not match the release version');
+          }
+          if (!tauriPackage || tauriPackage.version !== expectedVersion) {
+            errors.push('Tauri Cargo package version does not match the release version');
+          }
+          if (!fs.existsSync(`../../docs/releases/v${expectedVersion}.md`)) {
+            errors.push(`missing release notes for v${expectedVersion}`);
+          }
+
+          if (errors.length > 0) {
+            console.error(errors.join('\n'));
+            process.exit(1);
+          }
+
+          fs.appendFileSync(process.env.GITHUB_ENV, `RELEASE_VERSION=${expectedVersion}\n`);
+          fs.appendFileSync(process.env.GITHUB_ENV, `DMG_NAME=DustFril_${expectedVersion}_aarch64.dmg\n`);
+          NODE
+
+      - name: Install frontend dependencies
+        working-directory: apps/tauri
+        run: npm ci
+
+      - name: Run frontend tests
+        working-directory: apps/tauri
+        run: npm test
+
+      - name: Build frontend
+        working-directory: apps/tauri
+        run: npm run build
+
+      - name: Run Rust quality gates
+        run: |
+          git diff --check
+          cargo fmt --all -- --check
+          cargo clippy --workspace --all-targets -- -D warnings
+          cargo test --workspace
+
+      - name: Run Rust coverage
+        run: |
+          rustup component add llvm-tools-preview
+          cargo install cargo-llvm-cov --locked
+          cargo llvm-cov --workspace --all-features --summary-only
+
+      - name: Build production DMG
+        working-directory: apps/tauri
+        env:
+          CI: true
+          TAURI_BUNDLER_DMG_IGNORE_CI: false
+        run: npm run tauri build -- --verbose
+
+      - name: Validate DMG and generate checksum
+        run: |
+          set -euo pipefail
+          DMG_PATH="target/release/bundle/dmg/$DMG_NAME"
+          APP_PATH='target/release/bundle/macos/DustFril.app'
+          DMG_ABS_PATH="$(cd "$(dirname "$DMG_PATH")" && pwd)/$(basename "$DMG_PATH")"
+          test -d "$APP_PATH"
+          test -f "$APP_PATH/Contents/Info.plist"
+          test -f "$APP_PATH/Contents/Resources/icon.icns"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$APP_PATH/Contents/Info.plist" | grep -Fx 'DustFril'
+          APP_EXECUTABLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_PATH/Contents/Info.plist")
+          test -x "$APP_PATH/Contents/MacOS/$APP_EXECUTABLE"
+          file "$APP_PATH/Contents/MacOS/$APP_EXECUTABLE" | grep -Eq 'arm64|Apple Silicon'
+
+          test -f "$DMG_PATH"
+          hdiutil verify "$DMG_PATH"
+
+          mount_device=''
+          mount_point=''
+          detach_mount() {
+            if [[ -n "$mount_device" ]]; then
+              hdiutil detach "$mount_device" >/dev/null || hdiutil detach "$mount_point" >/dev/null || true
+            fi
+          }
+          trap detach_mount EXIT
+
+          attach_output=$(hdiutil attach -nobrowse -readonly "$DMG_PATH")
+          mount_device=$(printf '%s\n' "$attach_output" | awk '$1 ~ /^\/dev\/disk/ && $NF ~ /^\/Volumes\// { print $1; exit }')
+          mount_point=$(printf '%s\n' "$attach_output" | sed -n 's#.*\(/Volumes/.*\)$#\1#p' | tail -1)
+          test -n "$mount_device"
+          test -n "$mount_point"
+          test -d "$mount_point/DustFril.app"
+          test -L "$mount_point/Applications"
+          test "$(readlink "$mount_point/Applications")" = '/Applications'
+          test -f "$mount_point/.VolumeIcon.icns"
+
+          hdiutil detach "$mount_device" >/dev/null
+          mount_device=''
+          mount_point=''
+          if hdiutil info | grep -F "$DMG_ABS_PATH" >/dev/null; then
+            echo 'release DMG is still mounted' >&2
+            exit 1
+          fi
+
+          (cd "$(dirname "$DMG_PATH")" && shasum -a 256 "$(basename "$DMG_PATH")" > "$(basename "$DMG_PATH").sha256")
+          cat "$DMG_PATH.sha256"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" \
+            "target/release/bundle/dmg/$DMG_NAME" \
+            "target/release/bundle/dmg/$DMG_NAME.sha256" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "DustFril $RELEASE_TAG" \
+            --notes-file "$GITHUB_WORKSPACE/docs/releases/v$RELEASE_VERSION.md" \
+            --latest
