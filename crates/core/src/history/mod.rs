@@ -1,11 +1,12 @@
 use std::{
-    fs::{self, OpenOptions},
+    fs::{self, File, OpenOptions},
     io::{self, Write},
     path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
 };
 
 use directories::ProjectDirs;
+use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -35,11 +36,8 @@ static HISTORY_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 /// Appends a unified activity record to the local history.
 pub fn record(activity: ActivityRecord) -> DustResult<()> {
     let path = history_path()?;
-    let _guard = history_lock()
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
 
-    append_record(&path, activity)
+    with_history_lock(&path, || append_record(&path, activity))
 }
 
 /// Records a cleanup operation in the unified activity history.
@@ -134,11 +132,8 @@ pub fn record_security_failure(
 /// Loads all activity records, migrating a legacy cleanup history when needed.
 pub fn load_all() -> DustResult<Vec<ActivityRecord>> {
     let path = history_path()?;
-    let _guard = history_lock()
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
 
-    load_unlocked(&path)
+    with_history_lock(&path, || load_unlocked(&path))
 }
 
 /// Clears only the unified activity history.
@@ -148,11 +143,8 @@ pub fn load_all() -> DustResult<Vec<ActivityRecord>> {
 /// history and therefore succeeds.
 pub fn clear() -> DustResult<()> {
     let path = history_path()?;
-    let _guard = history_lock()
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
 
-    clear_file(&path)
+    with_history_lock(&path, || clear_file(&path))
 }
 
 pub fn history_path() -> io::Result<PathBuf> {
@@ -285,6 +277,43 @@ fn temporary_path(path: &Path) -> PathBuf {
 
 fn json_error(error: serde_json::Error) -> DustError {
     DustError::Io(io::Error::other(error))
+}
+
+fn with_history_lock<T>(path: &Path, operation: impl FnOnce() -> DustResult<T>) -> DustResult<T> {
+    // The process-local mutex protects threads within one executable. The
+    // sidecar lock extends the same critical section across the CLI and
+    // desktop processes while keeping history.json removable during clear.
+    let _process_guard = history_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let lock_file = open_history_lock(path)?;
+    lock_file.lock_exclusive()?;
+
+    let operation_result = operation();
+    let unlock_result = lock_file.unlock();
+
+    match (operation_result, unlock_result) {
+        (Err(error), _) => Err(error),
+        (Ok(value), Ok(())) => Ok(value),
+        (Ok(_), Err(error)) => Err(error.into()),
+    }
+}
+
+fn open_history_lock(path: &Path) -> io::Result<File> {
+    OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(history_lock_path(path))
+}
+
+fn history_lock_path(path: &Path) -> PathBuf {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("history.json");
+    path.with_file_name(format!(".{file_name}.lock"))
 }
 
 fn history_lock() -> &'static Mutex<()> {
@@ -507,9 +536,16 @@ mod tests {
 
         record_to(&path, activity).unwrap();
 
-        let files = std::fs::read_dir(temp.path()).unwrap().collect::<Vec<_>>();
-        assert_eq!(files.len(), 1);
-        assert_eq!(files[0].as_ref().unwrap().file_name(), "history.json");
+        let files = std::fs::read_dir(temp.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect::<Vec<_>>();
+        assert!(files.iter().any(|file| file == "history.json"));
+        assert!(
+            files
+                .iter()
+                .all(|file| file == "history.json" || file == ".history.json.lock")
+        );
     }
 
     #[test]
@@ -770,6 +806,73 @@ mod tests {
     }
 
     #[test]
+    fn history_file_lock_serializes_clear_and_append_across_processes() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("history.json");
+        record_to(&path, activity("before-clear")).unwrap();
+
+        let ready_path = temp.path().join("child-ready");
+        let child_done_path = temp.path().join("child-done");
+        let parent_lock = open_history_lock(&path).unwrap();
+        parent_lock.lock_exclusive().unwrap();
+
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "history::tests::history_lock_child_appends",
+                "--nocapture",
+            ])
+            .env("DUSTFRIL_HISTORY_LOCK_PATH", &path)
+            .env("DUSTFRIL_HISTORY_LOCK_READY", &ready_path)
+            .env("DUSTFRIL_HISTORY_LOCK_DONE", &child_done_path)
+            .spawn()
+            .unwrap();
+
+        for _ in 0..200 {
+            if ready_path.exists() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        if !ready_path.exists() {
+            parent_lock.unlock().unwrap();
+            child.kill().unwrap();
+            child.wait().unwrap();
+            panic!("child process did not start");
+        }
+        if child_done_path.exists() {
+            parent_lock.unlock().unwrap();
+            child.wait().unwrap();
+            panic!("child process acquired the history lock too early");
+        }
+
+        clear_file(&path).unwrap();
+        parent_lock.unlock().unwrap();
+
+        let status = child.wait().unwrap();
+        assert!(status.success());
+        assert!(child_done_path.exists());
+
+        let records = load_unlocked(&path).unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].id, "after-clear");
+    }
+
+    #[test]
+    fn history_lock_child_appends() {
+        let Some(path) = std::env::var_os("DUSTFRIL_HISTORY_LOCK_PATH") else {
+            return;
+        };
+        let ready_path = std::env::var_os("DUSTFRIL_HISTORY_LOCK_READY").unwrap();
+        let done_path = std::env::var_os("DUSTFRIL_HISTORY_LOCK_DONE").unwrap();
+        let path = PathBuf::from(path);
+
+        fs::write(ready_path, "ready").unwrap();
+        with_history_lock(&path, || append_record(&path, activity("after-clear"))).unwrap();
+        fs::write(done_path, "done").unwrap();
+    }
+
+    #[test]
     fn security_activity_is_persisted_as_one_reloadable_unified_record() {
         let temp = TempDir::new().unwrap();
         let path = temp.path().join("history.json");
@@ -804,9 +907,6 @@ mod tests {
     }
 
     fn record_to(path: &Path, activity: ActivityRecord) -> DustResult<()> {
-        let _guard = history_lock()
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        append_record(path, activity)
+        with_history_lock(path, || append_record(path, activity))
     }
 }
