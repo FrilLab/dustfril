@@ -30,8 +30,27 @@ The repository is split into a reusable Rust core crate, a CLI app, and a Tauri 
 - Persist CLI cleanup history to the OS app data directory
 - Run a local, read-only GitHub Actions workflow security scan
 
-The supply-chain scanner is post-v0.0.1 work. The v0.0.1 release remains
-focused on the desktop artifact-cleaner workflow.
+The supply-chain scanner is post-v0.0.1 work. The v0.1.0 release includes the
+desktop artifact-cleaner workflow and the supporting analysis and history
+features described below.
+
+## macOS v0.1.0 release
+
+Download the Apple Silicon build from the
+[DustFril v0.1.0 GitHub Release](https://github.com/FrilLab/dustfril/releases/tag/v0.1.0):
+
+1. Download `DustFril_0.1.0_aarch64.dmg` and its `.sha256` checksum.
+2. Verify the DMG with `shasum -a 256 -c DustFril_0.1.0_aarch64.dmg.sha256`.
+3. Open the DMG and copy `DustFril.app` to `Applications`.
+4. Launch DustFril.
+
+This release supports Apple Silicon (`aarch64`) only. Intel and universal
+artifacts are not provided. DustFril v0.1.0 is currently distributed as an
+unsigned/not-notarized early release, so macOS may show a security warning on
+first launch. Signed and notarized distribution is tracked separately in #161.
+
+Installation for this release is through GitHub Releases only. Homebrew and
+Chocolatey distribution are tracked separately in #162 and #163.
 
 Scans reject missing, symbolic-link, or non-directory roots and report
 filesystem traversal errors. Cleanup only accepts real artifact directories,

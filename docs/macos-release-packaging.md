@@ -2,8 +2,8 @@
 
 DustFril's macOS production bundle creates an application bundle and a DMG:
 
-- `target/release/bundle/macos/dustfril-tauri.app`
-- `target/release/bundle/dmg/dustfril-tauri_<version>_aarch64.dmg`
+- `target/release/bundle/macos/DustFril.app`
+- `target/release/bundle/dmg/DustFril_<version>_aarch64.dmg`
 
 ## DMG build failure on a local macOS session
 
@@ -54,10 +54,35 @@ environment; that forces the Finder AppleScript and recreates the TCC failure.
 After either build, verify the artifact before release:
 
 ```sh
-hdiutil verify target/release/bundle/dmg/dustfril-tauri_<version>_aarch64.dmg
-hdiutil attach -nobrowse -readonly target/release/bundle/dmg/dustfril-tauri_<version>_aarch64.dmg
+hdiutil verify target/release/bundle/dmg/DustFril_<version>_aarch64.dmg
+hdiutil attach -nobrowse -readonly target/release/bundle/dmg/DustFril_<version>_aarch64.dmg
 ```
 
-Confirm that the mounted volume contains `dustfril-tauri.app`, an
+Confirm that the mounted volume contains `DustFril.app`, an
 `Applications` link to `/Applications`, and the expected volume icon. Detach
 the volume with `hdiutil detach <device>` after verification.
+
+## v0.1.0 release policy
+
+The first public release is built and validated for Apple Silicon only
+(`aarch64`). It is distributed through the
+[DustFril GitHub Releases page](https://github.com/FrilLab/dustfril/releases)
+as `DustFril_0.1.0_aarch64.dmg` with a matching `.sha256` file.
+
+DustFril v0.1.0 is currently an unsigned/not-notarized early release. macOS
+may show a security warning on first launch. Do not describe this build as
+signed or notarized; signed and notarized distribution is tracked separately
+in #161.
+
+After the release is public, validate the downloaded artifact rather than only
+the local build:
+
+1. Download the DMG and its `.sha256` file from the GitHub Release.
+2. Run `shasum -a 256 -c DustFril_0.1.0_aarch64.dmg.sha256`.
+3. Run `hdiutil verify DustFril_0.1.0_aarch64.dmg` and mount it read-only.
+4. Copy `DustFril.app` to `Applications` or a disposable test location and
+   launch it, acknowledging the unsigned/not-notarized warning if shown.
+5. In a disposable workspace fixture, analyze the workspace, perform one
+   Trash cleanup, verify Activity History, and confirm unrelated files are
+   unchanged.
+6. Detach the DMG and confirm no release DMG remains mounted.

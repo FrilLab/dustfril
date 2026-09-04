@@ -27,8 +27,26 @@ DustFril은 개발 산출물을 스캔, 분석, 점검, 정리하기 위한 워�
 - CLI 정리 이력을 운영체제 앱 데이터 디렉터리에 저장
 - 로컬 GitHub Actions 워크플로를 실행하지 않고 읽기 전용으로 보안 점검
 
-공급망 보안 스캐너는 v0.0.1 이후 작업입니다. v0.0.1 릴리스 범위는
-`AGENTS.md`에 정의된 데스크톱 산출물 정리 흐름으로 유지됩니다.
+공급망 보안 스캐너는 v0.0.1 이후 작업입니다. v0.1.0 릴리스는 아래에 설명한
+데스크톱 산출물 정리 흐름과 분석·이력 기능을 포함합니다.
+
+## macOS v0.1.0 릴리스
+
+[DustFril v0.1.0 GitHub Release](https://github.com/FrilLab/dustfril/releases/tag/v0.1.0)에서
+Apple Silicon용 빌드를 내려받습니다.
+
+1. `DustFril_0.1.0_aarch64.dmg`와 `.sha256` 체크섬을 내려받습니다.
+2. `shasum -a 256 -c DustFril_0.1.0_aarch64.dmg.sha256`로 DMG를 검증합니다.
+3. DMG를 열고 `DustFril.app`을 `응용 프로그램`으로 복사합니다.
+4. DustFril을 실행합니다.
+
+이 릴리스는 Apple Silicon(`aarch64`)만 지원하며 Intel 및 universal 빌드는
+제공하지 않습니다. DustFril v0.1.0은 현재 서명되지 않았고 공증되지 않은
+초기 릴리스이므로 첫 실행 시 macOS 보안 경고가 나타날 수 있습니다. 서명 및
+공증 배포는 #161에서 별도로 다룹니다.
+
+이번 릴리스의 설치 방법은 GitHub Releases 직접 다운로드만 문서화합니다.
+Homebrew와 Chocolatey 배포는 각각 #162와 #163에서 별도로 다룹니다.
 
 ## 현재 탐지 대상
 
