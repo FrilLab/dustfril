@@ -3,7 +3,7 @@ name: Publish macOS release
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - 'v0.1.0'
 
 permissions:
   contents: write
@@ -33,7 +33,7 @@ jobs:
       - name: Install Node
         uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
 
       - name: Validate release metadata
         working-directory: apps/tauri
