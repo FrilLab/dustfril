@@ -1,5 +1,12 @@
 # DustFril
 
+> 🚧 **Under construction — do not download the current macOS release yet.**
+>
+> The published `v0.1.0` macOS DMG is unsigned/not-notarized and may be rejected
+> by Gatekeeper with **“DustFril is damaged and can’t be opened.”**
+> Please do not use the current release for normal installation.
+> Signed and notarized macOS distribution is tracked in [#161](https://github.com/FrilLab/dustfril/issues/161).
+
 DustFril is a workspace for scanning, analyzing, auditing, and cleaning development artifacts.
 
 The repository is split into a reusable Rust core crate, a CLI app, and a Tauri desktop app.
@@ -36,21 +43,24 @@ features described below.
 
 ## macOS v0.1.0 release
 
-Download the Apple Silicon build from the
-[DustFril v0.1.0 GitHub Release](https://github.com/FrilLab/dustfril/releases/tag/v0.1.0):
+> 🚧 **Do not download/install `v0.1.0` for normal use yet.**
+>
+> The current Apple Silicon DMG is not signed with a Developer ID and is not
+> notarized. A browser-downloaded copy may therefore be quarantined by macOS and
+> rejected by Gatekeeper with **“DustFril is damaged and can’t be opened.”**
+>
+> This is a distribution/signing limitation, not an installation flow we want
+> users to work around. Please wait for a signed and notarized macOS release.
+> Progress is tracked in [#161](https://github.com/FrilLab/dustfril/issues/161).
 
-1. Download `DustFril_0.1.0_aarch64.dmg` and its `.sha256` checksum.
-2. Verify the DMG with `shasum -a 256 -c DustFril_0.1.0_aarch64.dmg.sha256`.
-3. Open the DMG and copy `DustFril.app` to `Applications`.
-4. Launch DustFril.
+The existing `v0.1.0` release remains available for release-engineering and
+checksum verification, but it should be treated as an early development
+artifact rather than a normal end-user download.
 
-This release supports Apple Silicon (`aarch64`) only. Intel and universal
-artifacts are not provided. DustFril v0.1.0 is currently distributed as an
-unsigned/not-notarized early release, so macOS may show a security warning on
-first launch. Signed and notarized distribution is tracked separately in #161.
+This release targets Apple Silicon (`aarch64`) only. Intel and universal
+artifacts are not provided.
 
-Installation for this release is through GitHub Releases only. Homebrew and
-Chocolatey distribution are tracked separately in #162 and #163.
+Homebrew and Chocolatey distribution are tracked separately in #162 and #163.
 
 Scans reject missing, symbolic-link, or non-directory roots and report
 filesystem traversal errors. Cleanup only accepts real artifact directories,
@@ -188,8 +198,8 @@ construction reuses `AnalysisResult` and does not walk artifact directories a
 second time. State is keyed by canonical workspace path and retains the latest
 32 snapshots per workspace. Access through a symlink resolves to the same
 canonical workspace; moving a workspace creates a new history rather than
-guessing that it is the old one. Snapshot persistence warnings do not discard
-a completed scan/analyze result. Filtered snapshots carry forward the latest
+guessing that it is the old one. Snapshot persistence warnings do not discard a
+completed scan/analyze result. Filtered snapshots carry forward the latest
 state for ecosystems that were not selected, so a later full scan does not
 report unobserved artifacts as newly created.
 
