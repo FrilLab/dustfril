@@ -34,6 +34,7 @@ case-sensitive.
 | `build_cleanup_plan` | `{ options: RunOptions }` | `CleanupPlanResponse` |
 | `audit` | `{ options: RunOptions }` | `LifecycleScript[]` |
 | `security_scan` | `{ options: RunOptions }` | `SecurityScanResponse` (may include additive `historyWarning`) |
+| `workflow_scan` | `{ options: RunOptions }` | `WorkflowScanResponse` (local, read-only workflow findings; no history entry) |
 | `execute_cleanup` | `{ request: { root, ecosystems, analysisId, selectedArtifacts, mode } }` | `CleanupResultResponse` (may include additive `historyWarning`) |
 | `load_activity_history` | none | `ActivityRecord[]` |
 | `load_cleanup_history` | none | `CleanupHistoryEntry[]` |
@@ -64,6 +65,7 @@ refreshes set it to `false` so they do not change the generated-artifact baselin
 - Safe cleanup with Trash or permanent delete confirmation
 - Activity history viewer backed by shared, versioned core history storage
 - Explicit scans return the generated-artifact snapshot comparison produced by Core
+- Explicit local GitHub Actions workflow scans with structured command, permission, and direct secret-exposure findings
 
 Activity persistence is auxiliary to scan, cleanup, and security results. If a
 history write fails, the operation response remains available and includes an
@@ -78,11 +80,11 @@ additive `historyWarning` for the desktop status surface.
 - `HistoryList`
 - `AsyncStatePanel`
 - `ModulePlaceholderView`
+- `GithubActionsView`
 
 ## Desktop module navigation
 
-The sidebar keeps the planned Desktop information architecture in
-`src/model/categories.ts`:
+The sidebar keeps the Desktop information architecture in `src/model/categories.ts`:
 
 ```text
 Overview
@@ -100,13 +102,17 @@ Workspace
 
 Security
   Supply Chain (planned)
-  GitHub Actions (planned)
+  GitHub Actions
   Executable Integrity (planned)
 ```
 
 Rust, Node.js, and Java destinations filter the existing unified analysis
-result; they do not start a new scan when selected. Planned destinations render
-an explicit unsupported state and do not invoke speculative Tauri commands.
+result; they do not start a new scan when selected. GitHub Actions is an
+explicit local workflow scan: selecting the destination does not run it, and
+the `workflow_scan` command runs only after the user chooses Scan Workflows.
+The scan is read-only and does not write an activity-history entry. Other
+planned destinations render an explicit unsupported state and do not invoke
+speculative Tauri commands.
 
 Advanced operations use the small state model in `src/model/async.ts`. It
 keeps loading, success, partial success, unsupported, empty, and error states

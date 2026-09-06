@@ -183,6 +183,52 @@ export type SecurityScanResponse = {
   historyWarning?: string;
 };
 
+export type WorkflowAnalysisStatus = 'analyzed';
+export type WorkflowFindingCategory =
+  | 'suspiciousCommand'
+  | 'tokenPermissions'
+  | 'secretExposure';
+export type WorkflowExposureSink = 'stdout' | 'networkRequest';
+
+export type WorkflowJobSummary = {
+  id: string;
+  name?: string;
+  stepCount: number;
+};
+
+export type WorkflowSummary = {
+  path: string;
+  name?: string;
+  analysisStatus: WorkflowAnalysisStatus;
+  jobs: WorkflowJobSummary[];
+};
+
+export type WorkflowFinding = {
+  workflowPath: string;
+  jobId?: string;
+  stepIndex?: number;
+  stepName?: string;
+  ruleId: string;
+  category: WorkflowFindingCategory;
+  riskLevel: RiskLevel;
+  evidence?: string;
+  reason: string;
+  secretReference?: string;
+  exposureSink?: WorkflowExposureSink;
+};
+
+export type WorkflowScanNotice = {
+  workflowPath: string;
+  jobId?: string;
+  reason: string;
+};
+
+export type WorkflowScanResponse = {
+  workflows: WorkflowSummary[];
+  findings: WorkflowFinding[];
+  notices: WorkflowScanNotice[];
+};
+
 export type ActivityKind = 'Scan' | 'Cleanup' | 'Security';
 
 export type ActivityFailure = {
