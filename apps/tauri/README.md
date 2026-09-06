@@ -37,7 +37,7 @@ case-sensitive.
 | `execute_cleanup` | `{ request: { root, ecosystems, analysisId, selectedArtifacts, mode } }` | `CleanupResultResponse` (may include additive `historyWarning`) |
 | `load_activity_history` | none | `ActivityRecord[]` |
 | `load_cleanup_history` | none | `CleanupHistoryEntry[]` |
-| `load_artifact_snapshot_history` | `{ root }` | retained Core-computed artifact snapshot comparisons and retention metadata |
+| `load_artifact_snapshot_history` | `{ root }` | retained Core-computed artifact snapshot comparisons and retention metadata; an evicted predecessor is `comparisonUnavailable` |
 
 Contract changes must preserve existing command names, nullability, and enum wire
 values for v0.1.0. Cleanup execution intentionally accepts analyzed artifact

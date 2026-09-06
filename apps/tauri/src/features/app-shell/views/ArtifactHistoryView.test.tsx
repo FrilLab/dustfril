@@ -109,6 +109,42 @@ describe('ArtifactHistoryView', () => {
     expect(screen.getByText('Generated artifact snapshots')).toBeInTheDocument();
   });
 
+  it('explains when the oldest retained entry has no available predecessor', () => {
+    render(
+      <ArtifactHistoryView
+        {...props}
+        history={{
+          entries: [
+            {
+              status: 'comparisonUnavailable',
+              snapshot: {
+                workspaceId: '/workspace',
+                timestamp: '2026-09-01T00:00:00Z',
+                artifacts: [],
+              },
+              previousSnapshot: null,
+              changes: [],
+            },
+          ],
+          retainedSnapshotCount: 32,
+          retentionLimit: 32,
+        }}
+        scanEntry={scanEntry}
+      />,
+    );
+
+    expect(screen.getByText('Comparison unavailable')).toBeInTheDocument();
+    expect(screen.getByText(/retention limit was reached/)).toBeInTheDocument();
+  });
+
+  it('does not call a missing activity record proof that no scan ever ran', () => {
+    render(<ArtifactHistoryView {...props} history={history} scanEntry={null} />);
+
+    expect(screen.getByText(/No retained scan activity is available/)).toBeInTheDocument();
+    expect(screen.queryByText(/No scan has been run for this workspace yet/)).not.toBeInTheDocument();
+    expect(screen.getByText('Compared')).toBeInTheDocument();
+  });
+
   it('shows malformed or unsupported persisted state as an error', () => {
     render(
       <ArtifactHistoryView

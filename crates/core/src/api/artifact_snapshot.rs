@@ -58,8 +58,11 @@ pub fn load_artifact_snapshot_history(
     workspace_path: &Path,
 ) -> DustResult<Vec<ArtifactSnapshotResult>> {
     let path = artifact_snapshot_path()?;
-    let snapshots = ArtifactSnapshotStore::new(path).load_workspace(workspace_path)?;
-    Ok(artifact_snapshot::artifact_snapshot_history(snapshots))
+    let retained = ArtifactSnapshotStore::new(path).load_workspace_with_metadata(workspace_path)?;
+    Ok(artifact_snapshot::artifact_snapshot_history(
+        retained.snapshots,
+        retained.history_truncated,
+    ))
 }
 
 #[cfg(test)]
@@ -110,7 +113,8 @@ mod tests {
         store.record_snapshot(first).unwrap();
         store.record_snapshot(second).unwrap();
 
-        let history = artifact_snapshot::artifact_snapshot_history(store.load_all().unwrap());
+        let history =
+            artifact_snapshot::artifact_snapshot_history(store.load_all().unwrap(), false);
 
         assert_eq!(history.len(), 2);
         assert_eq!(

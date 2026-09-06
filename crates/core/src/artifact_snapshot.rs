@@ -28,6 +28,12 @@ static SNAPSHOT_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 struct ArtifactSnapshotState {
     version: u32,
     workspaces: BTreeMap<String, Vec<ArtifactSnapshot>>,
+    /// Whether the oldest retained snapshot may have an evicted predecessor.
+    /// `None` keeps older state files backward-compatible; a full legacy
+    /// workspace is treated conservatively because its retention boundary is
+    /// otherwise unknowable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    retention_metadata: Option<BTreeMap<String, bool>>,
 }
 
 impl Default for ArtifactSnapshotState {
@@ -35,8 +41,14 @@ impl Default for ArtifactSnapshotState {
         Self {
             version: ARTIFACT_SNAPSHOT_STATE_VERSION,
             workspaces: BTreeMap::new(),
+            retention_metadata: None,
         }
     }
+}
+
+pub(crate) struct RetainedArtifactSnapshots {
+    pub(crate) snapshots: Vec<ArtifactSnapshot>,
+    pub(crate) history_truncated: bool,
 }
 
 /// Access to the versioned local generated-artifact snapshot collection.
@@ -67,17 +79,36 @@ impl ArtifactSnapshotStore {
 
     /// Loads retained snapshots for one canonical workspace.
     pub fn load_workspace(&self, workspace_path: &Path) -> DustResult<Vec<ArtifactSnapshot>> {
+        self.load_workspace_with_metadata(workspace_path)
+            .map(|history| history.snapshots)
+    }
+
+    /// Loads retained snapshots and whether retention may have removed an
+    /// older predecessor from the beginning of the returned history.
+    pub(crate) fn load_workspace_with_metadata(
+        &self,
+        workspace_path: &Path,
+    ) -> DustResult<RetainedArtifactSnapshots> {
         let workspace_id = workspace_id(workspace_path)?;
         let _guard = snapshot_lock()
             .lock()
             .unwrap_or_else(|error| error.into_inner());
         let state = load_state(&self.path)?;
-
-        Ok(state
+        let snapshots = state
             .workspaces
             .get(&workspace_id)
             .cloned()
-            .unwrap_or_default())
+            .unwrap_or_default();
+        let history_truncated = state
+            .retention_metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(&workspace_id).copied())
+            .unwrap_or(snapshots.len() >= MAX_ARTIFACT_SNAPSHOTS_PER_WORKSPACE);
+
+        Ok(RetainedArtifactSnapshots {
+            snapshots,
+            history_truncated,
+        })
     }
 
     /// Creates and persists one snapshot from an existing analysis result.
@@ -149,6 +180,16 @@ impl ArtifactSnapshotStore {
             .unwrap_or_default();
 
         let mut next_state = state;
+        let existing_snapshot_count = next_state
+            .workspaces
+            .get(&snapshot.workspace_id)
+            .map_or(0, Vec::len);
+        let history_truncated = next_state
+            .retention_metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(&snapshot.workspace_id).copied())
+            .unwrap_or(false)
+            || existing_snapshot_count >= MAX_ARTIFACT_SNAPSHOTS_PER_WORKSPACE;
         let snapshots = next_state
             .workspaces
             .entry(snapshot.workspace_id.clone())
@@ -158,6 +199,10 @@ impl ArtifactSnapshotStore {
             let first_retained = snapshots.len() - MAX_ARTIFACT_SNAPSHOTS_PER_WORKSPACE;
             snapshots.drain(..first_retained);
         }
+        next_state
+            .retention_metadata
+            .get_or_insert_with(BTreeMap::new)
+            .insert(snapshot.workspace_id.clone(), history_truncated);
 
         save_state(&self.path, &next_state)?;
 
@@ -175,7 +220,10 @@ impl ArtifactSnapshotStore {
 /// Keeping this comparison next to snapshot persistence means read-only
 /// consumers can render the exact same New/Removed/Resized/Unchanged states as
 /// an explicit snapshot operation without reimplementing comparison logic.
-pub fn artifact_snapshot_history(snapshots: Vec<ArtifactSnapshot>) -> Vec<ArtifactSnapshotResult> {
+pub fn artifact_snapshot_history(
+    snapshots: Vec<ArtifactSnapshot>,
+    history_truncated: bool,
+) -> Vec<ArtifactSnapshotResult> {
     let mut previous_snapshot = None;
 
     snapshots
@@ -184,6 +232,8 @@ pub fn artifact_snapshot_history(snapshots: Vec<ArtifactSnapshot>) -> Vec<Artifa
             let result = ArtifactSnapshotResult {
                 status: if previous_snapshot.is_some() {
                     ArtifactSnapshotStatus::Compared
+                } else if history_truncated {
+                    ArtifactSnapshotStatus::ComparisonUnavailable
                 } else {
                     ArtifactSnapshotStatus::BaselineCreated
                 },
@@ -737,5 +787,41 @@ mod tests {
         let snapshots = store.load_all().unwrap();
         assert_eq!(snapshots.len(), MAX_ARTIFACT_SNAPSHOTS_PER_WORKSPACE);
         assert_eq!(snapshots[0].artifacts[0].size_bytes, 3);
+
+        let retained = store
+            .load_workspace_with_metadata(workspace.path())
+            .unwrap();
+        assert!(retained.history_truncated);
+        let history = artifact_snapshot_history(retained.snapshots, retained.history_truncated);
+        assert_eq!(
+            history[0].status,
+            ArtifactSnapshotStatus::ComparisonUnavailable
+        );
+        assert!(history[0].previous_snapshot.is_none());
+        assert!(history[0].changes.is_empty());
+    }
+
+    #[test]
+    fn exact_retention_limit_keeps_a_known_baseline() {
+        let workspace = TempDir::new().unwrap();
+        let store = ArtifactSnapshotStore::new(workspace.path().join("snapshots.json"));
+
+        for timestamp in 0..MAX_ARTIFACT_SNAPSHOTS_PER_WORKSPACE as i64 {
+            store
+                .record_snapshot(snapshot(
+                    workspace.path(),
+                    "target",
+                    timestamp as u64,
+                    timestamp,
+                ))
+                .unwrap();
+        }
+
+        let retained = store
+            .load_workspace_with_metadata(workspace.path())
+            .unwrap();
+        assert!(!retained.history_truncated);
+        let history = artifact_snapshot_history(retained.snapshots, retained.history_truncated);
+        assert_eq!(history[0].status, ArtifactSnapshotStatus::BaselineCreated);
     }
 }

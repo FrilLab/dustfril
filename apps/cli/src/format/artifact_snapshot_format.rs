@@ -12,6 +12,11 @@ pub fn print_artifact_snapshot_result(result: &ArtifactSnapshotResult) {
         return;
     }
 
+    if result.status == dustfril_core::models::ArtifactSnapshotStatus::ComparisonUnavailable {
+        println!("\nComparison unavailable; an older snapshot may no longer be retained.");
+        return;
+    }
+
     if result.changes.is_empty() {
         println!("\nNo artifact changes detected.");
         return;

@@ -30,7 +30,7 @@ export type ScanResponse = {
   artifactSnapshotWarning?: string;
 };
 
-export type ArtifactSnapshotStatus = 'baselineCreated' | 'compared';
+export type ArtifactSnapshotStatus = 'baselineCreated' | 'compared' | 'comparisonUnavailable';
 export type ArtifactChangeKind =
   | 'new'
   | 'removed'

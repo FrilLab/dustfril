@@ -70,7 +70,7 @@ export function ArtifactHistoryView(props: ArtifactHistoryViewProps) {
 
       {props.status === 'success' && props.history ? (
         <div className="artifact-history-content">
-          <ScanSummary entry={props.scanEntry} />
+          <ScanSummary entry={props.scanEntry} hasSnapshotHistory={props.history.entries.length > 0} />
           <SnapshotHistory history={props.history} scanEntry={props.scanEntry} />
         </div>
       ) : null}
@@ -78,7 +78,13 @@ export function ArtifactHistoryView(props: ArtifactHistoryViewProps) {
   );
 }
 
-function ScanSummary({ entry }: { entry: ActivityRecord | null }) {
+function ScanSummary({
+  entry,
+  hasSnapshotHistory,
+}: {
+  entry: ActivityRecord | null;
+  hasSnapshotHistory: boolean;
+}) {
   return (
     <section className="artifact-history-card" aria-labelledby="scan-summary-heading">
       <div className="artifact-history-card-heading">
@@ -97,7 +103,11 @@ function ScanSummary({ entry }: { entry: ActivityRecord | null }) {
         <EmptyState
           compact
           icon={<FolderIcon />}
-          message="No scan has been run for this workspace yet. Artifact History is read-only until an explicit scan is completed."
+          message={
+            hasSnapshotHistory
+              ? 'No retained scan activity is available for this workspace. The artifact snapshots below remain available from Core.'
+              : 'No scan has been run for this workspace yet. Artifact History is read-only until an explicit scan is completed.'
+          }
         />
       ) : entry.result.details.accessSummary ? (
         <AccessSummaryDetails entry={entry} summary={entry.result.details.accessSummary} />
@@ -200,6 +210,7 @@ function SnapshotHistory({
 
 function SnapshotCard({ entry }: { entry: ArtifactSnapshotResult }) {
   const isBaseline = entry.status === 'baselineCreated';
+  const isComparisonUnavailable = entry.status === 'comparisonUnavailable';
 
   return (
     <article className="artifact-snapshot-card">
@@ -216,6 +227,11 @@ function SnapshotCard({ entry }: { entry: ArtifactSnapshotResult }) {
       {isBaseline ? (
         <p className="artifact-history-card-description">
           First retained baseline. There is no earlier snapshot for a size comparison.
+        </p>
+      ) : isComparisonUnavailable ? (
+        <p className="artifact-history-card-description">
+          The earlier snapshot for this retained entry is no longer available because the history
+          retention limit was reached. No comparison is inferred.
         </p>
       ) : entry.changes.length ? (
         <ChangeTable entry={entry} />

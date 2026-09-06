@@ -201,7 +201,9 @@ canonical workspace; moving a workspace creates a new history rather than
 guessing that it is the old one. Snapshot persistence warnings do not discard a
 completed scan/analyze result. Filtered snapshots carry forward the latest
 state for ecosystems that were not selected, so a later full scan does not
-report unobserved artifacts as newly created.
+report unobserved artifacts as newly created. When retention has evicted the
+predecessor of the oldest retained snapshot, Desktop history reports that
+comparison as unavailable instead of presenting a misleading new baseline.
 
 ## Desktop App
 

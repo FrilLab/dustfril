@@ -1,4 +1,8 @@
-import type { ActivityRecord, ArtifactChangeKind } from '../types/workflow';
+import type {
+  ActivityRecord,
+  ArtifactChangeKind,
+  ArtifactSnapshotStatus,
+} from '../types/workflow';
 
 export function latestScanForWorkspace(entries: ActivityRecord[], root: string) {
   const normalizedRoot = normalizePath(root);
@@ -43,8 +47,15 @@ export function changeKindLabel(kind: ArtifactChangeKind) {
   }
 }
 
-export function snapshotStatusLabel(status: 'baselineCreated' | 'compared') {
-  return status === 'baselineCreated' ? 'Baseline created' : 'Compared';
+export function snapshotStatusLabel(status: ArtifactSnapshotStatus) {
+  switch (status) {
+    case 'baselineCreated':
+      return 'Baseline created';
+    case 'compared':
+      return 'Compared';
+    case 'comparisonUnavailable':
+      return 'Comparison unavailable';
+  }
 }
 
 function normalizePath(path: string) {

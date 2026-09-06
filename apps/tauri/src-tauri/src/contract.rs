@@ -1110,6 +1110,10 @@ mod tests {
             value["retentionLimit"],
             MAX_ARTIFACT_SNAPSHOTS_PER_WORKSPACE
         );
+        assert_eq!(
+            serde_json::to_value(ArtifactSnapshotStatus::ComparisonUnavailable).unwrap(),
+            "comparisonUnavailable"
+        );
     }
 
     #[test]
