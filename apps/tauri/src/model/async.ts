@@ -9,7 +9,7 @@ export type AsyncOperationStatus =
 
 export type AsyncOperationState<T> =
   | { status: 'idle'; requestId: number }
-  | { status: 'loading'; requestId: number }
+  | { status: 'loading'; requestId: number; previous?: T }
   | { status: 'success'; requestId: number; data: T }
   | { status: 'partial'; requestId: number; data: T; warnings: string[] }
   | { status: 'unsupported'; requestId: number; reason: string }
@@ -38,7 +38,11 @@ export function reduceAsyncOperation<T>(
 
   switch (action.type) {
     case 'start':
-      return { status: 'loading', requestId: action.requestId };
+      return {
+        status: 'loading',
+        requestId: action.requestId,
+        previous: operationData(state),
+      };
     case 'success':
       return action.warnings?.length
         ? {
@@ -65,5 +69,9 @@ export function reduceAsyncOperation<T>(
 }
 
 export function operationData<T>(state: AsyncOperationState<T>): T | undefined {
-  return 'data' in state ? state.data : state.status === 'error' ? state.previous : undefined;
+  if ('data' in state) {
+    return state.data;
+  }
+
+  return state.status === 'error' || state.status === 'loading' ? state.previous : undefined;
 }

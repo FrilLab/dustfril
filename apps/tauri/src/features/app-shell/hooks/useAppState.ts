@@ -46,6 +46,7 @@ export function useAppState() {
   const [storageSummary, setStorageSummary] = useState<StorageSummary | null>(null);
   const [historyEntries, setHistoryEntries] = useState<ActivityRecord[]>([]);
   const [selectedCleanupPaths, setSelectedCleanupPaths] = useState<string[]>([]);
+  const [cleanupReviewPaths, setCleanupReviewPaths] = useState<string[]>([]);
   const [cleanupAgeDays, setCleanupAgeDays] = useState<number>(defaultCleanupAgeDays);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [workspaceOperation, dispatchWorkspaceOperation] = useReducer(
@@ -82,9 +83,13 @@ export function useAppState() {
     }
   }, [filteredArtifacts, selectedItemId]);
 
-  const selectedCandidateTotalBytes = useMemo(
-    () => selectedCandidateBytes(cleanupCandidates, selectedCleanupPaths),
-    [cleanupCandidates, selectedCleanupPaths],
+  const cleanupReviewItems = useMemo(
+    () => cleanupCandidates.filter((candidate) => cleanupReviewPaths.includes(candidate.path)),
+    [cleanupCandidates, cleanupReviewPaths],
+  );
+  const cleanupReviewTotalBytes = useMemo(
+    () => selectedCandidateBytes(cleanupCandidates, cleanupReviewPaths),
+    [cleanupCandidates, cleanupReviewPaths],
   );
 
   const summary = useMemo(
@@ -109,7 +114,7 @@ export function useAppState() {
   const canAnalyze = busyAction === null && root.length > 0;
   const canReviewCleanup =
     busyAction === null && cleanupPlan !== null && selectedCleanupPaths.length > 0;
-  const confirmSamplePaths = selectedCleanupPaths.slice(0, 5);
+  const confirmSamplePaths = cleanupReviewPaths.slice(0, 5);
 
   async function runAction(action: string, runner: () => Promise<void>) {
     const requestId = ++actionRequestRef.current;
@@ -151,6 +156,7 @@ export function useAppState() {
     setCleanupPlan(null);
     setStorageSummary(null);
     setSelectedCleanupPaths([]);
+    setCleanupReviewPaths([]);
     setSelectedItemId(null);
     setConfirmDialogOpen(false);
     setSearch('');
@@ -222,6 +228,7 @@ export function useAppState() {
             .filter((candidate) => candidate.selectedByDefault)
             .map((candidate) => candidate.path),
         );
+        setCleanupReviewPaths([]);
         setSelectedItemId((current) =>
           current && response.analysis.artifacts.some((artifact) => artifact.path === current)
             ? current
@@ -306,10 +313,19 @@ export function useAppState() {
     setActiveCategory(categoryForEcosystem(artifact?.ecosystem));
   }
 
-  function handleRequestCleanup() {
-    if (canReviewCleanup) {
-      setConfirmDialogOpen(true);
+  function handleRequestCleanup(paths: string[]) {
+    if (busyAction !== null || cleanupPlan === null) {
+      return;
     }
+
+    const candidatePaths = new Set(cleanupPlan.candidates.map((candidate) => candidate.path));
+    const reviewPaths = [...new Set(paths)].filter((path) => candidatePaths.has(path));
+    if (!reviewPaths.length) {
+      return;
+    }
+
+    setCleanupReviewPaths(reviewPaths);
+    setConfirmDialogOpen(true);
   }
 
   async function handleConfirmCleanup() {
@@ -318,7 +334,7 @@ export function useAppState() {
     }
 
     const candidates = cleanupPlan.candidates.filter((candidate) =>
-      selectedCleanupPaths.includes(candidate.path),
+      cleanupReviewPaths.includes(candidate.path),
     );
 
     await runAction('cleanup-execute', async () => {
@@ -418,6 +434,7 @@ export function useAppState() {
       setSelectedCleanupPaths((current) =>
         current.filter((path) => !result.deletedPaths.includes(path)),
       );
+      setCleanupReviewPaths([]);
       setSelectedItemId(null);
       setConfirmDialogOpen(false);
       setHistoryEntries(await loadActivityHistory());
@@ -435,11 +452,9 @@ export function useAppState() {
     analysisResult,
     cleanupPlan,
     storageSummary,
-    selectedCleanupItems: cleanupCandidates.filter((candidate) =>
-      selectedCleanupPaths.includes(candidate.path),
-    ),
+    selectedCleanupItems: cleanupReviewItems,
     selectedCleanupPaths,
-    selectedCandidateBytes: selectedCandidateTotalBytes,
+    selectedCandidateBytes: cleanupReviewTotalBytes,
     cleanupAgeDays,
     sidebarEntries,
     filteredArtifacts,

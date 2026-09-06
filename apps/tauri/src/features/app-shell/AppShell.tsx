@@ -111,7 +111,7 @@ export function AppShell() {
 
       <CleanupDialog
         open={app.confirmDialogOpen}
-        itemCount={app.selectedCleanupPaths.length}
+        itemCount={app.selectedCleanupItems.length}
         totalBytes={app.selectedCandidateBytes}
         deleteMode={app.deleteMode}
         selectedItems={app.selectedCleanupItems}

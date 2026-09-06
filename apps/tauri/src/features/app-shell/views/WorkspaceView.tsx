@@ -45,7 +45,7 @@ type WorkspaceViewProps = {
   onTogglePath: (path: string) => void;
   onDeleteModeChange: (mode: DeleteMode) => void;
   onCleanupAgeChange: (days: number) => void | Promise<void>;
-  onRequestCleanup: () => void;
+  onRequestCleanup: (paths: string[]) => void;
 };
 
 export function WorkspaceView(props: WorkspaceViewProps) {
@@ -172,7 +172,7 @@ export function WorkspaceView(props: WorkspaceViewProps) {
               <button
                 type="button"
                 className="review-button"
-                onClick={props.onRequestCleanup}
+                onClick={() => props.onRequestCleanup(visibleSelectedPaths)}
                 disabled={!props.canReviewCleanup || visibleSelectedPaths.length === 0}
               >
                 Cleanup

@@ -46,10 +46,17 @@ describe('async operation state', () => {
       requestId: 1,
       data: 'previous result',
     };
-    const state = reduceAsyncOperation(previous, {
+    const loading = reduceAsyncOperation(previous, { type: 'start', requestId: 2 });
+    const state = reduceAsyncOperation(loading, {
       type: 'error',
       requestId: 2,
       error: 'refresh failed',
+    });
+
+    expect(loading).toEqual({
+      status: 'loading',
+      requestId: 2,
+      previous: 'previous result',
     });
 
     expect(state).toEqual({
