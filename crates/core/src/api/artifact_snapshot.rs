@@ -71,6 +71,7 @@ mod tests {
                 recommendation: CleanupRecommendation::Keep,
             }],
             total_size_bytes: 42,
+            ..AnalysisResult::default()
         };
 
         let snapshot = create_artifact_snapshot(workspace.path(), &analysis);

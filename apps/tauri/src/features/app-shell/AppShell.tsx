@@ -34,6 +34,7 @@ export function AppShell() {
             <OverviewView
               root={app.root}
               analysisReady={app.analysisResult !== null}
+              storageSummary={app.storageSummary}
               artifacts={app.analysisResult?.artifacts ?? []}
               candidates={app.cleanupPlan?.candidates ?? []}
               reclaimableBytes={app.cleanupPlan?.reclaimableSizeBytes ?? 0}

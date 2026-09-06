@@ -64,6 +64,7 @@ fn safe_to_clean_becomes_candidate() {
         artifacts: vec![artifact],
 
         total_size_bytes: 100,
+        ..AnalysisResult::default()
     };
 
     let plan = create_cleanup_plan(analysis).unwrap();
@@ -86,6 +87,7 @@ fn keep_is_not_candidate() {
     let analysis = AnalysisResult {
         artifacts: vec![artifact],
         total_size_bytes: 100,
+        ..AnalysisResult::default()
     };
 
     let plan = create_cleanup_plan(analysis).unwrap();
@@ -245,6 +247,7 @@ fn create_cleanup_plan_filters_safe_to_clean() {
             artifact(CleanupRecommendation::NeedsReview),
         ],
         total_size_bytes: 300,
+        ..AnalysisResult::default()
     };
 
     let plan = create_cleanup_plan(analysis).unwrap();
@@ -279,6 +282,7 @@ fn recommendation_controls_default_selection_not_eligibility() {
             },
         ],
         total_size_bytes: 150,
+        ..AnalysisResult::default()
     };
 
     let default_plan = create_cleanup_plan(analysis.clone()).unwrap();
@@ -330,6 +334,7 @@ fn explicit_selection_allows_review_and_keep_recommendations() {
             },
         ],
         total_size_bytes: 50,
+        ..AnalysisResult::default()
     };
 
     let plan = create_cleanup_plan_from_selection(

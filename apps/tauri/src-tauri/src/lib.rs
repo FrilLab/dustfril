@@ -17,9 +17,11 @@ use std::{
 
 use contract::{
     artifact_path, artifact_snapshot_to_dto, cleanup_failure_reason, project_identity_to_dto,
-    AnalysisResponse, ArtifactAnalysisDto, ArtifactDto, CleanupCandidateDto, CleanupFailureDto,
-    CleanupHistoryEntryDto, CleanupPlanResponse, CleanupResultResponse, ExecuteCleanupRequest,
-    LifecycleScriptDto, RunOptions, ScanResponse, SecurityScanResponse, WorkspaceAnalysisResponse,
+    storage_summary_to_dto, volume_storage_to_dto, AnalysisResponse, ArtifactAnalysisDto,
+    ArtifactDto, CleanupCandidateDto, CleanupFailureDto, CleanupHistoryEntryDto,
+    CleanupPlanResponse, CleanupResultResponse, ExecuteCleanupRequest, LifecycleScriptDto,
+    RunOptions, ScanResponse, SecurityScanResponse, StorageSummaryDto, VolumeStorageDto,
+    WorkspaceAnalysisResponse,
 };
 use dustfril_core::{
     api,
@@ -357,6 +359,16 @@ async fn analyze_workspace(options: RunOptions) -> Result<WorkspaceAnalysisRespo
         let analysis_id = cache_analysis(&root, &ecosystems, &analysis);
         let plan = api::clean::build_plan_from_analysis(analysis.clone())
             .map_err(|error| error.to_string())?;
+        let storage_summary = match api::storage::summarize_with_access_summary(
+            &root,
+            &analysis,
+            Some(&scan_result.access_summary),
+        ) {
+            Ok(summary) => storage_summary_to_dto(summary),
+            Err(error) => StorageSummaryDto::Unavailable {
+                reason: error.to_string(),
+            },
+        };
 
         let (artifact_snapshot, artifact_snapshot_warning) = record_artifact_snapshot_if_enabled(
             record_artifact_snapshot,
@@ -409,9 +421,25 @@ async fn analyze_workspace(options: RunOptions) -> Result<WorkspaceAnalysisRespo
         Ok(WorkspaceAnalysisResponse {
             analysis: analysis_response,
             cleanup_plan,
+            storage_summary,
             artifact_snapshot,
             artifact_snapshot_warning,
         })
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+/// Refreshes only filesystem capacity after a permanent cleanup. This does
+/// not re-scan or re-analyze the workspace.
+#[tauri::command]
+async fn refresh_storage_volume(root: String) -> Result<VolumeStorageDto, String> {
+    let root = resolve_root(Some(root))?;
+
+    tokio::task::spawn_blocking(move || {
+        api::storage::volume(&root)
+            .map(volume_storage_to_dto)
+            .map_err(|error| error.to_string())
     })
     .await
     .map_err(|error| error.to_string())?
@@ -584,6 +612,7 @@ pub fn run() {
             analyze_workspace,
             build_cleanup_plan,
             execute_cleanup,
+            refresh_storage_volume,
             load_activity_history,
             clear_activity_history,
             load_cleanup_history,
@@ -636,6 +665,7 @@ mod tests {
             &AnalysisResult {
                 artifacts: Vec::new(),
                 total_size_bytes: 1,
+                ..AnalysisResult::default()
             },
         );
         let java_id = cache_analysis(
@@ -644,6 +674,7 @@ mod tests {
             &AnalysisResult {
                 artifacts: Vec::new(),
                 total_size_bytes: 2,
+                ..AnalysisResult::default()
             },
         );
 
@@ -667,6 +698,7 @@ mod tests {
             &AnalysisResult {
                 artifacts: Vec::new(),
                 total_size_bytes: 3,
+                ..AnalysisResult::default()
             },
         );
 

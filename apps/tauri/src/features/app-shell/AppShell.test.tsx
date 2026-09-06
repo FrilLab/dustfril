@@ -1,13 +1,20 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppShell } from './AppShell';
-import { analyzeWorkspace, clearActivityHistory, loadActivityHistory } from '../../lib/tauri';
+import {
+  analyzeWorkspace,
+  clearActivityHistory,
+  executeCleanup,
+  loadActivityHistory,
+  refreshStorageVolume,
+} from '../../lib/tauri';
 
 vi.mock('../../lib/tauri', () => ({
   analyzeWorkspace: vi.fn(),
   chooseWorkspaceFolder: vi.fn(),
   defaultRoot: vi.fn().mockResolvedValue('/workspace'),
   executeCleanup: vi.fn(),
+  refreshStorageVolume: vi.fn(),
   loadActivityHistory: vi.fn().mockResolvedValue([]),
   clearActivityHistory: vi.fn().mockResolvedValue(undefined),
 }));
@@ -60,6 +67,19 @@ describe('AppShell Overview navigation', () => {
         ],
         reclaimableSizeBytes: 0,
       },
+      storageSummary: {
+        status: 'available',
+        totalBytes: 512 * 1024 ** 3,
+        usedBytes: 318 * 1024 ** 3,
+        availableBytes: 194 * 1024 ** 3,
+        detectedDevelopmentBytes: 11 * 1024 ** 3,
+        detectedSharePercent: 3.4591194968553455,
+        partial: false,
+        warnings: [],
+        recommendedBytes: 0,
+        scopePath: '/workspace/dustfril',
+        categories: ['Rust'],
+      },
     });
 
     render(<AppShell />);
@@ -105,5 +125,66 @@ describe('AppShell Overview navigation', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /^History/ })).toHaveTextContent('0'));
     expect(clearActivityHistory).toHaveBeenCalledOnce();
     expect(screen.getByText('No activity yet')).toBeInTheDocument();
+  });
+
+  it('refreshes volume capacity after permanent cleanup', async () => {
+    const sizeBytes = 11 * 1024 ** 3;
+    vi.mocked(analyzeWorkspace).mockResolvedValue({
+      analysis: {
+        artifacts: [{ ...analyzedArtifact, sizeBytes, recommendation: 'SafeToClean' }],
+        totalSizeBytes: sizeBytes,
+      },
+      cleanupPlan: {
+        analysisId: 'analysis-1',
+        candidates: [
+          {
+            path: analyzedArtifact.path,
+            ecosystem: analyzedArtifact.ecosystem,
+            project: analyzedArtifact.project,
+            sizeBytes,
+            ageDays: analyzedArtifact.ageDays,
+            recommendation: 'SafeToClean',
+            selectedByDefault: true,
+          },
+        ],
+        reclaimableSizeBytes: sizeBytes,
+      },
+      storageSummary: {
+        status: 'available',
+        totalBytes: 512 * 1024 ** 3,
+        usedBytes: 318 * 1024 ** 3,
+        availableBytes: 194 * 1024 ** 3,
+        detectedDevelopmentBytes: sizeBytes,
+        detectedSharePercent: 3.4591194968553455,
+        partial: false,
+        warnings: [],
+        recommendedBytes: sizeBytes,
+        scopePath: '/workspace/dustfril',
+        categories: ['Rust'],
+      },
+    });
+    vi.mocked(executeCleanup).mockResolvedValue({
+      deletedPaths: [analyzedArtifact.path],
+      failedPaths: [],
+      freedSizeBytes: sizeBytes,
+    });
+    vi.mocked(refreshStorageVolume).mockResolvedValue({
+      totalBytes: 512 * 1024 ** 3,
+      usedBytes: 300 * 1024 ** 3,
+      availableBytes: 212 * 1024 ** 3,
+    });
+
+    render(<AppShell />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Analyze Workspace' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze Workspace' }));
+    await waitFor(() => expect(screen.getByRole('checkbox')).toBeChecked());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cleanup' }));
+    fireEvent.click(screen.getByRole('dialog').querySelector('.button-confirm') as HTMLButtonElement);
+
+    await waitFor(() => expect(refreshStorageVolume).toHaveBeenCalledWith('/workspace'));
+    fireEvent.click(screen.getByRole('button', { name: 'Overview' }));
+    expect(screen.getByText('300 GB used of 512 GB')).toBeInTheDocument();
   });
 });

@@ -136,6 +136,7 @@ mod tests {
         AnalysisResult {
             artifacts,
             total_size_bytes: 30,
+            ..AnalysisResult::default()
         }
     }
 
@@ -161,6 +162,7 @@ mod tests {
                 CleanupRecommendation::Keep,
             )],
             total_size_bytes: 10,
+            ..AnalysisResult::default()
         };
 
         let plan = create_cleanup_plan_from_selection(
@@ -187,6 +189,7 @@ mod tests {
                 CleanupRecommendation::Keep,
             )],
             total_size_bytes: 10,
+            ..AnalysisResult::default()
         };
 
         let result = create_cleanup_plan_from_selection(
@@ -211,6 +214,7 @@ mod tests {
                 ),
             ],
             total_size_bytes: 20,
+            ..AnalysisResult::default()
         };
 
         let result = create_cleanup_plan_from_selection(

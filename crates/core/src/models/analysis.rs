@@ -29,6 +29,14 @@ pub struct AnalysisResult {
     pub artifacts: Vec<ArtifactAnalysis>,
     /// Sum of all analyzed artifact sizes.
     pub total_size_bytes: u64,
+    /// Number of filesystem entries whose size or modification metadata could
+    /// not be measured while analyzing the artifacts.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub measurement_failures: u64,
+}
+
+fn is_zero(value: &u64) -> bool {
+    *value == 0
 }
 
 /// Removes duplicate and covered analysis records before any aggregate is

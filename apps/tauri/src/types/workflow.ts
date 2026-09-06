@@ -85,9 +85,35 @@ export type AnalysisResponse = {
 export type WorkspaceAnalysisResponse = {
   analysis: AnalysisResponse;
   cleanupPlan: CleanupPlanResponse;
+  storageSummary: StorageSummary;
   artifactSnapshot?: ArtifactSnapshotResult;
   artifactSnapshotWarning?: string;
 };
+
+export type VolumeStorage = {
+  totalBytes: number;
+  usedBytes: number;
+  availableBytes: number;
+};
+
+export type StorageSummary =
+  | {
+      status: 'available';
+      totalBytes: number;
+      usedBytes: number;
+      availableBytes: number;
+      detectedDevelopmentBytes: number;
+      detectedSharePercent: number | null;
+      partial: boolean;
+      warnings: string[];
+      recommendedBytes: number;
+      scopePath: string;
+      categories: Ecosystem[];
+    }
+  | {
+      status: 'unavailable';
+      reason: string;
+    };
 
 export type CleanupCandidate = {
   path: string;

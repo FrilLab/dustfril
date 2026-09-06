@@ -7,6 +7,7 @@ import {
   defaultRoot,
   executeCleanup,
   loadActivityHistory,
+  refreshStorageVolume,
 } from '../../../lib/tauri';
 import { categoryConfigs, type SidebarCategory } from '../../../model/categories';
 import type { SidebarEntry } from '../../../components/Sidebar/Sidebar';
@@ -16,6 +17,8 @@ import type {
   CleanupPlanResponse,
   CleanupResultResponse,
   DeleteMode,
+  StorageSummary,
+  VolumeStorage,
 } from '../../../types/workflow';
 import { cleanupAgeOptions, defaultCleanupAgeDays, deleteModes, ecosystems } from '../../../types/workflow';
 import {
@@ -34,6 +37,7 @@ export function useAppState() {
   const [error, setError] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResponse | null>(null);
   const [cleanupPlan, setCleanupPlan] = useState<CleanupPlanResponse | null>(null);
+  const [storageSummary, setStorageSummary] = useState<StorageSummary | null>(null);
   const [historyEntries, setHistoryEntries] = useState<ActivityRecord[]>([]);
   const [selectedCleanupPaths, setSelectedCleanupPaths] = useState<string[]>([]);
   const [cleanupAgeDays, setCleanupAgeDays] = useState<number>(defaultCleanupAgeDays);
@@ -131,6 +135,7 @@ export function useAppState() {
     setError(null);
     setAnalysisResult(null);
     setCleanupPlan(null);
+    setStorageSummary(null);
     setSelectedCleanupPaths([]);
     setSelectedItemId(null);
     setConfirmDialogOpen(false);
@@ -182,6 +187,7 @@ export function useAppState() {
 
       setAnalysisResult(response.analysis);
       setCleanupPlan(response.cleanupPlan);
+      setStorageSummary(response.storageSummary);
       // Rebuild the default cleanup selection from the new policy. This
       // conservatively drops items that are no longer recommended and never
       // broadens the selection without a new recommendation.
@@ -285,10 +291,25 @@ export function useAppState() {
         deleteMode,
       );
 
+      let refreshedVolume: VolumeStorage | null = null;
+      let storageRefreshWarning: string | null = null;
+      if (deleteMode === 'Permanent' && result.deletedPaths.length > 0) {
+        try {
+          refreshedVolume = await refreshStorageVolume(root);
+        } catch (invokeError) {
+          storageRefreshWarning = `Failed to refresh storage statistics: ${String(invokeError)}`;
+        }
+      }
+
       setError(
-        result.failedPaths.length
-          ? formatCleanupFailure(result, result.historyWarning)
-          : result.historyWarning ?? null,
+        [
+          result.failedPaths.length
+            ? formatCleanupFailure(result, result.historyWarning)
+            : result.historyWarning,
+          storageRefreshWarning,
+        ]
+          .filter((warning): warning is string => Boolean(warning))
+          .join(' ') || null,
       );
       setCleanupPlan((current) =>
         current
@@ -319,6 +340,42 @@ export function useAppState() {
             }
           : current,
       );
+      const deletedCandidates = candidates.filter((candidate) =>
+        result.deletedPaths.includes(candidate.path),
+      );
+      const deletedDetectedBytes = deletedCandidates.reduce(
+        (total, candidate) => total + candidate.sizeBytes,
+        0,
+      );
+      const deletedRecommendedBytes = deletedCandidates
+        .filter((candidate) => candidate.selectedByDefault)
+        .reduce((total, candidate) => total + candidate.sizeBytes, 0);
+      setStorageSummary((current) =>
+        current?.status === 'available'
+          ? (() => {
+              const nextDetectedBytes = Math.max(
+                0,
+                current.detectedDevelopmentBytes - deletedDetectedBytes,
+              );
+              const nextVolume = refreshedVolume ?? {
+                totalBytes: current.totalBytes,
+                usedBytes: current.usedBytes,
+                availableBytes: current.availableBytes,
+              };
+
+              return {
+                ...current,
+                ...nextVolume,
+                detectedDevelopmentBytes: nextDetectedBytes,
+                detectedSharePercent:
+                  nextVolume.usedBytes > 0
+                    ? (nextDetectedBytes / nextVolume.usedBytes) * 100
+                    : null,
+                recommendedBytes: Math.max(0, current.recommendedBytes - deletedRecommendedBytes),
+              };
+            })()
+          : current,
+      );
       setSelectedCleanupPaths((current) =>
         current.filter((path) => !result.deletedPaths.includes(path)),
       );
@@ -338,6 +395,7 @@ export function useAppState() {
     error,
     analysisResult,
     cleanupPlan,
+    storageSummary,
     selectedCleanupItems: cleanupCandidates.filter((candidate) =>
       selectedCleanupPaths.includes(candidate.path),
     ),
