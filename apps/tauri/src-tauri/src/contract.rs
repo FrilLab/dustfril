@@ -6,9 +6,12 @@ use std::{
 use dustfril_core::models::{
     ArtifactChangeKind, ArtifactSizeChange, ArtifactSnapshot, ArtifactSnapshotArtifact,
     ArtifactSnapshotResult, ArtifactSnapshotStatus, CleanupFailureReason, CleanupRecommendation,
-    DeleteMode, DeveloperStorageSummary, Ecosystem, LifecycleScript, LockfileCheck, LockfileKind,
-    LockfileStatus, PackageManager, ProjectIdentity, RecommendationPolicy, RiskLevel, ScriptType,
-    SecurityFinding, SecurityReport, SecurityWarning, StorageSummary, VolumeStorage,
+    DeleteMode, DependencyBaselineStatus, DependencyChange, DependencyChangeKind, DependencyDiff,
+    DependencyEntry, DependencyLockfile, DependencyLockfileStatus, DependencyMetric,
+    DependencyMetricStatus, DependencyReport, DependencyReportStatus, DependencyScope,
+    DeveloperStorageSummary, DuplicateDependency, Ecosystem, LifecycleScript, LockfileCheck,
+    LockfileKind, LockfileStatus, PackageManager, ProjectIdentity, RecommendationPolicy, RiskLevel,
+    ScriptType, SecurityFinding, SecurityReport, SecurityWarning, StorageSummary, VolumeStorage,
     DEFAULT_CLEANUP_AGE_DAYS,
 };
 use serde::{Deserialize, Serialize};
@@ -386,6 +389,136 @@ pub(crate) struct SecurityWarningDto {
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct DependencyInventoryResponse {
+    pub(crate) workspace_path: String,
+    pub(crate) reports: Vec<DependencyReportDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) diff: Option<DependencyDiffDto>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DependencyReportDto {
+    pub(crate) ecosystem: EcosystemDto,
+    pub(crate) status: DependencyReportStatusDto,
+    pub(crate) manifest: String,
+    pub(crate) manifest_format: Option<String>,
+    pub(crate) lockfile: Option<DependencyLockfileDto>,
+    pub(crate) direct_dependency_counts: std::collections::BTreeMap<String, usize>,
+    pub(crate) direct_dependency_total: usize,
+    pub(crate) resolved_dependency_count: DependencyMetricDto,
+    pub(crate) transitive_dependency_count: DependencyMetricDto,
+    pub(crate) duplicate_versions: Vec<DuplicateDependencyDto>,
+    pub(crate) resolved_dependencies: Vec<DependencyEntryDto>,
+    pub(crate) warnings: Vec<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DependencyMetricDto {
+    pub(crate) value: Option<usize>,
+    pub(crate) status: DependencyMetricStatusDto,
+    pub(crate) reason: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DependencyLockfileDto {
+    pub(crate) path: String,
+    pub(crate) kind: Option<LockfileKindDto>,
+    pub(crate) format: Option<String>,
+    pub(crate) status: DependencyLockfileStatusDto,
+    pub(crate) reason: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DuplicateDependencyDto {
+    pub(crate) name: String,
+    pub(crate) versions: Vec<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DependencyEntryDto {
+    pub(crate) ecosystem: EcosystemDto,
+    pub(crate) name: String,
+    pub(crate) version: String,
+    pub(crate) source: Option<String>,
+    pub(crate) scope: DependencyScopeDto,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DependencyDiffDto {
+    pub(crate) workspace_id: String,
+    pub(crate) baseline_status: DependencyBaselineStatusDto,
+    pub(crate) added: Vec<DependencyChangeDto>,
+    pub(crate) removed: Vec<DependencyChangeDto>,
+    pub(crate) version_changes: Vec<DependencyChangeDto>,
+    pub(crate) source_changes: Vec<DependencyChangeDto>,
+    pub(crate) warnings: Vec<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DependencyChangeDto {
+    pub(crate) kind: DependencyChangeKindDto,
+    pub(crate) previous: Option<DependencyEntryDto>,
+    pub(crate) current: Option<DependencyEntryDto>,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum DependencyReportStatusDto {
+    Complete,
+    MissingLockfile,
+    Unsupported,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum DependencyMetricStatusDto {
+    Available,
+    Unknown,
+    Unsupported,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum DependencyLockfileStatusDto {
+    Parsed,
+    Missing,
+    Unsupported,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum DependencyScopeDto {
+    Direct,
+    Transitive,
+    Unknown,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum DependencyBaselineStatusDto {
+    BaselineCreated,
+    Compared,
+    Unavailable,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum DependencyChangeKindDto {
+    Added,
+    Removed,
+    VersionChanged,
+    SourceChanged,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct LockfileCheckDto {
     pub(crate) path: String,
     pub(crate) kind: LockfileKindDto,
@@ -645,6 +778,173 @@ impl From<LockfileStatus> for LockfileStatusDto {
     }
 }
 
+pub(crate) fn dependency_inventory_to_dto(
+    workspace_path: &Path,
+    reports: Vec<DependencyReport>,
+    diff: Option<DependencyDiff>,
+) -> DependencyInventoryResponse {
+    DependencyInventoryResponse {
+        workspace_path: workspace_path.display().to_string(),
+        reports: reports.into_iter().map(Into::into).collect(),
+        diff: diff.map(Into::into),
+    }
+}
+
+impl From<DependencyReport> for DependencyReportDto {
+    fn from(report: DependencyReport) -> Self {
+        Self {
+            ecosystem: report.ecosystem.into(),
+            status: report.status.into(),
+            manifest: report.manifest.display().to_string(),
+            manifest_format: report.manifest_format,
+            lockfile: report.lockfile.map(Into::into),
+            direct_dependency_counts: report.direct_dependency_counts,
+            direct_dependency_total: report.direct_dependency_total,
+            resolved_dependency_count: report.resolved_dependency_count.into(),
+            transitive_dependency_count: report.transitive_dependency_count.into(),
+            duplicate_versions: report
+                .duplicate_versions
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            resolved_dependencies: report
+                .resolved_dependencies
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            warnings: report.warnings,
+        }
+    }
+}
+
+impl From<DependencyMetric> for DependencyMetricDto {
+    fn from(metric: DependencyMetric) -> Self {
+        Self {
+            value: metric.value,
+            status: metric.status.into(),
+            reason: metric.reason,
+        }
+    }
+}
+
+impl From<DependencyLockfile> for DependencyLockfileDto {
+    fn from(lockfile: DependencyLockfile) -> Self {
+        Self {
+            path: lockfile.path.display().to_string(),
+            kind: lockfile.kind.map(Into::into),
+            format: lockfile.format,
+            status: lockfile.status.into(),
+            reason: lockfile.reason,
+        }
+    }
+}
+
+impl From<DuplicateDependency> for DuplicateDependencyDto {
+    fn from(duplicate: DuplicateDependency) -> Self {
+        Self {
+            name: duplicate.name,
+            versions: duplicate.versions,
+        }
+    }
+}
+
+impl From<DependencyEntry> for DependencyEntryDto {
+    fn from(entry: DependencyEntry) -> Self {
+        Self {
+            ecosystem: entry.ecosystem.into(),
+            name: entry.name,
+            version: entry.version,
+            source: entry.source,
+            scope: entry.scope.into(),
+        }
+    }
+}
+
+impl From<DependencyDiff> for DependencyDiffDto {
+    fn from(diff: DependencyDiff) -> Self {
+        Self {
+            workspace_id: diff.workspace_id,
+            baseline_status: diff.baseline_status.into(),
+            added: diff.added.into_iter().map(Into::into).collect(),
+            removed: diff.removed.into_iter().map(Into::into).collect(),
+            version_changes: diff.version_changes.into_iter().map(Into::into).collect(),
+            source_changes: diff.source_changes.into_iter().map(Into::into).collect(),
+            warnings: diff.warnings,
+        }
+    }
+}
+
+impl From<DependencyChange> for DependencyChangeDto {
+    fn from(change: DependencyChange) -> Self {
+        Self {
+            kind: change.kind.into(),
+            previous: change.previous.map(Into::into),
+            current: change.current.map(Into::into),
+        }
+    }
+}
+
+impl From<DependencyReportStatus> for DependencyReportStatusDto {
+    fn from(status: DependencyReportStatus) -> Self {
+        match status {
+            DependencyReportStatus::Complete => Self::Complete,
+            DependencyReportStatus::MissingLockfile => Self::MissingLockfile,
+            DependencyReportStatus::Unsupported => Self::Unsupported,
+        }
+    }
+}
+
+impl From<DependencyMetricStatus> for DependencyMetricStatusDto {
+    fn from(status: DependencyMetricStatus) -> Self {
+        match status {
+            DependencyMetricStatus::Available => Self::Available,
+            DependencyMetricStatus::Unknown => Self::Unknown,
+            DependencyMetricStatus::Unsupported => Self::Unsupported,
+        }
+    }
+}
+
+impl From<DependencyLockfileStatus> for DependencyLockfileStatusDto {
+    fn from(status: DependencyLockfileStatus) -> Self {
+        match status {
+            DependencyLockfileStatus::Parsed => Self::Parsed,
+            DependencyLockfileStatus::Missing => Self::Missing,
+            DependencyLockfileStatus::Unsupported => Self::Unsupported,
+        }
+    }
+}
+
+impl From<DependencyScope> for DependencyScopeDto {
+    fn from(scope: DependencyScope) -> Self {
+        match scope {
+            DependencyScope::Direct => Self::Direct,
+            DependencyScope::Transitive => Self::Transitive,
+            DependencyScope::Unknown => Self::Unknown,
+        }
+    }
+}
+
+impl From<DependencyBaselineStatus> for DependencyBaselineStatusDto {
+    fn from(status: DependencyBaselineStatus) -> Self {
+        match status {
+            DependencyBaselineStatus::BaselineCreated => Self::BaselineCreated,
+            DependencyBaselineStatus::Compared => Self::Compared,
+            DependencyBaselineStatus::Unavailable => Self::Unavailable,
+        }
+    }
+}
+
+impl From<DependencyChangeKind> for DependencyChangeKindDto {
+    fn from(kind: DependencyChangeKind) -> Self {
+        match kind {
+            DependencyChangeKind::Added => Self::Added,
+            DependencyChangeKind::Removed => Self::Removed,
+            DependencyChangeKind::VersionChanged => Self::VersionChanged,
+            DependencyChangeKind::SourceChanged => Self::SourceChanged,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use dustfril_core::models::AnalysisResult;
@@ -704,6 +1004,34 @@ mod tests {
         .unwrap();
         assert_eq!(refresh_options.record_history, Some(false));
         assert_eq!(refresh_options.record_artifact_snapshot, Some(false));
+    }
+
+    #[test]
+    fn dependency_inventory_wire_format_preserves_availability_and_baseline_state() {
+        let response = dependency_inventory_to_dto(
+            Path::new("/workspace"),
+            vec![DependencyReport::unsupported(
+                Ecosystem::Node,
+                Path::new("/workspace/package.json").to_path_buf(),
+                "unsupported package manager",
+            )],
+            Some(DependencyDiff::empty(
+                "v1:/workspace",
+                DependencyBaselineStatus::Unavailable,
+            )),
+        );
+
+        let value = serde_json::to_value(response).unwrap();
+        assert_eq!(value["workspacePath"], "/workspace");
+        assert_eq!(value["reports"][0]["ecosystem"], "Node");
+        assert_eq!(value["reports"][0]["status"], "unsupported");
+        assert_eq!(
+            value["reports"][0]["resolvedDependencyCount"]["status"],
+            "unsupported"
+        );
+        assert_eq!(value["diff"]["workspaceId"], "v1:/workspace");
+        assert_eq!(value["diff"]["baselineStatus"], "unavailable");
+        assert!(value["diff"]["added"].as_array().unwrap().is_empty());
     }
 
     #[test]

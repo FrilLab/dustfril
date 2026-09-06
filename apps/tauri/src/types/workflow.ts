@@ -183,6 +183,77 @@ export type SecurityScanResponse = {
   historyWarning?: string;
 };
 
+export type DependencyReportStatus = 'complete' | 'missingLockfile' | 'unsupported';
+export type DependencyMetricStatus = 'available' | 'unknown' | 'unsupported';
+export type DependencyLockfileStatus = 'parsed' | 'missing' | 'unsupported';
+export type DependencyScope = 'direct' | 'transitive' | 'unknown';
+export type DependencyBaselineStatus = 'baselineCreated' | 'compared' | 'unavailable';
+export type DependencyChangeKind = 'added' | 'removed' | 'versionChanged' | 'sourceChanged';
+
+export type DependencyMetric = {
+  value: number | null;
+  status: DependencyMetricStatus;
+  reason: string | null;
+};
+
+export type DependencyLockfile = {
+  path: string;
+  kind: 'PackageLockJson' | 'PnpmLockYaml' | 'BunLock' | 'CargoLock' | null;
+  format: string | null;
+  status: DependencyLockfileStatus;
+  reason: string | null;
+};
+
+export type DuplicateDependency = {
+  name: string;
+  versions: string[];
+};
+
+export type DependencyEntry = {
+  ecosystem: Ecosystem;
+  name: string;
+  version: string;
+  source: string | null;
+  scope: DependencyScope;
+};
+
+export type DependencyReport = {
+  ecosystem: Ecosystem;
+  status: DependencyReportStatus;
+  manifest: string;
+  manifestFormat: string | null;
+  lockfile: DependencyLockfile | null;
+  directDependencyCounts: Record<string, number>;
+  directDependencyTotal: number;
+  resolvedDependencyCount: DependencyMetric;
+  transitiveDependencyCount: DependencyMetric;
+  duplicateVersions: DuplicateDependency[];
+  resolvedDependencies: DependencyEntry[];
+  warnings: string[];
+};
+
+export type DependencyChange = {
+  kind: DependencyChangeKind;
+  previous: DependencyEntry | null;
+  current: DependencyEntry | null;
+};
+
+export type DependencyDiff = {
+  workspaceId: string;
+  baselineStatus: DependencyBaselineStatus;
+  added: DependencyChange[];
+  removed: DependencyChange[];
+  versionChanges: DependencyChange[];
+  sourceChanges: DependencyChange[];
+  warnings: string[];
+};
+
+export type DependencyInventoryResponse = {
+  workspacePath: string;
+  reports: DependencyReport[];
+  diff: DependencyDiff | null;
+};
+
 export type ActivityKind = 'Scan' | 'Cleanup' | 'Security';
 
 export type ActivityFailure = {

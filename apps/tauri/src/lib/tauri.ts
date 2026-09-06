@@ -7,6 +7,7 @@ import type {
   CleanupPlanResponse,
   CleanupResultResponse,
   DeleteMode,
+  DependencyInventoryResponse,
   LifecycleScript,
   RunOptions,
   ScanResponse,
@@ -28,6 +29,9 @@ const commands = {
   loadActivityHistory: 'load_activity_history',
   clearActivityHistory: 'clear_activity_history',
   loadCleanupHistory: 'load_cleanup_history',
+  loadDependencyInventory: 'load_dependency_inventory',
+  compareDependencyBaseline: 'compare_dependency_baseline',
+  acceptDependencyBaseline: 'accept_dependency_baseline',
 } as const;
 
 export function defaultRoot() {
@@ -91,4 +95,16 @@ export function loadActivityHistory() {
 
 export function clearActivityHistory() {
   return invoke<void>(commands.clearActivityHistory);
+}
+
+export function loadDependencyInventory(options: RunOptions) {
+  return invoke<DependencyInventoryResponse>(commands.loadDependencyInventory, { options });
+}
+
+export function compareDependencyBaseline(options: RunOptions) {
+  return invoke<DependencyInventoryResponse>(commands.compareDependencyBaseline, { options });
+}
+
+export function acceptDependencyBaseline(options: RunOptions) {
+  return invoke<DependencyInventoryResponse>(commands.acceptDependencyBaseline, { options });
 }

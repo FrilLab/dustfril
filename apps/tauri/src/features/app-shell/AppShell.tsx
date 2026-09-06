@@ -5,6 +5,7 @@ import { pathBreadcrumb } from '../../model/presentation';
 import { AppHeader } from './components/AppHeader';
 import { useAppState } from './hooks/useAppState';
 import { HistoryView } from './views/HistoryView';
+import { DependenciesView } from './views/DependenciesView';
 import { ModulePlaceholderView } from './views/ModulePlaceholderView';
 import { OverviewView } from './views/OverviewView';
 import { WorkspaceView } from './views/WorkspaceView';
@@ -14,6 +15,7 @@ export function AppShell() {
   const activeConfig = categoryConfig(app.activeCategory);
   const showingCleanup = activeConfig?.ecosystem !== undefined;
   const showingWorkspace = app.activeCategory === 'workspace' || showingCleanup;
+  const showingDependencies = app.activeCategory === 'workspace-dependencies';
   const showingActivity =
     app.activeCategory === 'history' || app.activeCategory === 'workspace-activity';
 
@@ -85,7 +87,24 @@ export function AppShell() {
             />
           ) : null}
 
-          {app.activeCategory !== 'overview' && !showingWorkspace && !showingActivity && activeConfig ? (
+          {showingDependencies ? (
+            <DependenciesView
+              root={app.root}
+              result={app.dependencyResult}
+              operationStatus={app.dependencyOperation.status}
+              busy={app.busyAction !== null}
+              error={app.error}
+              onLoad={app.handleLoadDependencyInventory}
+              onCompare={app.handleCompareDependencyBaseline}
+              onAccept={app.handleAcceptDependencyBaseline}
+            />
+          ) : null}
+
+          {app.activeCategory !== 'overview' &&
+          !showingWorkspace &&
+          !showingActivity &&
+          !showingDependencies &&
+          activeConfig ? (
             <ModulePlaceholderView
               config={activeConfig}
               onReturnToOverview={() => app.setActiveCategory('overview')}

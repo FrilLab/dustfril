@@ -16,11 +16,12 @@ use std::{
 };
 
 use contract::{
-    artifact_path, artifact_snapshot_to_dto, cleanup_failure_reason, project_identity_to_dto,
-    storage_summary_to_dto, volume_storage_to_dto, AnalysisResponse, ArtifactAnalysisDto,
-    ArtifactDto, CleanupCandidateDto, CleanupFailureDto, CleanupHistoryEntryDto,
-    CleanupPlanResponse, CleanupResultResponse, ExecuteCleanupRequest, LifecycleScriptDto,
-    RunOptions, ScanResponse, SecurityScanResponse, StorageSummaryDto, VolumeStorageDto,
+    artifact_path, artifact_snapshot_to_dto, cleanup_failure_reason, dependency_inventory_to_dto,
+    project_identity_to_dto, storage_summary_to_dto, volume_storage_to_dto, AnalysisResponse,
+    ArtifactAnalysisDto, ArtifactDto, CleanupCandidateDto, CleanupFailureDto,
+    CleanupHistoryEntryDto, CleanupPlanResponse, CleanupResultResponse,
+    DependencyInventoryResponse, ExecuteCleanupRequest, LifecycleScriptDto, RunOptions,
+    ScanResponse, SecurityScanResponse, StorageSummaryDto, VolumeStorageDto,
     WorkspaceAnalysisResponse,
 };
 use dustfril_core::{
@@ -556,6 +557,62 @@ async fn load_cleanup_history() -> Result<Vec<CleanupHistoryEntryDto>, String> {
 }
 
 #[tauri::command]
+async fn load_dependency_inventory(
+    options: RunOptions,
+) -> Result<DependencyInventoryResponse, String> {
+    let root = resolve_root(options.root)?;
+    let ecosystems: Vec<_> = options.ecosystems.into_iter().map(Into::into).collect();
+
+    tokio::task::spawn_blocking(move || {
+        let reports =
+            api::dependency_report(&root, &ecosystems).map_err(|error| error.to_string())?;
+        Ok(dependency_inventory_to_dto(&root, reports, None))
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn compare_dependency_baseline(
+    options: RunOptions,
+) -> Result<DependencyInventoryResponse, String> {
+    let root = resolve_root(options.root)?;
+    let ecosystems: Vec<_> = options.ecosystems.into_iter().map(Into::into).collect();
+    let baseline_path = api::dependency_baseline_path().map_err(|error| error.to_string())?;
+
+    tokio::task::spawn_blocking(move || {
+        let reports =
+            api::dependency_report(&root, &ecosystems).map_err(|error| error.to_string())?;
+        let diff = api::dependency_diff(&root, &reports, &baseline_path)
+            .map_err(|error| error.to_string())?;
+        Ok(dependency_inventory_to_dto(&root, reports, Some(diff)))
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn accept_dependency_baseline(
+    options: RunOptions,
+) -> Result<DependencyInventoryResponse, String> {
+    let root = resolve_root(options.root)?;
+    let ecosystems: Vec<_> = options.ecosystems.into_iter().map(Into::into).collect();
+    let baseline_path = api::dependency_baseline_path().map_err(|error| error.to_string())?;
+
+    tokio::task::spawn_blocking(move || {
+        let reports =
+            api::dependency_report(&root, &ecosystems).map_err(|error| error.to_string())?;
+        api::accept_dependency_baseline(&root, &reports, &baseline_path)
+            .map_err(|error| error.to_string())?;
+        let diff = api::dependency_diff(&root, &reports, &baseline_path)
+            .map_err(|error| error.to_string())?;
+        Ok(dependency_inventory_to_dto(&root, reports, Some(diff)))
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 async fn audit(options: RunOptions) -> Result<Vec<LifecycleScriptDto>, String> {
     let root = resolve_root(options.root)?;
     let ecosystems: Vec<_> = options.ecosystems.into_iter().map(Into::into).collect();
@@ -616,6 +673,9 @@ pub fn run() {
             load_activity_history,
             clear_activity_history,
             load_cleanup_history,
+            load_dependency_inventory,
+            compare_dependency_baseline,
+            accept_dependency_baseline,
             audit,
             security_scan
         ])

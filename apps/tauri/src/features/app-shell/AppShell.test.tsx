@@ -63,7 +63,7 @@ describe('AppShell Overview navigation', () => {
     ['Node.js', false],
     ['Java', false],
     ['Cache', true],
-    ['Dependencies', true],
+    ['Dependencies', false],
     ['Artifact History', true],
     ['Activity', false],
     ['Supply Chain', true],
