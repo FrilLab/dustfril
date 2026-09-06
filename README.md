@@ -213,6 +213,7 @@ The desktop app currently exposes the same core workflows in a workspace browser
 - cleanup execution
 - lifecycle script audit
 - unified activity history
+- bounded scan access summaries and generated-artifact snapshot history
 
 Cleanup results are project-aware: each artifact carries the project identity
 returned by discovery, including its root directory and ecosystem. The scanned

@@ -6,18 +6,22 @@ import {
   clearActivityHistory,
   defaultRoot,
   executeCleanup,
+  loadArtifactSnapshotHistory,
   loadActivityHistory,
   refreshStorageVolume,
 } from '../../../lib/tauri';
 import { categoryConfigs, type SidebarCategory } from '../../../model/categories';
+import { latestScanForWorkspace } from '../../../model/artifactHistory';
 import {
   idleAsyncOperation,
   reduceAsyncOperation,
 } from '../../../model/async';
+import type { AsyncOperationStatus } from '../../../model/async';
 import type { SidebarEntry } from '../../../components/Sidebar/Sidebar';
 import type {
   ActivityRecord,
   AnalysisResponse,
+  ArtifactSnapshotHistory,
   CleanupPlanResponse,
   CleanupResultResponse,
   DeleteMode,
@@ -45,6 +49,12 @@ export function useAppState() {
   const [cleanupPlan, setCleanupPlan] = useState<CleanupPlanResponse | null>(null);
   const [storageSummary, setStorageSummary] = useState<StorageSummary | null>(null);
   const [historyEntries, setHistoryEntries] = useState<ActivityRecord[]>([]);
+  const [artifactHistory, setArtifactHistory] = useState<ArtifactSnapshotHistory | null>(null);
+  const [artifactHistoryStatus, setArtifactHistoryStatus] =
+    useState<AsyncOperationStatus>('idle');
+  const [artifactHistoryError, setArtifactHistoryError] = useState<string | null>(null);
+  const [artifactHistoryPersistenceWarning, setArtifactHistoryPersistenceWarning] =
+    useState<string | null>(null);
   const [selectedCleanupPaths, setSelectedCleanupPaths] = useState<string[]>([]);
   const [cleanupReviewPaths, setCleanupReviewPaths] = useState<string[]>([]);
   const [cleanupAgeDays, setCleanupAgeDays] = useState<number>(defaultCleanupAgeDays);
@@ -55,6 +65,8 @@ export function useAppState() {
   );
   const workspaceRequestRef = useRef(0);
   const actionRequestRef = useRef(0);
+  const artifactHistoryRequestRef = useRef(0);
+  const [artifactHistoryRefreshToken, setArtifactHistoryRefreshToken] = useState(0);
 
   useEffect(() => {
     defaultRoot()
@@ -65,6 +77,39 @@ export function useAppState() {
       .then(setHistoryEntries)
       .catch((invokeError) => setError(String(invokeError)));
   }, []);
+
+  useEffect(() => {
+    const requestId = ++artifactHistoryRequestRef.current;
+
+    if (activeCategory !== 'workspace-artifact-history' || !root) {
+      setArtifactHistory(null);
+      setArtifactHistoryStatus('idle');
+      setArtifactHistoryError(null);
+      return;
+    }
+
+    setArtifactHistory(null);
+    setArtifactHistoryStatus('loading');
+    setArtifactHistoryError(null);
+
+    loadArtifactSnapshotHistory(root)
+      .then((response) => {
+        if (requestId !== artifactHistoryRequestRef.current) {
+          return;
+        }
+
+        setArtifactHistory(response);
+        setArtifactHistoryStatus('success');
+      })
+      .catch((invokeError) => {
+        if (requestId !== artifactHistoryRequestRef.current) {
+          return;
+        }
+
+        setArtifactHistoryError(String(invokeError));
+        setArtifactHistoryStatus('error');
+      });
+  }, [activeCategory, artifactHistoryRefreshToken, root]);
 
   const workspaceArtifacts = analysisResult?.artifacts ?? [];
   const cleanupCandidates = cleanupPlan?.candidates ?? [];
@@ -155,6 +200,11 @@ export function useAppState() {
     setAnalysisResult(null);
     setCleanupPlan(null);
     setStorageSummary(null);
+    setArtifactHistory(null);
+    setArtifactHistoryStatus('idle');
+    setArtifactHistoryError(null);
+    setArtifactHistoryPersistenceWarning(null);
+    artifactHistoryRequestRef.current += 1;
     setSelectedCleanupPaths([]);
     setCleanupReviewPaths([]);
     setSelectedItemId(null);
@@ -220,6 +270,14 @@ export function useAppState() {
         setAnalysisResult(response.analysis);
         setCleanupPlan(response.cleanupPlan);
         setStorageSummary(response.storageSummary);
+        if (recordArtifactSnapshot) {
+          setArtifactHistoryPersistenceWarning(
+            [response.analysis.historyWarning, response.artifactSnapshotWarning]
+              .filter((warning): warning is string => Boolean(warning))
+              .join(' ') || null,
+          );
+          setArtifactHistoryRefreshToken((current) => current + 1);
+        }
         // Rebuild the default cleanup selection from the new policy. This
         // conservatively drops items that are no longer recommended and never
         // broadens the selection without a new recommendation.
@@ -459,6 +517,11 @@ export function useAppState() {
     sidebarEntries,
     filteredArtifacts,
     historyEntries,
+    artifactHistory,
+    artifactHistoryStatus,
+    artifactHistoryError,
+    artifactHistoryPersistenceWarning,
+    latestScanEntry: latestScanForWorkspace(historyEntries, root),
     confirmDialogOpen,
     confirmSamplePaths,
     workspaceOperation,

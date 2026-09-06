@@ -170,6 +170,36 @@ impl ArtifactSnapshotStore {
     }
 }
 
+/// Builds the Core-owned comparison results for retained snapshots.
+///
+/// Keeping this comparison next to snapshot persistence means read-only
+/// consumers can render the exact same New/Removed/Resized/Unchanged states as
+/// an explicit snapshot operation without reimplementing comparison logic.
+pub fn artifact_snapshot_history(snapshots: Vec<ArtifactSnapshot>) -> Vec<ArtifactSnapshotResult> {
+    let mut previous_snapshot = None;
+
+    snapshots
+        .into_iter()
+        .map(|snapshot| {
+            let result = ArtifactSnapshotResult {
+                status: if previous_snapshot.is_some() {
+                    ArtifactSnapshotStatus::Compared
+                } else {
+                    ArtifactSnapshotStatus::BaselineCreated
+                },
+                changes: previous_snapshot
+                    .as_ref()
+                    .map(|previous| compare_artifact_snapshots(previous, &snapshot))
+                    .unwrap_or_default(),
+                previous_snapshot: previous_snapshot.clone(),
+                snapshot: snapshot.clone(),
+            };
+            previous_snapshot = Some(snapshot);
+            result
+        })
+        .collect()
+}
+
 fn merge_unselected_artifacts(
     previous: Option<&ArtifactSnapshot>,
     mut current: ArtifactSnapshot,

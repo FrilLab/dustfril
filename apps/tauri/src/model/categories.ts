@@ -91,9 +91,9 @@ export const categoryConfigs: CategoryConfig[] = [
   {
     key: 'workspace-artifact-history',
     title: 'Artifact History',
-    description: 'Future generated-artifact history and growth',
+    description: 'Scan access summaries and generated-artifact growth',
     section: 'workspace',
-    availability: 'planned',
+    availability: 'available',
   },
   {
     key: 'workspace-activity',

@@ -8,6 +8,7 @@ import { HistoryView } from './views/HistoryView';
 import { ModulePlaceholderView } from './views/ModulePlaceholderView';
 import { OverviewView } from './views/OverviewView';
 import { WorkspaceView } from './views/WorkspaceView';
+import { ArtifactHistoryView } from './views/ArtifactHistoryView';
 
 export function AppShell() {
   const app = useAppState();
@@ -16,6 +17,7 @@ export function AppShell() {
   const showingWorkspace = app.activeCategory === 'workspace' || showingCleanup;
   const showingActivity =
     app.activeCategory === 'history' || app.activeCategory === 'workspace-activity';
+  const showingArtifactHistory = app.activeCategory === 'workspace-artifact-history';
 
   return (
     <main className="app-shell">
@@ -85,7 +87,22 @@ export function AppShell() {
             />
           ) : null}
 
-          {app.activeCategory !== 'overview' && !showingWorkspace && !showingActivity && activeConfig ? (
+          {showingArtifactHistory ? (
+            <ArtifactHistoryView
+              root={app.root}
+              history={app.artifactHistory}
+              status={app.artifactHistoryStatus}
+              error={app.artifactHistoryError}
+              scanEntry={app.latestScanEntry}
+              persistenceWarning={app.artifactHistoryPersistenceWarning}
+            />
+          ) : null}
+
+          {app.activeCategory !== 'overview' &&
+          !showingWorkspace &&
+          !showingActivity &&
+          !showingArtifactHistory &&
+          activeConfig ? (
             <ModulePlaceholderView
               config={activeConfig}
               onReturnToOverview={() => app.setActiveCategory('overview')}

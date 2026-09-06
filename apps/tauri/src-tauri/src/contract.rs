@@ -9,7 +9,7 @@ use dustfril_core::models::{
     DeleteMode, DeveloperStorageSummary, Ecosystem, LifecycleScript, LockfileCheck, LockfileKind,
     LockfileStatus, PackageManager, ProjectIdentity, RecommendationPolicy, RiskLevel, ScriptType,
     SecurityFinding, SecurityReport, SecurityWarning, StorageSummary, VolumeStorage,
-    DEFAULT_CLEANUP_AGE_DAYS,
+    DEFAULT_CLEANUP_AGE_DAYS, MAX_ARTIFACT_SNAPSHOTS_PER_WORKSPACE,
 };
 use serde::{Deserialize, Serialize};
 
@@ -75,6 +75,14 @@ pub(crate) struct ArtifactSnapshotResultDto {
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct ArtifactSnapshotHistoryDto {
+    pub(crate) entries: Vec<ArtifactSnapshotResultDto>,
+    pub(crate) retained_snapshot_count: usize,
+    pub(crate) retention_limit: usize,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct ArtifactSnapshotDto {
     pub(crate) workspace_id: String,
     pub(crate) timestamp: String,
@@ -114,6 +122,18 @@ pub(crate) fn artifact_snapshot_to_dto(
             .into_iter()
             .map(artifact_size_change_to_dto)
             .collect(),
+    }
+}
+
+pub(crate) fn artifact_snapshot_history_to_dto(
+    entries: Vec<ArtifactSnapshotResult>,
+) -> ArtifactSnapshotHistoryDto {
+    let retained_snapshot_count = entries.len();
+
+    ArtifactSnapshotHistoryDto {
+        entries: entries.into_iter().map(artifact_snapshot_to_dto).collect(),
+        retained_snapshot_count,
+        retention_limit: MAX_ARTIFACT_SNAPSHOTS_PER_WORKSPACE,
     }
 }
 
@@ -1063,6 +1083,33 @@ mod tests {
         assert_eq!(value["snapshot"]["artifacts"][0]["lastModifiedMs"], 0);
         assert_eq!(value["changes"][0]["kind"], "sizeIncreased");
         assert_eq!(value["changes"][0]["deltaBytes"], 5);
+    }
+
+    #[test]
+    fn artifact_snapshot_history_wire_format_exposes_retention_metadata() {
+        let result = ArtifactSnapshotResult {
+            status: ArtifactSnapshotStatus::BaselineCreated,
+            snapshot: ArtifactSnapshot {
+                workspace_id: "/workspace".to_owned(),
+                timestamp: ArtifactSnapshot::from_analysis(
+                    Path::new("/workspace"),
+                    &AnalysisResult::default(),
+                )
+                .timestamp,
+                artifacts: Vec::new(),
+            },
+            previous_snapshot: None,
+            changes: Vec::new(),
+        };
+
+        let value = serde_json::to_value(artifact_snapshot_history_to_dto(vec![result])).unwrap();
+
+        assert_eq!(value["entries"].as_array().unwrap().len(), 1);
+        assert_eq!(value["retainedSnapshotCount"], 1);
+        assert_eq!(
+            value["retentionLimit"],
+            MAX_ARTIFACT_SNAPSHOTS_PER_WORKSPACE
+        );
     }
 
     #[test]

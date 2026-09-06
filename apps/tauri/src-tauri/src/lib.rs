@@ -16,12 +16,12 @@ use std::{
 };
 
 use contract::{
-    artifact_path, artifact_snapshot_to_dto, cleanup_failure_reason, project_identity_to_dto,
-    storage_summary_to_dto, volume_storage_to_dto, AnalysisResponse, ArtifactAnalysisDto,
-    ArtifactDto, CleanupCandidateDto, CleanupFailureDto, CleanupHistoryEntryDto,
-    CleanupPlanResponse, CleanupResultResponse, ExecuteCleanupRequest, LifecycleScriptDto,
-    RunOptions, ScanResponse, SecurityScanResponse, StorageSummaryDto, VolumeStorageDto,
-    WorkspaceAnalysisResponse,
+    artifact_path, artifact_snapshot_history_to_dto, artifact_snapshot_to_dto,
+    cleanup_failure_reason, project_identity_to_dto, storage_summary_to_dto, volume_storage_to_dto,
+    AnalysisResponse, ArtifactAnalysisDto, ArtifactDto, CleanupCandidateDto, CleanupFailureDto,
+    CleanupHistoryEntryDto, CleanupPlanResponse, CleanupResultResponse, ExecuteCleanupRequest,
+    LifecycleScriptDto, RunOptions, ScanResponse, SecurityScanResponse, StorageSummaryDto,
+    VolumeStorageDto, WorkspaceAnalysisResponse,
 };
 use dustfril_core::{
     api,
@@ -555,6 +555,22 @@ async fn load_cleanup_history() -> Result<Vec<CleanupHistoryEntryDto>, String> {
     .map_err(|error| error.to_string())?
 }
 
+/// Loads retained artifact snapshot comparisons without starting a new scan.
+#[tauri::command]
+async fn load_artifact_snapshot_history(
+    root: String,
+) -> Result<contract::ArtifactSnapshotHistoryDto, String> {
+    let root = resolve_root(Some(root))?;
+
+    tokio::task::spawn_blocking(move || {
+        api::artifact_snapshot::load_artifact_snapshot_history(&root)
+            .map(artifact_snapshot_history_to_dto)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 #[tauri::command]
 async fn audit(options: RunOptions) -> Result<Vec<LifecycleScriptDto>, String> {
     let root = resolve_root(options.root)?;
@@ -616,6 +632,7 @@ pub fn run() {
             load_activity_history,
             clear_activity_history,
             load_cleanup_history,
+            load_artifact_snapshot_history,
             audit,
             security_scan
         ])

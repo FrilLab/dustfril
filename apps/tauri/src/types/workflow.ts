@@ -66,6 +66,12 @@ export type ArtifactSnapshotResult = {
   changes: ArtifactSizeChange[];
 };
 
+export type ArtifactSnapshotHistory = {
+  entries: ArtifactSnapshotResult[];
+  retainedSnapshotCount: number;
+  retentionLimit: number;
+};
+
 export type ArtifactAnalysis = {
   path: string;
   ecosystem: Ecosystem;
