@@ -6,9 +6,9 @@ use std::{
 use dustfril_core::models::{
     ArtifactChangeKind, ArtifactSizeChange, ArtifactSnapshot, ArtifactSnapshotArtifact,
     ArtifactSnapshotResult, ArtifactSnapshotStatus, CleanupFailureReason, CleanupRecommendation,
-    DeleteMode, Ecosystem, LifecycleScript, LockfileCheck, LockfileKind, LockfileStatus,
-    PackageManager, ProjectIdentity, RecommendationPolicy, RiskLevel, ScriptType, SecurityFinding,
-    SecurityReport, SecurityWarning, DEFAULT_CLEANUP_AGE_DAYS,
+    DeleteMode, DeveloperStorageSummary, Ecosystem, LifecycleScript, LockfileCheck, LockfileKind,
+    LockfileStatus, PackageManager, ProjectIdentity, RecommendationPolicy, RiskLevel, ScriptType,
+    SecurityFinding, SecurityReport, SecurityWarning, StorageSummary, DEFAULT_CLEANUP_AGE_DAYS,
 };
 use serde::{Deserialize, Serialize};
 
@@ -194,11 +194,12 @@ pub(crate) struct AnalysisResponse {
 /// Result of the single user-facing Workspace analysis workflow. It carries
 /// both the analyzed artifacts and the cleanup plan derived from that same
 /// scan, so the desktop does not need to repeat filesystem traversal.
-#[derive(Debug, Serialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WorkspaceAnalysisResponse {
     pub(crate) analysis: AnalysisResponse,
     pub(crate) cleanup_plan: CleanupPlanResponse,
+    pub(crate) storage_summary: StorageSummaryDto,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) artifact_snapshot: Option<ArtifactSnapshotResultDto>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -250,6 +251,62 @@ pub(crate) struct CleanupResultResponse {
     pub(crate) freed_size_bytes: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) history_warning: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(tag = "status", rename_all = "camelCase")]
+pub(crate) enum StorageSummaryDto {
+    Available {
+        #[serde(rename = "totalBytes")]
+        total_bytes: u64,
+        #[serde(rename = "usedBytes")]
+        used_bytes: u64,
+        #[serde(rename = "availableBytes")]
+        available_bytes: u64,
+        #[serde(rename = "detectedDevelopmentBytes")]
+        detected_development_bytes: u64,
+        #[serde(rename = "detectedSharePercent")]
+        detected_share_percent: Option<f64>,
+        partial: bool,
+        warnings: Vec<String>,
+        #[serde(rename = "recommendedBytes")]
+        recommended_bytes: u64,
+        #[serde(rename = "scopePath")]
+        scope_path: String,
+        categories: Vec<EcosystemDto>,
+    },
+    Unavailable {
+        reason: String,
+    },
+}
+
+pub(crate) fn storage_summary_to_dto(summary: StorageSummary) -> StorageSummaryDto {
+    let detected_share_percent = summary.detected_share_percent();
+    let StorageSummary {
+        volume,
+        developer_storage:
+            DeveloperStorageSummary {
+                measured_bytes,
+                recommended_bytes,
+                scope_path,
+                categories,
+            },
+        partial,
+        warnings,
+    } = summary;
+
+    StorageSummaryDto::Available {
+        total_bytes: volume.total_bytes,
+        used_bytes: volume.used_bytes,
+        available_bytes: volume.available_bytes,
+        detected_development_bytes: measured_bytes,
+        detected_share_percent,
+        partial,
+        warnings,
+        recommended_bytes,
+        scope_path: scope_path.display().to_string(),
+        categories: categories.into_iter().map(Into::into).collect(),
+    }
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -722,6 +779,18 @@ mod tests {
                 reclaimable_size_bytes: 42,
                 analysis_id: "analysis-1".to_string(),
             },
+            storage_summary: StorageSummaryDto::Available {
+                total_bytes: 100,
+                used_bytes: 60,
+                available_bytes: 40,
+                detected_development_bytes: 12,
+                detected_share_percent: Some(20.0),
+                partial: false,
+                warnings: vec![],
+                recommended_bytes: 4,
+                scope_path: "/workspace".to_string(),
+                categories: vec![EcosystemDto::Rust, EcosystemDto::Node],
+            },
             artifact_snapshot: None,
             artifact_snapshot_warning: None,
         };
@@ -749,6 +818,19 @@ mod tests {
                     }],
                     "reclaimableSizeBytes": 42,
                     "analysisId": "analysis-1"
+                },
+                "storageSummary": {
+                    "status": "available",
+                    "totalBytes": 100,
+                    "usedBytes": 60,
+                    "availableBytes": 40,
+                    "detectedDevelopmentBytes": 12,
+                    "detectedSharePercent": 20.0,
+                    "partial": false,
+                    "warnings": [],
+                    "recommendedBytes": 4,
+                    "scopePath": "/workspace",
+                    "categories": ["Rust", "Node"]
                 }
             })
         );

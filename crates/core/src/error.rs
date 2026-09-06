@@ -19,6 +19,12 @@ pub enum DustError {
     },
     /// Indicates an unrecoverable analysis failure.
     AnalysisFailed,
+    /// Indicates that filesystem capacity statistics could not be read for a
+    /// workspace path.
+    FilesystemStats {
+        path: std::path::PathBuf,
+        source: std::io::Error,
+    },
     /// Indicates an unrecoverable cleanup failure.
     CleanupFailed,
     /// Indicates that a cleanup selection was not present in the analyzed
@@ -57,6 +63,13 @@ impl fmt::Display for DustError {
             DustError::AnalysisFailed => {
                 write!(f, "Analysis failed")
             }
+            DustError::FilesystemStats { path, source } => {
+                write!(
+                    f,
+                    "Failed to read filesystem statistics for {}: {source}",
+                    path.display()
+                )
+            }
             DustError::CleanupFailed => {
                 write!(f, "Cleanup failed")
             }
@@ -89,6 +102,7 @@ impl std::error::Error for DustError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Io(error) => Some(error),
+            Self::FilesystemStats { source, .. } => Some(source),
             Self::ScanAccess { source, .. } => Some(source),
             _ => None,
         }

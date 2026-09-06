@@ -16,6 +16,7 @@ import type {
   CleanupPlanResponse,
   CleanupResultResponse,
   DeleteMode,
+  StorageSummary,
 } from '../../../types/workflow';
 import { cleanupAgeOptions, defaultCleanupAgeDays, deleteModes, ecosystems } from '../../../types/workflow';
 import {
@@ -34,6 +35,7 @@ export function useAppState() {
   const [error, setError] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResponse | null>(null);
   const [cleanupPlan, setCleanupPlan] = useState<CleanupPlanResponse | null>(null);
+  const [storageSummary, setStorageSummary] = useState<StorageSummary | null>(null);
   const [historyEntries, setHistoryEntries] = useState<ActivityRecord[]>([]);
   const [selectedCleanupPaths, setSelectedCleanupPaths] = useState<string[]>([]);
   const [cleanupAgeDays, setCleanupAgeDays] = useState<number>(defaultCleanupAgeDays);
@@ -131,6 +133,7 @@ export function useAppState() {
     setError(null);
     setAnalysisResult(null);
     setCleanupPlan(null);
+    setStorageSummary(null);
     setSelectedCleanupPaths([]);
     setSelectedItemId(null);
     setConfirmDialogOpen(false);
@@ -182,6 +185,7 @@ export function useAppState() {
 
       setAnalysisResult(response.analysis);
       setCleanupPlan(response.cleanupPlan);
+      setStorageSummary(response.storageSummary);
       // Rebuild the default cleanup selection from the new policy. This
       // conservatively drops items that are no longer recommended and never
       // broadens the selection without a new recommendation.
@@ -319,6 +323,34 @@ export function useAppState() {
             }
           : current,
       );
+      const deletedCandidates = candidates.filter((candidate) =>
+        result.deletedPaths.includes(candidate.path),
+      );
+      const deletedDetectedBytes = deletedCandidates.reduce(
+        (total, candidate) => total + candidate.sizeBytes,
+        0,
+      );
+      const deletedRecommendedBytes = deletedCandidates
+        .filter((candidate) => candidate.selectedByDefault)
+        .reduce((total, candidate) => total + candidate.sizeBytes, 0);
+      setStorageSummary((current) =>
+        current?.status === 'available'
+          ? {
+              ...current,
+              detectedDevelopmentBytes: Math.max(
+                0,
+                current.detectedDevelopmentBytes - deletedDetectedBytes,
+              ),
+              detectedSharePercent:
+                current.usedBytes > 0
+                  ? (Math.max(0, current.detectedDevelopmentBytes - deletedDetectedBytes) /
+                      current.usedBytes) *
+                    100
+                  : null,
+              recommendedBytes: Math.max(0, current.recommendedBytes - deletedRecommendedBytes),
+            }
+          : current,
+      );
       setSelectedCleanupPaths((current) =>
         current.filter((path) => !result.deletedPaths.includes(path)),
       );
@@ -338,6 +370,7 @@ export function useAppState() {
     error,
     analysisResult,
     cleanupPlan,
+    storageSummary,
     selectedCleanupItems: cleanupCandidates.filter((candidate) =>
       selectedCleanupPaths.includes(candidate.path),
     ),

@@ -12,6 +12,7 @@ mod project;
 mod recommendation;
 mod scan;
 mod signature;
+mod storage;
 mod workflow;
 
 pub(crate) use analysis::normalize_artifact_analyses;
@@ -30,4 +31,5 @@ pub(crate) use scan::effective_security_ecosystems;
 pub(crate) use scan::normalize_artifacts;
 pub use scan::*;
 pub use signature::*;
+pub use storage::*;
 pub use workflow::*;

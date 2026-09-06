@@ -7,6 +7,7 @@ pub mod history;
 pub mod integrity;
 pub mod lockfile;
 pub mod scan;
+pub mod storage;
 pub mod workflow;
 
 pub use analyze::*;

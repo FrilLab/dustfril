@@ -60,6 +60,19 @@ describe('AppShell Overview navigation', () => {
         ],
         reclaimableSizeBytes: 0,
       },
+      storageSummary: {
+        status: 'available',
+        totalBytes: 512 * 1024 ** 3,
+        usedBytes: 318 * 1024 ** 3,
+        availableBytes: 194 * 1024 ** 3,
+        detectedDevelopmentBytes: 11 * 1024 ** 3,
+        detectedSharePercent: 3.4591194968553455,
+        partial: false,
+        warnings: [],
+        recommendedBytes: 0,
+        scopePath: '/workspace/dustfril',
+        categories: ['Rust'],
+      },
     });
 
     render(<AppShell />);

@@ -1033,6 +1033,93 @@ button:disabled {
   font-size: 11px;
 }
 
+.overview-storage-panel {
+  gap: 12px;
+}
+
+.overview-storage-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.overview-storage-capacity,
+.overview-storage-detected {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.overview-storage-capacity strong,
+.overview-storage-detected strong {
+  color: #edf2f6;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.overview-storage-capacity span,
+.overview-storage-detected span,
+.overview-storage-recommended {
+  color: #a3adb9;
+  font-size: 11px;
+}
+
+.overview-storage-meter {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.overview-storage-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #67c7e8;
+}
+
+.overview-storage-detected {
+  padding-top: 2px;
+}
+
+.overview-storage-detected > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.overview-storage-detected > strong {
+  flex: 0 0 auto;
+  color: #bceafa;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.overview-storage-recommended {
+  margin: 0;
+}
+
+.overview-storage-warning {
+  margin: 0;
+  color: #f7d797;
+  font-size: 11px;
+}
+
+.overview-storage-unavailable {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: #a3adb9;
+  font-size: 12px;
+}
+
+.overview-storage-unavailable strong {
+  color: #edf2f6;
+  font-size: 13px;
+}
+
 .overview-summary-unavailable {
   color: #9ba5b0 !important;
   font-size: 16px !important;

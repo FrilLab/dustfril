@@ -4,11 +4,17 @@ import { formatBytes, formatCount, formatDate } from '../../../lib/format';
 import { cleanupItemCount, cleanupModeLabel, historyStatusLabel } from '../../../model/activity';
 import { leafName, recommendationClass, recommendationLabel } from '../../../model/presentation';
 import { sortArtifacts } from '../../../model/sorting';
-import type { ActivityRecord, ArtifactAnalysis, CleanupCandidate } from '../../../types/workflow';
+import type {
+  ActivityRecord,
+  ArtifactAnalysis,
+  CleanupCandidate,
+  StorageSummary,
+} from '../../../types/workflow';
 
 type OverviewViewProps = {
   root: string;
   analysisReady: boolean;
+  storageSummary: StorageSummary | null;
   artifacts: ArtifactAnalysis[];
   candidates: CleanupCandidate[];
   reclaimableBytes: number;
@@ -73,6 +79,8 @@ export function OverviewView(props: OverviewViewProps) {
           analysisReady={props.analysisReady}
         />
       </div>
+
+      <StoragePanel analysisReady={props.analysisReady} summary={props.storageSummary} />
 
       {!props.analysisReady ? (
         <p className="overview-analysis-hint" role="status">
@@ -147,6 +155,99 @@ export function OverviewView(props: OverviewViewProps) {
           <p className="overview-muted">No cleanup operations yet.</p>
         )}
       </section>
+    </div>
+  );
+}
+
+function StoragePanel({
+  analysisReady,
+  summary,
+}: {
+  analysisReady: boolean;
+  summary: StorageSummary | null;
+}) {
+  return (
+    <section className="overview-panel overview-storage-panel" aria-labelledby="storage-heading">
+      <div className="overview-section-heading">
+        <div>
+          <p className="eyebrow" id="storage-heading">
+            Storage
+          </p>
+          <p className="overview-caption">
+            The filesystem volume containing this workspace.
+          </p>
+        </div>
+      </div>
+
+      {!analysisReady ? (
+        <div className="overview-storage-unavailable">
+          <strong>Not analyzed</strong>
+          <span>Analyze this workspace to measure detected development storage.</span>
+        </div>
+      ) : summary?.status === 'unavailable' ? (
+        <div className="overview-storage-unavailable">
+          <strong>Storage unavailable</strong>
+          <span>{summary.reason}</span>
+        </div>
+      ) : summary?.status === 'available' ? (
+        <AvailableStorage summary={summary} />
+      ) : (
+        <div className="overview-storage-unavailable">
+          <strong>Storage unavailable</strong>
+          <span>No storage summary was returned for this analysis.</span>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AvailableStorage({
+  summary,
+}: {
+  summary: Extract<StorageSummary, { status: 'available' }>;
+}) {
+  const usedPercent = summary.totalBytes
+    ? Math.min((summary.usedBytes / summary.totalBytes) * 100, 100)
+    : 0;
+
+  return (
+    <div className="overview-storage-content">
+      <div className="overview-storage-capacity">
+        <strong>
+          {formatBytes(summary.usedBytes)} used of {formatBytes(summary.totalBytes)}
+        </strong>
+        <span>{formatBytes(summary.availableBytes)} available</span>
+      </div>
+      <div
+        className="overview-storage-meter"
+        role="progressbar"
+        aria-label="Used storage"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={usedPercent}
+      >
+        <span style={{ width: `${usedPercent}%` }} />
+      </div>
+      <div className="overview-storage-detected">
+        <div>
+          <strong>Detected development storage</strong>
+          <span title={summary.scopePath}>Measured in current workspace</span>
+        </div>
+        <strong>
+          {formatBytes(summary.detectedDevelopmentBytes)} ·{' '}
+          {summary.detectedSharePercent === null
+            ? 'Share unavailable'
+            : `${summary.detectedSharePercent.toFixed(1)}% of used storage`}
+        </strong>
+      </div>
+      <p className="overview-storage-recommended">
+        Recommended cleanup: {formatBytes(summary.recommendedBytes)}
+      </p>
+      {summary.partial ? (
+        <p className="overview-storage-warning" role="status">
+          {summary.warnings.join(' ') || 'Partial analysis: some filesystem entries could not be measured.'}
+        </p>
+      ) : null}
     </div>
   );
 }
