@@ -17,6 +17,19 @@ fn analyze_empty_scan_result() {
 
     assert!(analysis.artifacts.is_empty());
     assert_eq!(analysis.total_size_bytes, 0);
+    assert_eq!(analysis.measurement_failures, 0);
+}
+
+#[test]
+fn analysis_measurement_failures_are_backward_compatible_on_the_wire() {
+    let analysis: AnalysisResult =
+        serde_json::from_str(r#"{"artifacts":[],"total_size_bytes":0}"#).unwrap();
+
+    assert_eq!(analysis.measurement_failures, 0);
+    assert_eq!(
+        serde_json::to_string(&analysis).unwrap(),
+        r#"{"artifacts":[],"total_size_bytes":0}"#
+    );
 }
 
 #[test]

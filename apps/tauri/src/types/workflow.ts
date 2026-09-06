@@ -90,6 +90,12 @@ export type WorkspaceAnalysisResponse = {
   artifactSnapshotWarning?: string;
 };
 
+export type VolumeStorage = {
+  totalBytes: number;
+  usedBytes: number;
+  availableBytes: number;
+};
+
 export type StorageSummary =
   | {
       status: 'available';

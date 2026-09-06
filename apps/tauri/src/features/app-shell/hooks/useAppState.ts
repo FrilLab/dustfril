@@ -7,6 +7,7 @@ import {
   defaultRoot,
   executeCleanup,
   loadActivityHistory,
+  refreshStorageVolume,
 } from '../../../lib/tauri';
 import { categoryConfigs, type SidebarCategory } from '../../../model/categories';
 import type { SidebarEntry } from '../../../components/Sidebar/Sidebar';
@@ -17,6 +18,7 @@ import type {
   CleanupResultResponse,
   DeleteMode,
   StorageSummary,
+  VolumeStorage,
 } from '../../../types/workflow';
 import { cleanupAgeOptions, defaultCleanupAgeDays, deleteModes, ecosystems } from '../../../types/workflow';
 import {
@@ -289,10 +291,25 @@ export function useAppState() {
         deleteMode,
       );
 
+      let refreshedVolume: VolumeStorage | null = null;
+      let storageRefreshWarning: string | null = null;
+      if (deleteMode === 'Permanent' && result.deletedPaths.length > 0) {
+        try {
+          refreshedVolume = await refreshStorageVolume(root);
+        } catch (invokeError) {
+          storageRefreshWarning = `Failed to refresh storage statistics: ${String(invokeError)}`;
+        }
+      }
+
       setError(
-        result.failedPaths.length
-          ? formatCleanupFailure(result, result.historyWarning)
-          : result.historyWarning ?? null,
+        [
+          result.failedPaths.length
+            ? formatCleanupFailure(result, result.historyWarning)
+            : result.historyWarning,
+          storageRefreshWarning,
+        ]
+          .filter((warning): warning is string => Boolean(warning))
+          .join(' ') || null,
       );
       setCleanupPlan((current) =>
         current
@@ -335,20 +352,28 @@ export function useAppState() {
         .reduce((total, candidate) => total + candidate.sizeBytes, 0);
       setStorageSummary((current) =>
         current?.status === 'available'
-          ? {
-              ...current,
-              detectedDevelopmentBytes: Math.max(
+          ? (() => {
+              const nextDetectedBytes = Math.max(
                 0,
                 current.detectedDevelopmentBytes - deletedDetectedBytes,
-              ),
-              detectedSharePercent:
-                current.usedBytes > 0
-                  ? (Math.max(0, current.detectedDevelopmentBytes - deletedDetectedBytes) /
-                      current.usedBytes) *
-                    100
-                  : null,
-              recommendedBytes: Math.max(0, current.recommendedBytes - deletedRecommendedBytes),
-            }
+              );
+              const nextVolume = refreshedVolume ?? {
+                totalBytes: current.totalBytes,
+                usedBytes: current.usedBytes,
+                availableBytes: current.availableBytes,
+              };
+
+              return {
+                ...current,
+                ...nextVolume,
+                detectedDevelopmentBytes: nextDetectedBytes,
+                detectedSharePercent:
+                  nextVolume.usedBytes > 0
+                    ? (nextDetectedBytes / nextVolume.usedBytes) * 100
+                    : null,
+                recommendedBytes: Math.max(0, current.recommendedBytes - deletedRecommendedBytes),
+              };
+            })()
           : current,
       );
       setSelectedCleanupPaths((current) =>

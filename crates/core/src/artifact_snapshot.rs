@@ -414,6 +414,7 @@ mod tests {
         AnalysisResult {
             artifacts: vec![analyzed_artifact(path, Ecosystem::Rust, size_bytes)],
             total_size_bytes: size_bytes,
+            ..AnalysisResult::default()
         }
     }
 
@@ -429,6 +430,7 @@ mod tests {
                     size_bytes,
                 )],
                 total_size_bytes: size_bytes,
+                ..AnalysisResult::default()
             },
             Utc.timestamp_opt(timestamp, 0).single().unwrap(),
         )
@@ -484,6 +486,7 @@ mod tests {
                 analyzed_artifact(workspace.path().join("build"), Ecosystem::Java, 30),
             ],
             total_size_bytes: 60,
+            ..AnalysisResult::default()
         };
         store
             .record_snapshot(ArtifactSnapshot::from_analysis_at(
@@ -501,6 +504,7 @@ mod tests {
                 15,
             )],
             total_size_bytes: 15,
+            ..AnalysisResult::default()
         };
         let filtered_result = store
             .record_with_ecosystems(workspace.path(), &filtered_analysis, &[Ecosystem::Rust])
@@ -525,6 +529,7 @@ mod tests {
                 analyzed_artifact(workspace.path().join("build"), Ecosystem::Java, 30),
             ],
             total_size_bytes: 65,
+            ..AnalysisResult::default()
         };
         let full_result = store
             .record_with_ecosystems(workspace.path(), &full_analysis, &[])

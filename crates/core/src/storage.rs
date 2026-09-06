@@ -18,6 +18,19 @@ pub fn summarize(workspace: &Path, analysis: &AnalysisResult) -> DustResult<Stor
     summarize_with_access_summary(workspace, analysis, None)
 }
 
+/// Reads the capacity of the filesystem containing the selected workspace.
+pub fn volume(workspace: &Path) -> DustResult<VolumeStorage> {
+    let filesystem = fs2::statvfs(workspace).map_err(|source| DustError::FilesystemStats {
+        path: workspace.to_path_buf(),
+        source,
+    })?;
+
+    Ok(VolumeStorage::from_filesystem_values(
+        filesystem.total_space(),
+        filesystem.available_space(),
+    ))
+}
+
 /// Builds the storage context while retaining bounded scan-coverage warnings.
 ///
 /// A partial scan still contributes the bytes DustFril measured, but the
@@ -28,14 +41,7 @@ pub fn summarize_with_access_summary(
     analysis: &AnalysisResult,
     access_summary: Option<&ScanAccessSummary>,
 ) -> DustResult<StorageSummary> {
-    let filesystem = fs2::statvfs(workspace).map_err(|source| DustError::FilesystemStats {
-        path: workspace.to_path_buf(),
-        source,
-    })?;
-    let volume = VolumeStorage::from_filesystem_values(
-        filesystem.total_space(),
-        filesystem.available_space(),
-    );
+    let volume = volume(workspace)?;
 
     let recommended_bytes = analysis
         .artifacts
@@ -52,16 +58,20 @@ pub fn summarize_with_access_summary(
     categories.sort_unstable();
     categories.dedup();
 
-    let partial = access_summary.is_some_and(|summary| summary.failures > 0);
-    let warnings = access_summary
-        .filter(|summary| summary.failures > 0)
-        .map(|summary| {
-            vec![format!(
-                "Workspace analysis was partial: {} filesystem access failure(s) were not measured.",
-                summary.failures
-            )]
-        })
-        .unwrap_or_default();
+    let mut warnings = Vec::new();
+    if analysis.measurement_failures > 0 {
+        warnings.push(format!(
+            "Workspace analysis was partial: {} artifact measurement failure(s) were not measured.",
+            analysis.measurement_failures
+        ));
+    }
+    if let Some(summary) = access_summary.filter(|summary| summary.failures > 0) {
+        warnings.push(format!(
+            "Workspace analysis was partial: {} filesystem access failure(s) were not measured.",
+            summary.failures
+        ));
+    }
+    let partial = !warnings.is_empty();
 
     Ok(StorageSummary {
         volume,
@@ -105,6 +115,7 @@ mod tests {
                 )
                 .collect(),
             total_size_bytes,
+            ..AnalysisResult::default()
         }
     }
 
@@ -154,6 +165,20 @@ mod tests {
             matches!(error, DustError::FilesystemStats { path: ref error_path, .. } if error_path == &path)
         );
         assert!(!error.to_string().contains("0 B"));
+    }
+
+    #[test]
+    fn volume_reads_capacity_without_an_analysis() {
+        let root = tempfile::tempdir().unwrap();
+
+        let volume = volume(root.path()).unwrap();
+
+        assert!(volume.total_bytes > 0);
+        assert!(volume.available_bytes <= volume.total_bytes);
+        assert_eq!(
+            volume.used_bytes + volume.available_bytes,
+            volume.total_bytes
+        );
     }
 
     #[test]
@@ -243,5 +268,24 @@ mod tests {
         assert!(summary.partial);
         assert_eq!(summary.developer_storage.measured_bytes, 42);
         assert_eq!(summary.warnings.len(), 1);
+    }
+
+    #[test]
+    fn partial_artifact_measurement_is_exposed_without_discarding_measured_bytes() {
+        let root = tempfile::tempdir().unwrap();
+        let mut analysis = analysis(vec![(
+            root.path().join("target"),
+            Ecosystem::Rust,
+            42,
+            CleanupRecommendation::Keep,
+        )]);
+        analysis.measurement_failures = 2;
+
+        let summary = summarize(root.path(), &analysis).unwrap();
+
+        assert!(summary.partial);
+        assert_eq!(summary.developer_storage.measured_bytes, 42);
+        assert_eq!(summary.warnings.len(), 1);
+        assert!(summary.warnings[0].contains("2 artifact measurement failure(s)"));
     }
 }

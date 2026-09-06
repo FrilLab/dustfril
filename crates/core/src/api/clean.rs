@@ -92,6 +92,7 @@ mod tests {
                 recommendation: CleanupRecommendation::Keep,
             }],
             total_size_bytes: 42,
+            ..AnalysisResult::default()
         };
 
         let plan = build_plan_from_analysis_with_selection(

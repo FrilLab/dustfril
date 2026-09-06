@@ -8,7 +8,8 @@ use dustfril_core::models::{
     ArtifactSnapshotResult, ArtifactSnapshotStatus, CleanupFailureReason, CleanupRecommendation,
     DeleteMode, DeveloperStorageSummary, Ecosystem, LifecycleScript, LockfileCheck, LockfileKind,
     LockfileStatus, PackageManager, ProjectIdentity, RecommendationPolicy, RiskLevel, ScriptType,
-    SecurityFinding, SecurityReport, SecurityWarning, StorageSummary, DEFAULT_CLEANUP_AGE_DAYS,
+    SecurityFinding, SecurityReport, SecurityWarning, StorageSummary, VolumeStorage,
+    DEFAULT_CLEANUP_AGE_DAYS,
 };
 use serde::{Deserialize, Serialize};
 
@@ -251,6 +252,22 @@ pub(crate) struct CleanupResultResponse {
     pub(crate) freed_size_bytes: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) history_warning: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct VolumeStorageDto {
+    pub(crate) total_bytes: u64,
+    pub(crate) used_bytes: u64,
+    pub(crate) available_bytes: u64,
+}
+
+pub(crate) fn volume_storage_to_dto(volume: VolumeStorage) -> VolumeStorageDto {
+    VolumeStorageDto {
+        total_bytes: volume.total_bytes,
+        used_bytes: volume.used_bytes,
+        available_bytes: volume.available_bytes,
+    }
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -832,6 +849,24 @@ mod tests {
                     "scopePath": "/workspace",
                     "categories": ["Rust", "Node"]
                 }
+            })
+        );
+    }
+
+    #[test]
+    fn volume_storage_wire_format_uses_capacity_field_names() {
+        let response = volume_storage_to_dto(VolumeStorage {
+            total_bytes: 100,
+            used_bytes: 60,
+            available_bytes: 40,
+        });
+
+        assert_eq!(
+            serde_json::to_value(response).unwrap(),
+            json!({
+                "totalBytes": 100,
+                "usedBytes": 60,
+                "availableBytes": 40
             })
         );
     }

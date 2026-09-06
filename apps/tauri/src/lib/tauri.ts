@@ -11,6 +11,7 @@ import type {
   RunOptions,
   ScanResponse,
   SecurityScanResponse,
+  VolumeStorage,
   WorkspaceAnalysisResponse,
 } from '../types/workflow';
 
@@ -23,6 +24,7 @@ const commands = {
   audit: 'audit',
   securityScan: 'security_scan',
   executeCleanup: 'execute_cleanup',
+  refreshStorageVolume: 'refresh_storage_volume',
   loadActivityHistory: 'load_activity_history',
   clearActivityHistory: 'clear_activity_history',
   loadCleanupHistory: 'load_cleanup_history',
@@ -77,6 +79,10 @@ export function executeCleanup(
   return invoke<CleanupResultResponse>(commands.executeCleanup, {
     request: { root, ecosystems, analysisId, selectedArtifacts, mode },
   });
+}
+
+export function refreshStorageVolume(root: string) {
+  return invoke<VolumeStorage>(commands.refreshStorageVolume, { root });
 }
 
 export function loadActivityHistory() {

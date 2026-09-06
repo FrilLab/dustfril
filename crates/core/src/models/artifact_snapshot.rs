@@ -338,6 +338,7 @@ mod tests {
             &AnalysisResult {
                 artifacts,
                 total_size_bytes: 0,
+                ..AnalysisResult::default()
             },
             timestamp(1),
         )
@@ -455,6 +456,7 @@ mod tests {
                 10,
             )],
             total_size_bytes: 10,
+            ..AnalysisResult::default()
         };
         let snapshot = ArtifactSnapshot::from_analysis(&link, &analysis);
 
