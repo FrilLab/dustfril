@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppShell } from './AppShell';
 import {
@@ -7,7 +7,9 @@ import {
   executeCleanup,
   loadActivityHistory,
   refreshStorageVolume,
+  scanExecutableIntegrity,
 } from '../../lib/tauri';
+import type { IntegrityScanResponse } from '../../types/workflow';
 
 vi.mock('../../lib/tauri', () => ({
   analyzeWorkspace: vi.fn(),
@@ -81,6 +83,36 @@ describe('AppShell Overview navigation', () => {
       expect(screen.getByRole('heading', { name: `${title} is planned` })).toBeInTheDocument();
     }
     expect(analyzeWorkspace).not.toHaveBeenCalled();
+  });
+
+  it('keeps an integrity result available after navigating away while scanning', async () => {
+    let resolveScan: ((response: IntegrityScanResponse) => void) | undefined;
+    vi.mocked(scanExecutableIntegrity).mockImplementation(
+      () =>
+        new Promise<IntegrityScanResponse>((resolve) => {
+          resolveScan = resolve;
+        }),
+    );
+
+    render(<AppShell />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Analyze Workspace' })).toBeEnabled());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Executable Integrity' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run integrity scan' }));
+    await waitFor(() => expect(scanExecutableIntegrity).toHaveBeenCalledOnce());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Overview' }));
+    expect(screen.queryByRole('heading', { name: 'git' })).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveScan?.({
+        checks: [{ requestedTool: 'git', status: 'contentChanged' }],
+      });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Executable Integrity' }));
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'git' })).toBeInTheDocument());
+    expect(screen.getByText('Content changed')).toBeInTheDocument();
   });
 
   it('opens the exact Overview artifact in Workspace without selecting it', async () => {

@@ -10,7 +10,14 @@ import type { IntegrityScanResponse } from '../../../types/workflow';
 
 export const defaultIntegrityTools = ['node', 'bun', 'cargo', 'rustc', 'git', 'java', 'gradle'];
 
-export function useExecutableIntegrity() {
+export type ExecutableIntegrityState = {
+  operation: AsyncOperationState<IntegrityScanResponse>;
+  result: IntegrityScanResponse | undefined;
+  busy: boolean;
+  scan: (tools: string[]) => Promise<void>;
+};
+
+export function useExecutableIntegrity(): ExecutableIntegrityState {
   const [operation, dispatch] = useReducer(
     reduceAsyncOperation<IntegrityScanResponse>,
     idleAsyncOperation<IntegrityScanResponse>(),
@@ -34,10 +41,5 @@ export function useExecutableIntegrity() {
     result: operationData(operation),
     busy: operation.status === 'loading',
     scan,
-  } satisfies {
-    operation: AsyncOperationState<IntegrityScanResponse>;
-    result: IntegrityScanResponse | undefined;
-    busy: boolean;
-    scan: (tools: string[]) => Promise<void>;
   };
 }

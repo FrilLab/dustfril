@@ -8,7 +8,10 @@ import type {
   SignatureReport,
   SignatureStatus,
 } from '../../../types/workflow';
-import { defaultIntegrityTools, useExecutableIntegrity } from '../hooks/useExecutableIntegrity';
+import {
+  defaultIntegrityTools,
+  type ExecutableIntegrityState,
+} from '../hooks/useExecutableIntegrity';
 
 const integrityStatusLabels: Record<IntegrityStatus, string> = {
   newBaseline: 'New baseline',
@@ -34,8 +37,11 @@ const signaturePlatformLabels = {
   other: 'Other',
 } as const;
 
-export function ExecutableIntegrityView() {
-  const integrity = useExecutableIntegrity();
+export function ExecutableIntegrityView({
+  integrity,
+}: {
+  integrity: ExecutableIntegrityState;
+}) {
   const [selectedTools, setSelectedTools] = useState(defaultIntegrityTools);
   const [customTool, setCustomTool] = useState('');
   const result = integrity.result;

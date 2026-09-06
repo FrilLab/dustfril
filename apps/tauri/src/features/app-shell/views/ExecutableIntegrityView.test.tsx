@@ -82,7 +82,7 @@ describe('ExecutableIntegrityView', () => {
   it('runs an explicit scan and renders structured integrity and signature evidence', async () => {
     vi.mocked(scanExecutableIntegrity).mockResolvedValue(scanResponse);
 
-    render(<ExecutableIntegrityView />);
+    render(<TestExecutableIntegrityView />);
     expect(screen.getByRole('heading', { name: 'Ready to inspect' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Run integrity scan' })).toBeEnabled();
 
@@ -108,7 +108,7 @@ describe('ExecutableIntegrityView', () => {
   it('passes custom names and paths as one structured tool selection', async () => {
     vi.mocked(scanExecutableIntegrity).mockResolvedValue({ checks: [] });
 
-    render(<ExecutableIntegrityView />);
+    render(<TestExecutableIntegrityView />);
     const input = screen.getByLabelText('Additional tool name or path');
     fireEvent.change(input, { target: { value: '/tmp/tools/my tool' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add' }));
@@ -149,3 +149,8 @@ describe('ExecutableIntegrityView', () => {
     expect(hook.result.current.result?.checks[0].requestedTool).toBe('second');
   });
 });
+
+function TestExecutableIntegrityView() {
+  const integrity = useExecutableIntegrity();
+  return <ExecutableIntegrityView integrity={integrity} />;
+}
