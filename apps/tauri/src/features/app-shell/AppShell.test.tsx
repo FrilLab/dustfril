@@ -17,6 +17,7 @@ vi.mock('../../lib/tauri', () => ({
   refreshStorageVolume: vi.fn(),
   loadActivityHistory: vi.fn().mockResolvedValue([]),
   clearActivityHistory: vi.fn().mockResolvedValue(undefined),
+  scanExecutableIntegrity: vi.fn(),
 }));
 
 const analyzedArtifact = {
@@ -68,7 +69,7 @@ describe('AppShell Overview navigation', () => {
     ['Activity', false],
     ['Supply Chain', true],
     ['GitHub Actions', true],
-    ['Executable Integrity', true],
+    ['Executable Integrity', false],
   ])('navigates to the %s module without starting another operation', async (title, planned) => {
     render(<AppShell />);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Analyze Workspace' })).toBeEnabled());

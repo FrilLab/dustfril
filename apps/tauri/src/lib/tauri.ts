@@ -7,6 +7,8 @@ import type {
   CleanupPlanResponse,
   CleanupResultResponse,
   DeleteMode,
+  IntegrityScanOptions,
+  IntegrityScanResponse,
   LifecycleScript,
   RunOptions,
   ScanResponse,
@@ -23,6 +25,7 @@ const commands = {
   analyzeWorkspace: 'analyze_workspace',
   audit: 'audit',
   securityScan: 'security_scan',
+  integrityScan: 'integrity_scan',
   executeCleanup: 'execute_cleanup',
   refreshStorageVolume: 'refresh_storage_volume',
   loadActivityHistory: 'load_activity_history',
@@ -67,6 +70,10 @@ export function auditScripts(options: RunOptions) {
 
 export function securityScan(options: RunOptions) {
   return invoke<SecurityScanResponse>(commands.securityScan, { options });
+}
+
+export function scanExecutableIntegrity(options: IntegrityScanOptions) {
+  return invoke<IntegrityScanResponse>(commands.integrityScan, { options });
 }
 
 export function executeCleanup(

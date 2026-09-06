@@ -183,6 +183,83 @@ export type SecurityScanResponse = {
   historyWarning?: string;
 };
 
+export type IntegrityScanOptions = {
+  tools: string[];
+};
+
+export type IntegrityStatus =
+  | 'newBaseline'
+  | 'unchanged'
+  | 'contentChanged'
+  | 'resolvedPathChanged'
+  | 'missing'
+  | 'inspectionFailed';
+
+export type IntegrityFailureKind =
+  | 'invalidToolName'
+  | 'notFound'
+  | 'nonRegularFile'
+  | 'nonExecutable'
+  | 'unreadable'
+  | 'brokenSymlink'
+  | 'symlinkLoop'
+  | 'hashFailed';
+
+export type IntegrityFailure = {
+  kind: IntegrityFailureKind;
+  message: string;
+};
+
+export type ExecutableObservation = {
+  requestedTool: string;
+  resolvedPath: string;
+  canonicalPath: string;
+  symlinkTarget?: string;
+  sizeBytes: number;
+  sha256: string;
+  observedAt: string;
+  versionMetadata?: string;
+};
+
+export type SignatureStatus = 'valid' | 'unsigned' | 'invalid' | 'unsupported' | 'inspectionFailed';
+export type SignaturePlatform = 'macos' | 'windows' | 'linux' | 'other';
+export type SignatureFailureKind =
+  | 'platformUnsupported'
+  | 'verifierUnavailable'
+  | 'verifierFailed'
+  | 'targetMissing'
+  | 'targetUnreadable'
+  | 'targetNonRegularFile'
+  | 'targetChangedDuringVerification';
+
+export type SignatureFailure = {
+  kind: SignatureFailureKind;
+  message: string;
+};
+
+export type SignatureReport = {
+  platform: SignaturePlatform;
+  status: SignatureStatus;
+  signer?: string;
+  teamIdentifier?: string;
+  verificationMessage?: string;
+  verificationCode?: number;
+  failure?: SignatureFailure;
+};
+
+export type IntegrityCheck = {
+  requestedTool: string;
+  status: IntegrityStatus;
+  observation?: ExecutableObservation;
+  previousObservation?: ExecutableObservation;
+  failure?: IntegrityFailure;
+  signature?: SignatureReport;
+};
+
+export type IntegrityScanResponse = {
+  checks: IntegrityCheck[];
+};
+
 export type ActivityKind = 'Scan' | 'Cleanup' | 'Security';
 
 export type ActivityFailure = {

@@ -7,6 +7,7 @@ import { useAppState } from './hooks/useAppState';
 import { HistoryView } from './views/HistoryView';
 import { ModulePlaceholderView } from './views/ModulePlaceholderView';
 import { OverviewView } from './views/OverviewView';
+import { ExecutableIntegrityView } from './views/ExecutableIntegrityView';
 import { WorkspaceView } from './views/WorkspaceView';
 
 export function AppShell() {
@@ -16,6 +17,7 @@ export function AppShell() {
   const showingWorkspace = app.activeCategory === 'workspace' || showingCleanup;
   const showingActivity =
     app.activeCategory === 'history' || app.activeCategory === 'workspace-activity';
+  const showingExecutableIntegrity = app.activeCategory === 'security-executable-integrity';
 
   return (
     <main className="app-shell">
@@ -85,7 +87,13 @@ export function AppShell() {
             />
           ) : null}
 
-          {app.activeCategory !== 'overview' && !showingWorkspace && !showingActivity && activeConfig ? (
+          {showingExecutableIntegrity ? <ExecutableIntegrityView /> : null}
+
+          {app.activeCategory !== 'overview' &&
+          !showingWorkspace &&
+          !showingActivity &&
+          !showingExecutableIntegrity &&
+          activeConfig ? (
             <ModulePlaceholderView
               config={activeConfig}
               onReturnToOverview={() => app.setActiveCategory('overview')}

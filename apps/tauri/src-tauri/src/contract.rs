@@ -6,10 +6,12 @@ use std::{
 use dustfril_core::models::{
     ArtifactChangeKind, ArtifactSizeChange, ArtifactSnapshot, ArtifactSnapshotArtifact,
     ArtifactSnapshotResult, ArtifactSnapshotStatus, CleanupFailureReason, CleanupRecommendation,
-    DeleteMode, DeveloperStorageSummary, Ecosystem, LifecycleScript, LockfileCheck, LockfileKind,
-    LockfileStatus, PackageManager, ProjectIdentity, RecommendationPolicy, RiskLevel, ScriptType,
-    SecurityFinding, SecurityReport, SecurityWarning, StorageSummary, VolumeStorage,
-    DEFAULT_CLEANUP_AGE_DAYS,
+    DeleteMode, DeveloperStorageSummary, Ecosystem, ExecutableObservation, IntegrityCheck,
+    IntegrityFailure, IntegrityFailureKind, IntegrityReport, IntegrityStatus, LifecycleScript,
+    LockfileCheck, LockfileKind, LockfileStatus, PackageManager, ProjectIdentity,
+    RecommendationPolicy, RiskLevel, ScriptType, SecurityFinding, SecurityReport, SecurityWarning,
+    SignatureFailure, SignatureFailureKind, SignaturePlatform, SignatureReport, SignatureStatus,
+    StorageSummary, ToolSpec, VolumeStorage, DEFAULT_CLEANUP_AGE_DAYS,
 };
 use serde::{Deserialize, Serialize};
 
@@ -364,6 +366,90 @@ pub(crate) struct SecurityScanResponse {
     pub(crate) history_warning: Option<String>,
 }
 
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct IntegrityScanOptions {
+    #[serde(default)]
+    pub(crate) tools: Vec<String>,
+}
+
+impl IntegrityScanOptions {
+    pub(crate) fn tools(self) -> Vec<ToolSpec> {
+        if self.tools.is_empty() {
+            dustfril_core::api::integrity::default_tools()
+        } else {
+            self.tools.into_iter().map(ToolSpec::from).collect()
+        }
+    }
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct IntegrityScanResponse {
+    pub(crate) checks: Vec<IntegrityCheckDto>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct IntegrityCheckDto {
+    pub(crate) requested_tool: String,
+    pub(crate) status: IntegrityStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) observation: Option<ExecutableObservationDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) previous_observation: Option<ExecutableObservationDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) failure: Option<IntegrityFailureDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) signature: Option<SignatureReportDto>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ExecutableObservationDto {
+    pub(crate) requested_tool: String,
+    pub(crate) resolved_path: String,
+    pub(crate) canonical_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) symlink_target: Option<String>,
+    pub(crate) size_bytes: u64,
+    pub(crate) sha256: String,
+    pub(crate) observed_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) version_metadata: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct IntegrityFailureDto {
+    pub(crate) kind: IntegrityFailureKind,
+    pub(crate) message: String,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SignatureReportDto {
+    pub(crate) platform: SignaturePlatform,
+    pub(crate) status: SignatureStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) signer: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) team_identifier: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) verification_message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) verification_code: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) failure: Option<SignatureFailureDto>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SignatureFailureDto {
+    pub(crate) kind: SignatureFailureKind,
+    pub(crate) message: String,
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SecurityFindingDto {
@@ -589,6 +675,76 @@ impl From<SecurityReport> for SecurityScanResponse {
     }
 }
 
+impl From<IntegrityReport> for IntegrityScanResponse {
+    fn from(report: IntegrityReport) -> Self {
+        Self {
+            checks: report.checks.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<IntegrityCheck> for IntegrityCheckDto {
+    fn from(check: IntegrityCheck) -> Self {
+        Self {
+            requested_tool: check.requested_tool,
+            status: check.status,
+            observation: check.observation.map(Into::into),
+            previous_observation: check.previous_observation.map(Into::into),
+            failure: check.failure.map(Into::into),
+            signature: check.signature.map(Into::into),
+        }
+    }
+}
+
+impl From<ExecutableObservation> for ExecutableObservationDto {
+    fn from(observation: ExecutableObservation) -> Self {
+        Self {
+            requested_tool: observation.requested_tool,
+            resolved_path: observation.resolved_path.display().to_string(),
+            canonical_path: observation.canonical_path.display().to_string(),
+            symlink_target: observation
+                .symlink_target
+                .map(|path| path.display().to_string()),
+            size_bytes: observation.size_bytes,
+            sha256: observation.sha256,
+            observed_at: observation.observed_at.to_rfc3339(),
+            version_metadata: observation.version_metadata,
+        }
+    }
+}
+
+impl From<IntegrityFailure> for IntegrityFailureDto {
+    fn from(failure: IntegrityFailure) -> Self {
+        Self {
+            kind: failure.kind,
+            message: failure.message,
+        }
+    }
+}
+
+impl From<SignatureReport> for SignatureReportDto {
+    fn from(report: SignatureReport) -> Self {
+        Self {
+            platform: report.platform,
+            status: report.status,
+            signer: report.signer,
+            team_identifier: report.team_identifier,
+            verification_message: report.verification_message,
+            verification_code: report.verification_code,
+            failure: report.failure.map(Into::into),
+        }
+    }
+}
+
+impl From<SignatureFailure> for SignatureFailureDto {
+    fn from(failure: SignatureFailure) -> Self {
+        Self {
+            kind: failure.kind,
+            message: failure.message,
+        }
+    }
+}
+
 impl From<SecurityFinding> for SecurityFindingDto {
     fn from(finding: SecurityFinding) -> Self {
         Self {
@@ -704,6 +860,92 @@ mod tests {
         .unwrap();
         assert_eq!(refresh_options.record_history, Some(false));
         assert_eq!(refresh_options.record_artifact_snapshot, Some(false));
+    }
+
+    #[test]
+    fn integrity_scan_options_preserve_selected_tools_and_default_to_core_selection() {
+        let defaults = IntegrityScanOptions { tools: Vec::new() }.tools();
+        assert_eq!(defaults, dustfril_core::api::integrity::default_tools());
+
+        let options: IntegrityScanOptions = serde_json::from_value(json!({
+            "tools": ["git", "/Applications/Developer Tools/git"]
+        }))
+        .unwrap();
+        assert_eq!(
+            options.tools(),
+            vec![
+                dustfril_core::models::ToolSpec::from("git"),
+                dustfril_core::models::ToolSpec::from("/Applications/Developer Tools/git")
+            ]
+        );
+    }
+
+    #[test]
+    fn integrity_response_wire_format_preserves_evidence_and_neutral_signature_state() {
+        let observation: ExecutableObservation = serde_json::from_value(json!({
+            "requestedTool": "/Applications/Developer Tools/git",
+            "resolvedPath": "/Applications/Developer Tools/git",
+            "canonicalPath": "/Applications/Developer Tools/git",
+            "symlinkTarget": null,
+            "sizeBytes": 9,
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "observedAt": "2026-09-07T01:02:03Z",
+            "versionMetadata": null
+        }))
+        .unwrap();
+        let report = IntegrityReport {
+            checks: vec![IntegrityCheck {
+                requested_tool: observation.requested_tool.clone(),
+                status: IntegrityStatus::ContentChanged,
+                observation: Some(observation),
+                previous_observation: None,
+                failure: None,
+                signature: Some(SignatureReport {
+                    platform: SignaturePlatform::Linux,
+                    status: SignatureStatus::Unsupported,
+                    signer: None,
+                    team_identifier: None,
+                    verification_message: Some(
+                        "Linux does not provide a universal executable code-signature verifier"
+                            .to_owned(),
+                    ),
+                    verification_code: None,
+                    failure: Some(SignatureFailure {
+                        kind: SignatureFailureKind::PlatformUnsupported,
+                        message: "no verifier".to_owned(),
+                    }),
+                }),
+            }],
+        };
+
+        let response: IntegrityScanResponse = report.into();
+
+        assert_eq!(
+            serde_json::to_value(response).unwrap(),
+            json!({
+                "checks": [{
+                    "requestedTool": "/Applications/Developer Tools/git",
+                    "status": "contentChanged",
+                    "observation": {
+                        "requestedTool": "/Applications/Developer Tools/git",
+                        "resolvedPath": "/Applications/Developer Tools/git",
+                        "canonicalPath": "/Applications/Developer Tools/git",
+                        "sizeBytes": 9,
+                        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                        "observedAt": "2026-09-07T01:02:03+00:00"
+                    },
+                    "signature": {
+                        "platform": "linux",
+                        "status": "unsupported",
+                        "verificationMessage": "Linux does not provide a universal executable code-signature verifier",
+                        "failure": {
+                            "kind": "platformUnsupported",
+                            "message": "no verifier"
+                        }
+                    }
+                }]
+            })
+        );
     }
 
     #[test]
