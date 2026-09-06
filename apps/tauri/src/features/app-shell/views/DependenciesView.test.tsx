@@ -156,6 +156,7 @@ const diff: DependencyDiff = {
 };
 
 const result: DependencyInventoryResponse = {
+  inventoryFingerprint: 'fingerprint-1',
   workspacePath: '/workspace',
   reports: [nodeReport, incompleteRustReport],
   diff: null,

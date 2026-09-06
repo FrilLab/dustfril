@@ -249,6 +249,7 @@ export type DependencyDiff = {
 };
 
 export type DependencyInventoryResponse = {
+  inventoryFingerprint: string;
   workspacePath: string;
   reports: DependencyReport[];
   diff: DependencyDiff | null;
@@ -334,6 +335,12 @@ export type RunOptions = {
   recordHistory?: boolean;
   cleanupAgeDays?: number;
   recordArtifactSnapshot?: boolean;
+};
+
+export type DependencyBaselineAcceptOptions = {
+  root: string;
+  ecosystems: Ecosystem[];
+  expectedInventoryFingerprint: string;
 };
 
 export const ecosystems: Ecosystem[] = ['Rust', 'Node', 'Java'];

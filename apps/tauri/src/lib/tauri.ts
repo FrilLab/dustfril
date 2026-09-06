@@ -7,6 +7,7 @@ import type {
   CleanupPlanResponse,
   CleanupResultResponse,
   DeleteMode,
+  DependencyBaselineAcceptOptions,
   DependencyInventoryResponse,
   LifecycleScript,
   RunOptions,
@@ -105,6 +106,6 @@ export function compareDependencyBaseline(options: RunOptions) {
   return invoke<DependencyInventoryResponse>(commands.compareDependencyBaseline, { options });
 }
 
-export function acceptDependencyBaseline(options: RunOptions) {
+export function acceptDependencyBaseline(options: DependencyBaselineAcceptOptions) {
   return invoke<DependencyInventoryResponse>(commands.acceptDependencyBaseline, { options });
 }

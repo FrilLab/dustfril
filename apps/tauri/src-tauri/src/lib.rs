@@ -20,14 +20,14 @@ use contract::{
     project_identity_to_dto, storage_summary_to_dto, volume_storage_to_dto, AnalysisResponse,
     ArtifactAnalysisDto, ArtifactDto, CleanupCandidateDto, CleanupFailureDto,
     CleanupHistoryEntryDto, CleanupPlanResponse, CleanupResultResponse,
-    DependencyInventoryResponse, ExecuteCleanupRequest, LifecycleScriptDto, RunOptions,
-    ScanResponse, SecurityScanResponse, StorageSummaryDto, VolumeStorageDto,
-    WorkspaceAnalysisResponse,
+    DependencyBaselineAcceptOptions, DependencyInventoryResponse, ExecuteCleanupRequest,
+    LifecycleScriptDto, RunOptions, ScanResponse, SecurityScanResponse, StorageSummaryDto,
+    VolumeStorageDto, WorkspaceAnalysisResponse,
 };
 use dustfril_core::{
     api,
     error::DustError,
-    models::{AnalysisResult, ArtifactAnalysis, ArtifactSelection, Ecosystem},
+    models::{AnalysisResult, ArtifactAnalysis, ArtifactSelection, DependencyReport, Ecosystem},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -152,6 +152,22 @@ fn discover_workspace_root(start: &Path) -> Option<PathBuf> {
 fn default_root_path() -> Result<PathBuf, String> {
     let current_dir = env::current_dir().map_err(|error| error.to_string())?;
     Ok(discover_workspace_root(&current_dir).unwrap_or(current_dir))
+}
+
+fn verify_dependency_inventory_fingerprint(
+    reports: &[DependencyReport],
+    expected: &str,
+) -> Result<String, String> {
+    let actual =
+        api::dependency_inventory_fingerprint(reports).map_err(|error| error.to_string())?;
+    if actual != expected {
+        return Err(
+            "Dependency inventory changed since it was reviewed. Compare again before accepting the baseline."
+                .to_owned(),
+        );
+    }
+
+    Ok(actual)
 }
 
 fn system_time_to_ms(value: std::time::SystemTime) -> Option<u64> {
@@ -566,7 +582,14 @@ async fn load_dependency_inventory(
     tokio::task::spawn_blocking(move || {
         let reports =
             api::dependency_report(&root, &ecosystems).map_err(|error| error.to_string())?;
-        Ok(dependency_inventory_to_dto(&root, reports, None))
+        let inventory_fingerprint =
+            api::dependency_inventory_fingerprint(&reports).map_err(|error| error.to_string())?;
+        Ok(dependency_inventory_to_dto(
+            &root,
+            reports,
+            None,
+            inventory_fingerprint,
+        ))
     })
     .await
     .map_err(|error| error.to_string())?
@@ -585,7 +608,14 @@ async fn compare_dependency_baseline(
             api::dependency_report(&root, &ecosystems).map_err(|error| error.to_string())?;
         let diff = api::dependency_diff(&root, &reports, &baseline_path)
             .map_err(|error| error.to_string())?;
-        Ok(dependency_inventory_to_dto(&root, reports, Some(diff)))
+        let inventory_fingerprint =
+            api::dependency_inventory_fingerprint(&reports).map_err(|error| error.to_string())?;
+        Ok(dependency_inventory_to_dto(
+            &root,
+            reports,
+            Some(diff),
+            inventory_fingerprint,
+        ))
     })
     .await
     .map_err(|error| error.to_string())?
@@ -593,20 +623,28 @@ async fn compare_dependency_baseline(
 
 #[tauri::command]
 async fn accept_dependency_baseline(
-    options: RunOptions,
+    options: DependencyBaselineAcceptOptions,
 ) -> Result<DependencyInventoryResponse, String> {
     let root = resolve_root(options.root)?;
     let ecosystems: Vec<_> = options.ecosystems.into_iter().map(Into::into).collect();
+    let expected_inventory_fingerprint = options.expected_inventory_fingerprint;
     let baseline_path = api::dependency_baseline_path().map_err(|error| error.to_string())?;
 
     tokio::task::spawn_blocking(move || {
         let reports =
             api::dependency_report(&root, &ecosystems).map_err(|error| error.to_string())?;
+        let inventory_fingerprint =
+            verify_dependency_inventory_fingerprint(&reports, &expected_inventory_fingerprint)?;
         api::accept_dependency_baseline(&root, &reports, &baseline_path)
             .map_err(|error| error.to_string())?;
         let diff = api::dependency_diff(&root, &reports, &baseline_path)
             .map_err(|error| error.to_string())?;
-        Ok(dependency_inventory_to_dto(&root, reports, Some(diff)))
+        Ok(dependency_inventory_to_dto(
+            &root,
+            reports,
+            Some(diff),
+            inventory_fingerprint,
+        ))
     })
     .await
     .map_err(|error| error.to_string())?
@@ -787,5 +825,28 @@ mod tests {
 
         assert!(snapshot.is_none());
         assert!(warning.is_none());
+    }
+
+    #[test]
+    fn dependency_acceptance_rejects_an_inventory_that_changed_after_review() {
+        let original = DependencyReport::unsupported(
+            Ecosystem::Node,
+            PathBuf::from("/workspace/package.json"),
+            "unsupported package manager",
+        );
+        let expected =
+            api::dependency_inventory_fingerprint(std::slice::from_ref(&original)).unwrap();
+        let mut changed = original;
+        changed.warnings.push("changed after review".to_owned());
+
+        assert!(
+            verify_dependency_inventory_fingerprint(std::slice::from_ref(&changed), &expected,)
+                .is_err()
+        );
+        assert_eq!(
+            verify_dependency_inventory_fingerprint(std::slice::from_ref(&changed), &expected)
+                .unwrap_err(),
+            "Dependency inventory changed since it was reviewed. Compare again before accepting the baseline."
+        );
     }
 }

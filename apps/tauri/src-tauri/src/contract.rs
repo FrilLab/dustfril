@@ -40,6 +40,14 @@ impl RunOptions {
 
 #[derive(Debug, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct DependencyBaselineAcceptOptions {
+    pub(crate) root: Option<String>,
+    pub(crate) ecosystems: Vec<EcosystemDto>,
+    pub(crate) expected_inventory_fingerprint: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct ExecuteCleanupRequest {
     pub(crate) root: String,
     pub(crate) ecosystems: Vec<EcosystemDto>,
@@ -390,6 +398,7 @@ pub(crate) struct SecurityWarningDto {
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DependencyInventoryResponse {
+    pub(crate) inventory_fingerprint: String,
     pub(crate) workspace_path: String,
     pub(crate) reports: Vec<DependencyReportDto>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -782,8 +791,10 @@ pub(crate) fn dependency_inventory_to_dto(
     workspace_path: &Path,
     reports: Vec<DependencyReport>,
     diff: Option<DependencyDiff>,
+    inventory_fingerprint: String,
 ) -> DependencyInventoryResponse {
     DependencyInventoryResponse {
+        inventory_fingerprint,
         workspace_path: workspace_path.display().to_string(),
         reports: reports.into_iter().map(Into::into).collect(),
         diff: diff.map(Into::into),
@@ -1019,9 +1030,11 @@ mod tests {
                 "v1:/workspace",
                 DependencyBaselineStatus::Unavailable,
             )),
+            "fingerprint-1".to_owned(),
         );
 
         let value = serde_json::to_value(response).unwrap();
+        assert_eq!(value["inventoryFingerprint"], "fingerprint-1");
         assert_eq!(value["workspacePath"], "/workspace");
         assert_eq!(value["reports"][0]["ecosystem"], "Node");
         assert_eq!(value["reports"][0]["status"], "unsupported");
@@ -1032,6 +1045,19 @@ mod tests {
         assert_eq!(value["diff"]["workspaceId"], "v1:/workspace");
         assert_eq!(value["diff"]["baselineStatus"], "unavailable");
         assert!(value["diff"]["added"].as_array().unwrap().is_empty());
+
+        let accept_options: DependencyBaselineAcceptOptions = serde_json::from_value(json!({
+            "root": "/workspace",
+            "ecosystems": ["Node"],
+            "expectedInventoryFingerprint": "fingerprint-1"
+        }))
+        .unwrap();
+        assert_eq!(accept_options.root.as_deref(), Some("/workspace"));
+        assert_eq!(accept_options.ecosystems, vec![EcosystemDto::Node]);
+        assert_eq!(
+            accept_options.expected_inventory_fingerprint,
+            "fingerprint-1"
+        );
     }
 
     #[test]

@@ -23,7 +23,8 @@ type DependenciesViewProps = {
 
 export function DependenciesView(props: DependenciesViewProps) {
   const completeReportAvailable = Boolean(
-    props.result?.reports.some((report) => report.status === 'complete'),
+    props.result?.inventoryFingerprint &&
+      props.result.reports.some((report) => report.status === 'complete'),
   );
 
   return (

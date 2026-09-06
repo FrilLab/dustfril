@@ -340,8 +340,16 @@ export function useAppState() {
   }
 
   async function handleAcceptDependencyBaseline() {
+    if (!dependencyResult) {
+      return;
+    }
+
     await runDependencyAction('dependency-accept', () =>
-      acceptDependencyBaseline({ root, ecosystems: ['Node', 'Rust'] }),
+      acceptDependencyBaseline({
+        root,
+        ecosystems: ['Node', 'Rust'],
+        expectedInventoryFingerprint: dependencyResult.inventoryFingerprint,
+      }),
     );
   }
 
