@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { formatBytes } from '../../../lib/format';
 import {
   analyzeWorkspace,
@@ -10,6 +10,10 @@ import {
   refreshStorageVolume,
 } from '../../../lib/tauri';
 import { categoryConfigs, type SidebarCategory } from '../../../model/categories';
+import {
+  idleAsyncOperation,
+  reduceAsyncOperation,
+} from '../../../model/async';
 import type { SidebarEntry } from '../../../components/Sidebar/Sidebar';
 import type {
   ActivityRecord,
@@ -27,10 +31,12 @@ import {
   selectedCandidateBytes,
 } from '../../../model/presentation';
 
+type WorkspaceAnalysisResponse = Awaited<ReturnType<typeof analyzeWorkspace>>;
+
 export function useAppState() {
   const [root, setRoot] = useState('');
   const [search, setSearch] = useState('');
-  const [activeCategory, setActiveCategory] = useState<SidebarCategory>('workspace');
+  const [activeCategory, setActiveCategory] = useState<SidebarCategory>('cleanup-rust');
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [deleteMode, setDeleteMode] = useState<DeleteMode>('Trash');
   const [busyAction, setBusyAction] = useState<string | null>(null);
@@ -42,6 +48,10 @@ export function useAppState() {
   const [selectedCleanupPaths, setSelectedCleanupPaths] = useState<string[]>([]);
   const [cleanupAgeDays, setCleanupAgeDays] = useState<number>(defaultCleanupAgeDays);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [workspaceOperation, dispatchWorkspaceOperation] = useReducer(
+    reduceAsyncOperation<WorkspaceAnalysisResponse>,
+    idleAsyncOperation<WorkspaceAnalysisResponse>(),
+  );
   const workspaceRequestRef = useRef(0);
   const actionRequestRef = useRef(0);
 
@@ -87,13 +97,13 @@ export function useAppState() {
       categoryConfigs.map((config) => ({
         ...config,
         count:
-          config.key === 'workspace'
-            ? workspaceArtifacts.length
-            : config.key === 'history'
+          config.ecosystem
+            ? workspaceArtifacts.filter((artifact) => artifact.ecosystem === config.ecosystem).length
+            : config.key === 'workspace-activity' || config.key === 'history'
               ? historyEntries.length
               : null,
       })),
-    [historyEntries.length, workspaceArtifacts.length],
+    [historyEntries.length, workspaceArtifacts],
   );
 
   const canAnalyze = busyAction === null && root.length > 0;
@@ -130,6 +140,10 @@ export function useAppState() {
     }
 
     workspaceRequestRef.current += 1;
+    dispatchWorkspaceOperation({
+      type: 'invalidate',
+      requestId: workspaceRequestRef.current,
+    });
     actionRequestRef.current += 1;
     setRoot(nextRoot);
     setError(null);
@@ -173,42 +187,66 @@ export function useAppState() {
   ) {
     await runAction('analyze-workspace', async () => {
       const requestId = ++workspaceRequestRef.current;
-      const response = await analyzeWorkspace({
-        root,
-        ecosystems: [...ecosystems],
-        cleanupAgeDays: policyAgeDays,
-        recordHistory,
-        recordArtifactSnapshot,
-      });
+      dispatchWorkspaceOperation({ type: 'start', requestId });
 
-      if (requestId !== workspaceRequestRef.current) {
-        return;
+      try {
+        const response = await analyzeWorkspace({
+          root,
+          ecosystems: [...ecosystems],
+          cleanupAgeDays: policyAgeDays,
+          recordHistory,
+          recordArtifactSnapshot,
+        });
+
+        dispatchWorkspaceOperation({
+          type: 'success',
+          requestId,
+          data: response,
+          warnings: [response.analysis.historyWarning, response.artifactSnapshotWarning].filter(
+            (warning): warning is string => Boolean(warning),
+          ),
+        });
+
+        if (requestId !== workspaceRequestRef.current) {
+          return;
+        }
+
+        setAnalysisResult(response.analysis);
+        setCleanupPlan(response.cleanupPlan);
+        setStorageSummary(response.storageSummary);
+        // Rebuild the default cleanup selection from the new policy. This
+        // conservatively drops items that are no longer recommended and never
+        // broadens the selection without a new recommendation.
+        setSelectedCleanupPaths(
+          response.cleanupPlan.candidates
+            .filter((candidate) => candidate.selectedByDefault)
+            .map((candidate) => candidate.path),
+        );
+        setSelectedItemId((current) =>
+          current && response.analysis.artifacts.some((artifact) => artifact.path === current)
+            ? current
+            : null,
+        );
+        setCleanupAgeDays(policyAgeDays);
+        setError(
+          [response.analysis.historyWarning, response.artifactSnapshotWarning]
+            .filter((warning): warning is string => Boolean(warning))
+            .join(' ') || null,
+        );
+        const refreshedHistory = await loadActivityHistory();
+        if (requestId !== workspaceRequestRef.current) {
+          return;
+        }
+        setHistoryEntries(refreshedHistory);
+        setActiveCategory((current) => (current === 'overview' ? 'cleanup-rust' : current));
+      } catch (invokeError) {
+        dispatchWorkspaceOperation({
+          type: 'error',
+          requestId,
+          error: String(invokeError),
+        });
+        throw invokeError;
       }
-
-      setAnalysisResult(response.analysis);
-      setCleanupPlan(response.cleanupPlan);
-      setStorageSummary(response.storageSummary);
-      // Rebuild the default cleanup selection from the new policy. This
-      // conservatively drops items that are no longer recommended and never
-      // broadens the selection without a new recommendation.
-      setSelectedCleanupPaths(
-        response.cleanupPlan.candidates
-          .filter((candidate) => candidate.selectedByDefault)
-          .map((candidate) => candidate.path),
-      );
-      setSelectedItemId((current) =>
-        current && response.analysis.artifacts.some((artifact) => artifact.path === current)
-          ? current
-          : null,
-      );
-      setCleanupAgeDays(policyAgeDays);
-      setError(
-        [response.analysis.historyWarning, response.artifactSnapshotWarning]
-          .filter((warning): warning is string => Boolean(warning))
-          .join(' ') || null,
-      );
-      setHistoryEntries(await loadActivityHistory());
-      setActiveCategory('workspace');
     });
   }
 
@@ -264,7 +302,8 @@ export function useAppState() {
   function openWorkspaceArtifact(path: string) {
     setSearch('');
     setSelectedItemId(path);
-    setActiveCategory('workspace');
+    const artifact = analysisResult?.artifacts.find((candidate) => candidate.path === path);
+    setActiveCategory(categoryForEcosystem(artifact?.ecosystem));
   }
 
   function handleRequestCleanup() {
@@ -407,6 +446,7 @@ export function useAppState() {
     historyEntries,
     confirmDialogOpen,
     confirmSamplePaths,
+    workspaceOperation,
     canAnalyze,
     canReviewCleanup,
     summary,
@@ -426,6 +466,20 @@ export function useAppState() {
     handleRequestCleanup,
     handleConfirmCleanup,
   };
+}
+
+function categoryForEcosystem(
+  ecosystem: WorkspaceAnalysisResponse['analysis']['artifacts'][number]['ecosystem'] | undefined,
+): SidebarCategory {
+  switch (ecosystem) {
+    case 'Node':
+      return 'cleanup-node';
+    case 'Java':
+      return 'cleanup-java';
+    case 'Rust':
+    default:
+      return 'cleanup-rust';
+  }
 }
 
 function formatCleanupFailure(result: CleanupResultResponse, historyWarning?: string): string {

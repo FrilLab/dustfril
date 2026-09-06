@@ -46,6 +46,30 @@ const historyEntry = {
 describe('AppShell Overview navigation', () => {
   afterEach(() => vi.clearAllMocks());
 
+  it.each([
+    ['Rust', false],
+    ['Node.js', false],
+    ['Java', false],
+    ['Cache', true],
+    ['Dependencies', true],
+    ['Artifact History', true],
+    ['Activity', false],
+    ['Supply Chain', true],
+    ['GitHub Actions', true],
+    ['Executable Integrity', true],
+  ])('navigates to the %s module without starting another operation', async (title, planned) => {
+    render(<AppShell />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Analyze Workspace' })).toBeEnabled());
+
+    fireEvent.click(screen.getByRole('button', { name: title }));
+
+    expect(screen.getByRole('button', { name: title })).toHaveAttribute('aria-current', 'page');
+    if (planned) {
+      expect(screen.getByRole('heading', { name: `${title} is planned` })).toBeInTheDocument();
+    }
+    expect(analyzeWorkspace).not.toHaveBeenCalled();
+  });
+
   it('opens the exact Overview artifact in Workspace without selecting it', async () => {
     vi.mocked(analyzeWorkspace).mockResolvedValue({
       analysis: {

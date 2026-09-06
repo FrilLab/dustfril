@@ -245,6 +245,11 @@ button:disabled {
 
 .sidebar-nav {
   display: grid;
+  gap: 14px;
+}
+
+.sidebar-section {
+  display: grid;
   gap: 2px;
 }
 
@@ -305,11 +310,129 @@ button:disabled {
   color: #d9e7ee;
 }
 
+.sidebar-item-planned {
+  color: #8f98a4;
+}
+
+.sidebar-item-planned .sidebar-item-icon {
+  color: #737d89;
+}
+
+.sidebar-item-planned:hover {
+  color: #d2d8df;
+}
+
+.sidebar-planned-label {
+  color: #737d89;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
 .main-pane {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
   background: #1d1e21;
+}
+
+.module-placeholder-view {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 22px;
+  overflow: auto;
+  padding: 28px 30px;
+}
+
+.module-placeholder-heading {
+  display: flex;
+  max-width: 680px;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.module-placeholder-heading h1 {
+  margin: 0;
+  color: #f5f7fb;
+  font-size: 24px;
+  letter-spacing: -0.025em;
+}
+
+.module-placeholder-heading p:last-child {
+  margin: 0;
+  color: #a3adb9;
+  font-size: 13px;
+}
+
+.async-state-panel {
+  display: flex;
+  max-width: 680px;
+  flex-direction: column;
+  gap: 11px;
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  background: #222427;
+}
+
+.async-state-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.async-state-header h2 {
+  margin: 0;
+  color: #f0f4f7;
+  font-size: 16px;
+}
+
+.async-state-panel p {
+  margin: 0;
+  color: #aeb8c3;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.status-badge {
+  display: inline-flex;
+  min-height: 20px;
+  align-items: center;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+  color: #c8d0d9;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.async-state-unsupported .status-badge {
+  background: rgba(198, 182, 252, 0.13);
+  color: #d4c7ff;
+}
+
+.async-state-partial .status-badge {
+  background: rgba(247, 190, 91, 0.13);
+  color: #f7d797;
+}
+
+.async-state-error .status-badge {
+  background: rgba(242, 112, 112, 0.13);
+  color: #f6aaaa;
+}
+
+.async-state-warnings {
+  margin: 0;
+  padding-left: 18px;
+  color: #f7d797;
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .workspace-view,

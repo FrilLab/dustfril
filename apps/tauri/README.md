@@ -76,6 +76,43 @@ additive `historyWarning` for the desktop status surface.
 - `WorkspaceView`
 - `CleanupDialog`
 - `HistoryList`
+- `AsyncStatePanel`
+- `ModulePlaceholderView`
+
+## Desktop module navigation
+
+The sidebar keeps the planned Desktop information architecture in
+`src/model/categories.ts`:
+
+```text
+Overview
+
+Cleanup
+  Rust
+  Node.js
+  Java
+  Cache (planned)
+
+Workspace
+  Dependencies (planned)
+  Artifact History (planned)
+  Activity
+
+Security
+  Supply Chain (planned)
+  GitHub Actions (planned)
+  Executable Integrity (planned)
+```
+
+Rust, Node.js, and Java destinations filter the existing unified analysis
+result; they do not start a new scan when selected. Planned destinations render
+an explicit unsupported state and do not invoke speculative Tauri commands.
+
+Advanced operations use the small state model in `src/model/async.ts`. It
+keeps loading, success, partial success, unsupported, empty, and error states
+distinct, preserves a previous result on refresh errors, and ignores responses
+from older request IDs. Workspace changes invalidate the current operation
+before clearing workspace-bound results.
 
 ## Commands
 
