@@ -3,19 +3,23 @@ import { Sidebar } from '../../components/Sidebar/Sidebar';
 import { categoryConfig } from '../../model/categories';
 import { pathBreadcrumb } from '../../model/presentation';
 import { AppHeader } from './components/AppHeader';
+import { useExecutableIntegrity } from './hooks/useExecutableIntegrity';
 import { useAppState } from './hooks/useAppState';
 import { HistoryView } from './views/HistoryView';
 import { ModulePlaceholderView } from './views/ModulePlaceholderView';
 import { OverviewView } from './views/OverviewView';
+import { ExecutableIntegrityView } from './views/ExecutableIntegrityView';
 import { WorkspaceView } from './views/WorkspaceView';
 
 export function AppShell() {
   const app = useAppState();
+  const executableIntegrity = useExecutableIntegrity();
   const activeConfig = categoryConfig(app.activeCategory);
   const showingCleanup = activeConfig?.ecosystem !== undefined;
   const showingWorkspace = app.activeCategory === 'workspace' || showingCleanup;
   const showingActivity =
     app.activeCategory === 'history' || app.activeCategory === 'workspace-activity';
+  const showingExecutableIntegrity = app.activeCategory === 'security-executable-integrity';
 
   return (
     <main className="app-shell">
@@ -85,7 +89,15 @@ export function AppShell() {
             />
           ) : null}
 
-          {app.activeCategory !== 'overview' && !showingWorkspace && !showingActivity && activeConfig ? (
+          {showingExecutableIntegrity ? (
+            <ExecutableIntegrityView integrity={executableIntegrity} />
+          ) : null}
+
+          {app.activeCategory !== 'overview' &&
+          !showingWorkspace &&
+          !showingActivity &&
+          !showingExecutableIntegrity &&
+          activeConfig ? (
             <ModulePlaceholderView
               config={activeConfig}
               onReturnToOverview={() => app.setActiveCategory('overview')}

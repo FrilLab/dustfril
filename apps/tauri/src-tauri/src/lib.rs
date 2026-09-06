@@ -19,9 +19,9 @@ use contract::{
     artifact_path, artifact_snapshot_to_dto, cleanup_failure_reason, project_identity_to_dto,
     storage_summary_to_dto, volume_storage_to_dto, AnalysisResponse, ArtifactAnalysisDto,
     ArtifactDto, CleanupCandidateDto, CleanupFailureDto, CleanupHistoryEntryDto,
-    CleanupPlanResponse, CleanupResultResponse, ExecuteCleanupRequest, LifecycleScriptDto,
-    RunOptions, ScanResponse, SecurityScanResponse, StorageSummaryDto, VolumeStorageDto,
-    WorkspaceAnalysisResponse,
+    CleanupPlanResponse, CleanupResultResponse, ExecuteCleanupRequest, IntegrityScanOptions,
+    IntegrityScanResponse, LifecycleScriptDto, RunOptions, ScanResponse, SecurityScanResponse,
+    StorageSummaryDto, VolumeStorageDto, WorkspaceAnalysisResponse,
 };
 use dustfril_core::{
     api,
@@ -600,6 +600,21 @@ async fn security_scan(options: RunOptions) -> Result<SecurityScanResponse, Stri
     .map_err(|error| error.to_string())?
 }
 
+#[tauri::command]
+async fn integrity_scan(options: IntegrityScanOptions) -> Result<IntegrityScanResponse, String> {
+    let baseline_path = api::integrity::state_path()
+        .map_err(|error| format!("Failed to determine executable-integrity state path: {error}"))?;
+    let tools = options.tools();
+
+    tokio::task::spawn_blocking(move || {
+        api::integrity::scan(&tools, &baseline_path)
+            .map(Into::into)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -617,7 +632,8 @@ pub fn run() {
             clear_activity_history,
             load_cleanup_history,
             audit,
-            security_scan
+            security_scan,
+            integrity_scan
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -119,9 +119,9 @@ export const categoryConfigs: CategoryConfig[] = [
   {
     key: 'security-executable-integrity',
     title: 'Executable Integrity',
-    description: 'Future executable integrity evidence',
+    description: 'Inspect developer-tool paths, hashes, and supported signatures',
     section: 'security',
-    availability: 'planned',
+    availability: 'available',
   },
 ];
 
