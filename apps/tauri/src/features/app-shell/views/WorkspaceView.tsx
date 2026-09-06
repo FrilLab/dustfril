@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { AsyncStatePanel } from '../../../components/AsyncStatePanel/AsyncStatePanel';
 import { EmptyState } from '../../../components/EmptyState/EmptyState';
 import { FolderIcon, ItemIcon } from '../../../components/icons';
 import { SortableHeader } from '../../../components/SortableHeader/SortableHeader';
@@ -9,12 +10,15 @@ import {
   leafName,
   recommendationClass,
   recommendationLabel,
+  selectedCandidateBytes,
 } from '../../../model/presentation';
 import type {
   ArtifactAnalysis,
   CleanupCandidate,
   DeleteMode,
+  Ecosystem,
 } from '../../../types/workflow';
+import type { AsyncOperationStatus } from '../../../model/async';
 import { cleanupAgeOptions } from '../../../types/workflow';
 import {
   sortArtifacts,
@@ -23,13 +27,12 @@ import {
 } from '../../../model/sorting';
 
 type WorkspaceViewProps = {
+  ecosystem?: Ecosystem;
   artifacts: ArtifactAnalysis[];
-  artifactCount: number;
-  totalSizeBytes: number;
   candidates: CleanupCandidate[];
+  operationStatus?: AsyncOperationStatus;
   selectedItemId: string | null;
   selectedPaths: string[];
-  selectedCandidateBytes: number;
   canReviewCleanup: boolean;
   deleteMode: DeleteMode;
   deleteModes: DeleteMode[];
@@ -42,17 +45,37 @@ type WorkspaceViewProps = {
   onTogglePath: (path: string) => void;
   onDeleteModeChange: (mode: DeleteMode) => void;
   onCleanupAgeChange: (days: number) => void | Promise<void>;
-  onRequestCleanup: () => void;
+  onRequestCleanup: (paths: string[]) => void;
 };
 
 export function WorkspaceView(props: WorkspaceViewProps) {
   const [sort, setSort] = useState<WorkspaceSortState>({ column: 'size', direction: 'desc' });
-  const candidatesByPath = new Map(props.candidates.map((candidate) => [candidate.path, candidate]));
+  const visibleArtifacts = useMemo(
+    () => props.ecosystem ? props.artifacts.filter((artifact) => artifact.ecosystem === props.ecosystem) : props.artifacts,
+    [props.artifacts, props.ecosystem],
+  );
+  const visibleCandidates = useMemo(
+    () => props.ecosystem ? props.candidates.filter((candidate) => candidate.ecosystem === props.ecosystem) : props.candidates,
+    [props.candidates, props.ecosystem],
+  );
+  const visibleSelectedPaths = useMemo(
+    () => props.selectedPaths.filter((path) => visibleCandidates.some((candidate) => candidate.path === path)),
+    [props.selectedPaths, visibleCandidates],
+  );
+  const visibleSelectedBytes = useMemo(
+    () => selectedCandidateBytes(visibleCandidates, visibleSelectedPaths),
+    [visibleCandidates, visibleSelectedPaths],
+  );
+  const candidatesByPath = new Map(visibleCandidates.map((candidate) => [candidate.path, candidate]));
   const selectedArtifact =
-    props.artifacts.find((artifact) => artifact.path === props.selectedItemId) ?? null;
+    visibleArtifacts.find((artifact) => artifact.path === props.selectedItemId) ?? null;
   const sortedArtifacts = useMemo(
-    () => sortArtifacts(props.artifacts, sort),
-    [props.artifacts, sort],
+    () => sortArtifacts(visibleArtifacts, sort),
+    [visibleArtifacts, sort],
+  );
+  const visibleTotalSizeBytes = visibleArtifacts.reduce(
+    (total, artifact) => total + artifact.sizeBytes,
+    0,
   );
 
   function handleSort(column: WorkspaceSortColumn) {
@@ -82,10 +105,10 @@ export function WorkspaceView(props: WorkspaceViewProps) {
       <div className="workspace-summary-strip" aria-live="polite">
         <span>
           <strong>
-            {formatCount(props.artifactCount)} artifact{props.artifactCount === 1 ? '' : 's'}
+            {formatCount(visibleArtifacts.length)} artifact{visibleArtifacts.length === 1 ? '' : 's'}
           </strong>{' '}
           ·{' '}
-          <strong>{formatBytes(props.totalSizeBytes)}</strong> total
+          <strong>{formatBytes(visibleTotalSizeBytes)}</strong> total
         </span>
         <label className="cleanup-age-control">
           <span>AGE</span>
@@ -116,8 +139,9 @@ export function WorkspaceView(props: WorkspaceViewProps) {
             artifacts={sortedArtifacts}
             candidatesByPath={candidatesByPath}
             selectedItemId={props.selectedItemId}
-            selectedPaths={props.selectedPaths}
+            selectedPaths={visibleSelectedPaths}
             analysisReady={props.analysisReady}
+            operationStatus={props.operationStatus ?? 'idle'}
             sort={sort}
             onSort={handleSort}
             onSelectItem={props.onSelectItem}
@@ -143,13 +167,13 @@ export function WorkspaceView(props: WorkspaceViewProps) {
             </div>
             <div className="cleanup-selection-summary">
               <span>
-                {formatCount(props.selectedPaths.length)} selected · {formatBytes(props.selectedCandidateBytes)}
+                {formatCount(visibleSelectedPaths.length)} selected · {formatBytes(visibleSelectedBytes)}
               </span>
               <button
                 type="button"
                 className="review-button"
-                onClick={props.onRequestCleanup}
-                disabled={!props.canReviewCleanup}
+                onClick={() => props.onRequestCleanup(visibleSelectedPaths)}
+                disabled={!props.canReviewCleanup || visibleSelectedPaths.length === 0}
               >
                 Cleanup
               </button>
@@ -161,7 +185,7 @@ export function WorkspaceView(props: WorkspaceViewProps) {
           <Inspector
             artifact={selectedArtifact}
             candidate={candidatesByPath.get(selectedArtifact.path)}
-            selectedPaths={props.selectedPaths}
+            selectedPaths={visibleSelectedPaths}
             onClose={props.onCloseInspector}
           />
         ) : null}
@@ -177,6 +201,7 @@ type WorkspaceResultsProps = {
   selectedItemId: string | null;
   selectedPaths: string[];
   analysisReady: boolean;
+  operationStatus: AsyncOperationStatus;
   sort: WorkspaceSortState;
   onSort: (column: WorkspaceSortColumn) => void;
   onSelectItem: (path: string) => void;
@@ -184,6 +209,26 @@ type WorkspaceResultsProps = {
 };
 
 function WorkspaceResults(props: WorkspaceResultsProps) {
+  if (props.operationStatus === 'loading' && !props.analysisReady) {
+    return (
+      <AsyncStatePanel
+        status="loading"
+        title="Analyzing workspace"
+        description="DustFril is scanning the selected workspace for supported development artifacts."
+      />
+    );
+  }
+
+  if (props.operationStatus === 'error' && !props.analysisReady) {
+    return (
+      <AsyncStatePanel
+        status="error"
+        title="Workspace analysis failed"
+        description="The workspace could not be analyzed. Choose another workspace or try again."
+      />
+    );
+  }
+
   if (!props.analysisReady) {
     return (
       <EmptyState

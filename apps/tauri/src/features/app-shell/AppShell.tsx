@@ -1,14 +1,21 @@
 import { CleanupDialog } from '../../components/CleanupDialog/CleanupDialog';
 import { Sidebar } from '../../components/Sidebar/Sidebar';
+import { categoryConfig } from '../../model/categories';
 import { pathBreadcrumb } from '../../model/presentation';
 import { AppHeader } from './components/AppHeader';
 import { useAppState } from './hooks/useAppState';
 import { HistoryView } from './views/HistoryView';
+import { ModulePlaceholderView } from './views/ModulePlaceholderView';
 import { OverviewView } from './views/OverviewView';
 import { WorkspaceView } from './views/WorkspaceView';
 
 export function AppShell() {
   const app = useAppState();
+  const activeConfig = categoryConfig(app.activeCategory);
+  const showingCleanup = activeConfig?.ecosystem !== undefined;
+  const showingWorkspace = app.activeCategory === 'workspace' || showingCleanup;
+  const showingActivity =
+    app.activeCategory === 'history' || app.activeCategory === 'workspace-activity';
 
   return (
     <main className="app-shell">
@@ -45,15 +52,14 @@ export function AppShell() {
             />
           ) : null}
 
-          {app.activeCategory === 'workspace' ? (
+          {showingWorkspace ? (
             <WorkspaceView
+              ecosystem={activeConfig?.ecosystem}
               artifacts={app.filteredArtifacts}
-              artifactCount={app.summary.artifactCount}
-              totalSizeBytes={app.analysisResult?.totalSizeBytes ?? 0}
               candidates={app.cleanupPlan?.candidates ?? []}
+              operationStatus={app.workspaceOperation.status}
               selectedItemId={app.selectedItemId}
               selectedPaths={app.selectedCleanupPaths}
-              selectedCandidateBytes={app.selectedCandidateBytes}
               canReviewCleanup={app.canReviewCleanup}
               deleteMode={app.deleteMode}
               deleteModes={app.deleteModes}
@@ -70,12 +76,19 @@ export function AppShell() {
             />
           ) : null}
 
-          {app.activeCategory === 'history' ? (
+          {showingActivity ? (
             <HistoryView
               entries={app.historyEntries}
               busy={app.busyAction !== null}
               error={app.error}
               onClearHistory={app.handleClearHistory}
+            />
+          ) : null}
+
+          {app.activeCategory !== 'overview' && !showingWorkspace && !showingActivity && activeConfig ? (
+            <ModulePlaceholderView
+              config={activeConfig}
+              onReturnToOverview={() => app.setActiveCategory('overview')}
             />
           ) : null}
         </section>
@@ -98,7 +111,7 @@ export function AppShell() {
 
       <CleanupDialog
         open={app.confirmDialogOpen}
-        itemCount={app.selectedCleanupPaths.length}
+        itemCount={app.selectedCleanupItems.length}
         totalBytes={app.selectedCandidateBytes}
         deleteMode={app.deleteMode}
         selectedItems={app.selectedCleanupItems}

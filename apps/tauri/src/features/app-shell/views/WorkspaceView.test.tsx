@@ -21,8 +21,6 @@ function renderWorkspace(deleteMode: 'Trash' | 'Permanent' = 'Trash') {
   return render(
     <WorkspaceView
       artifacts={[artifact]}
-      artifactCount={1}
-      totalSizeBytes={artifact.sizeBytes}
       candidates={[{
         path: artifact.path,
         ecosystem: artifact.ecosystem,
@@ -34,7 +32,6 @@ function renderWorkspace(deleteMode: 'Trash' | 'Permanent' = 'Trash') {
       }]}
       selectedItemId={artifact.path}
       selectedPaths={[]}
-      selectedCandidateBytes={0}
       canReviewCleanup={false}
       deleteMode={deleteMode}
       deleteModes={['Trash', 'Permanent']}
