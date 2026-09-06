@@ -21,7 +21,7 @@ use contract::{
     ArtifactDto, CleanupCandidateDto, CleanupFailureDto, CleanupHistoryEntryDto,
     CleanupPlanResponse, CleanupResultResponse, ExecuteCleanupRequest, LifecycleScriptDto,
     RunOptions, ScanResponse, SecurityScanResponse, StorageSummaryDto, VolumeStorageDto,
-    WorkspaceAnalysisResponse,
+    WorkflowScanResponse, WorkspaceAnalysisResponse,
 };
 use dustfril_core::{
     api,
@@ -600,6 +600,24 @@ async fn security_scan(options: RunOptions) -> Result<SecurityScanResponse, Stri
     .map_err(|error| error.to_string())?
 }
 
+/// Runs the local, read-only GitHub Actions workflow security scan.
+///
+/// The command deliberately does not record activity history: workflow
+/// security results are transient evidence for this screen, and the Core
+/// report contains no operation that should be persisted by the desktop.
+#[tauri::command]
+async fn workflow_scan(options: RunOptions) -> Result<WorkflowScanResponse, String> {
+    let root = resolve_root(options.root)?;
+
+    tokio::task::spawn_blocking(move || {
+        api::workflow_scan(&root)
+            .map(Into::into)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -617,7 +635,8 @@ pub fn run() {
             clear_activity_history,
             load_cleanup_history,
             audit,
-            security_scan
+            security_scan,
+            workflow_scan
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

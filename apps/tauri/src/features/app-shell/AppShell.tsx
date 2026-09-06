@@ -5,6 +5,7 @@ import { pathBreadcrumb } from '../../model/presentation';
 import { AppHeader } from './components/AppHeader';
 import { useAppState } from './hooks/useAppState';
 import { HistoryView } from './views/HistoryView';
+import { GithubActionsView } from './views/GithubActionsView';
 import { ModulePlaceholderView } from './views/ModulePlaceholderView';
 import { OverviewView } from './views/OverviewView';
 import { WorkspaceView } from './views/WorkspaceView';
@@ -85,7 +86,20 @@ export function AppShell() {
             />
           ) : null}
 
-          {app.activeCategory !== 'overview' && !showingWorkspace && !showingActivity && activeConfig ? (
+          {app.activeCategory === 'security-github-actions' ? (
+            <GithubActionsView
+              root={app.root}
+              operation={app.workflowOperation}
+              canScan={app.canScanWorkflows}
+              onScan={app.handleWorkflowSecurityScan}
+            />
+          ) : null}
+
+          {app.activeCategory !== 'overview' &&
+          !showingWorkspace &&
+          !showingActivity &&
+          app.activeCategory !== 'security-github-actions' &&
+          activeConfig ? (
             <ModulePlaceholderView
               config={activeConfig}
               onReturnToOverview={() => app.setActiveCategory('overview')}

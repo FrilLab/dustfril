@@ -8,8 +8,9 @@ use dustfril_core::models::{
     ArtifactSnapshotResult, ArtifactSnapshotStatus, CleanupFailureReason, CleanupRecommendation,
     DeleteMode, DeveloperStorageSummary, Ecosystem, LifecycleScript, LockfileCheck, LockfileKind,
     LockfileStatus, PackageManager, ProjectIdentity, RecommendationPolicy, RiskLevel, ScriptType,
-    SecurityFinding, SecurityReport, SecurityWarning, StorageSummary, VolumeStorage,
-    DEFAULT_CLEANUP_AGE_DAYS,
+    SecurityFinding, SecurityReport, SecurityWarning, StorageSummary, VolumeStorage, Workflow,
+    WorkflowExposureSink, WorkflowFinding, WorkflowFindingCategory, WorkflowScanNotice,
+    WorkflowScanReport, DEFAULT_CLEANUP_AGE_DAYS,
 };
 use serde::{Deserialize, Serialize};
 
@@ -364,6 +365,90 @@ pub(crate) struct SecurityScanResponse {
     pub(crate) history_warning: Option<String>,
 }
 
+/// Structured, presentation-safe result for the local GitHub Actions scan.
+///
+/// Workflow YAML is intentionally reduced to file/job metadata here. The
+/// desktop receives findings and partial-analysis notices, but never the
+/// parsed environment or action input values that Core uses internally.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkflowScanResponse {
+    pub(crate) workflows: Vec<WorkflowSummaryDto>,
+    pub(crate) findings: Vec<WorkflowFindingDto>,
+    pub(crate) notices: Vec<WorkflowScanNoticeDto>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkflowSummaryDto {
+    pub(crate) path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) name: Option<String>,
+    pub(crate) analysis_status: WorkflowAnalysisStatusDto,
+    pub(crate) jobs: Vec<WorkflowJobSummaryDto>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkflowJobSummaryDto {
+    pub(crate) id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) name: Option<String>,
+    pub(crate) step_count: usize,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum WorkflowAnalysisStatusDto {
+    Analyzed,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkflowFindingDto {
+    pub(crate) workflow_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) job_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) step_index: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) step_name: Option<String>,
+    pub(crate) rule_id: String,
+    pub(crate) category: WorkflowFindingCategoryDto,
+    pub(crate) risk_level: RiskLevelDto,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) evidence: Option<String>,
+    pub(crate) reason: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) secret_reference: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) exposure_sink: Option<WorkflowExposureSinkDto>,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum WorkflowFindingCategoryDto {
+    SuspiciousCommand,
+    TokenPermissions,
+    SecretExposure,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum WorkflowExposureSinkDto {
+    Stdout,
+    NetworkRequest,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkflowScanNoticeDto {
+    pub(crate) workflow_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) job_id: Option<String>,
+    pub(crate) reason: String,
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SecurityFindingDto {
@@ -589,6 +674,105 @@ impl From<SecurityReport> for SecurityScanResponse {
     }
 }
 
+impl From<WorkflowScanReport> for WorkflowScanResponse {
+    fn from(report: WorkflowScanReport) -> Self {
+        Self {
+            workflows: report
+                .workflows
+                .into_iter()
+                .map(WorkflowSummaryDto::from)
+                .collect(),
+            findings: report
+                .findings
+                .into_iter()
+                .map(WorkflowFindingDto::from)
+                .collect(),
+            notices: report
+                .notices
+                .into_iter()
+                .map(WorkflowScanNoticeDto::from)
+                .collect(),
+        }
+    }
+}
+
+impl From<Workflow> for WorkflowSummaryDto {
+    fn from(workflow: Workflow) -> Self {
+        Self {
+            path: workflow.path.display().to_string(),
+            name: workflow.name,
+            analysis_status: WorkflowAnalysisStatusDto::Analyzed,
+            jobs: workflow
+                .jobs
+                .into_iter()
+                .map(|(id, job)| WorkflowJobSummaryDto {
+                    id,
+                    name: job.name,
+                    step_count: job.steps.len(),
+                })
+                .collect(),
+        }
+    }
+}
+
+impl From<WorkflowFinding> for WorkflowFindingDto {
+    fn from(finding: WorkflowFinding) -> Self {
+        // Core already strips secret values from secret findings. Keep the
+        // boundary defensive as well: only expose the supported sink label
+        // and reference name, never a raw expression or command context.
+        let evidence = match finding.category {
+            WorkflowFindingCategory::SecretExposure => finding
+                .exposure_sink
+                .map(|sink| format!("supported {sink} sink")),
+            WorkflowFindingCategory::SuspiciousCommand
+            | WorkflowFindingCategory::TokenPermissions => finding.evidence,
+        };
+
+        Self {
+            workflow_path: finding.workflow_path.display().to_string(),
+            job_id: finding.job_id,
+            step_index: finding.step_index,
+            step_name: finding.step_name,
+            rule_id: finding.rule_id,
+            category: finding.category.into(),
+            risk_level: finding.risk_level.into(),
+            evidence,
+            reason: finding.reason,
+            secret_reference: finding.secret_reference,
+            exposure_sink: finding.exposure_sink.map(Into::into),
+        }
+    }
+}
+
+impl From<WorkflowFindingCategory> for WorkflowFindingCategoryDto {
+    fn from(category: WorkflowFindingCategory) -> Self {
+        match category {
+            WorkflowFindingCategory::SuspiciousCommand => Self::SuspiciousCommand,
+            WorkflowFindingCategory::TokenPermissions => Self::TokenPermissions,
+            WorkflowFindingCategory::SecretExposure => Self::SecretExposure,
+        }
+    }
+}
+
+impl From<WorkflowExposureSink> for WorkflowExposureSinkDto {
+    fn from(sink: WorkflowExposureSink) -> Self {
+        match sink {
+            WorkflowExposureSink::Stdout => Self::Stdout,
+            WorkflowExposureSink::NetworkRequest => Self::NetworkRequest,
+        }
+    }
+}
+
+impl From<WorkflowScanNotice> for WorkflowScanNoticeDto {
+    fn from(notice: WorkflowScanNotice) -> Self {
+        Self {
+            workflow_path: notice.workflow_path.display().to_string(),
+            job_id: notice.job_id,
+            reason: notice.reason,
+        }
+    }
+}
+
 impl From<SecurityFinding> for SecurityFindingDto {
     fn from(finding: SecurityFinding) -> Self {
         Self {
@@ -649,6 +833,7 @@ impl From<LockfileStatus> for LockfileStatusDto {
 mod tests {
     use dustfril_core::models::AnalysisResult;
     use serde_json::json;
+    use tempfile::TempDir;
 
     use super::*;
 
@@ -1091,6 +1276,46 @@ mod tests {
                 "reason": "Remote script is piped to a shell."
             })
         );
+    }
+
+    #[test]
+    fn workflow_scan_wire_format_is_structured_and_secret_safe() {
+        let temp_dir = TempDir::new().unwrap();
+        let workflow_dir = temp_dir.path().join(".github/workflows");
+        std::fs::create_dir_all(&workflow_dir).unwrap();
+        std::fs::write(
+            workflow_dir.join("security.yml"),
+            r#"name: Security
+permissions: write-all
+jobs:
+  build:
+    name: Build
+    steps:
+      - name: Upload token
+        run: echo "${{ secrets.DEPLOY_TOKEN }}"
+"#,
+        )
+        .unwrap();
+
+        let report = dustfril_core::api::workflow_scan(temp_dir.path()).unwrap();
+        let response: WorkflowScanResponse = report.into();
+        let value = serde_json::to_value(response).unwrap();
+
+        assert_eq!(value["workflows"][0]["analysisStatus"], "analyzed");
+        assert_eq!(value["workflows"][0]["jobs"][0]["id"], "build");
+        assert_eq!(value["workflows"][0]["jobs"][0]["stepCount"], 1);
+        let secret_finding = value["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|finding| finding["category"] == "secretExposure")
+            .unwrap();
+        assert_eq!(secret_finding["secretReference"], "DEPLOY_TOKEN");
+        assert_eq!(secret_finding["exposureSink"], "stdout");
+        assert_eq!(secret_finding["evidence"], "supported stdout sink");
+        let serialized = value.to_string();
+        assert!(!serialized.contains("${{"));
+        assert!(!serialized.contains("actual-secret-value"));
     }
 
     #[test]

@@ -112,9 +112,9 @@ export const categoryConfigs: CategoryConfig[] = [
   {
     key: 'security-github-actions',
     title: 'GitHub Actions',
-    description: 'Future workflow security analysis',
+    description: 'Inspect local GitHub Actions workflows for static security findings',
     section: 'security',
-    availability: 'planned',
+    availability: 'available',
   },
   {
     key: 'security-executable-integrity',
