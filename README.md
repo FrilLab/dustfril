@@ -201,7 +201,9 @@ canonical workspace; moving a workspace creates a new history rather than
 guessing that it is the old one. Snapshot persistence warnings do not discard a
 completed scan/analyze result. Filtered snapshots carry forward the latest
 state for ecosystems that were not selected, so a later full scan does not
-report unobserved artifacts as newly created.
+report unobserved artifacts as newly created. When retention has evicted the
+predecessor of the oldest retained snapshot, Desktop history reports that
+comparison as unavailable instead of presenting a misleading new baseline.
 
 ## Desktop App
 
@@ -213,6 +215,7 @@ The desktop app currently exposes the same core workflows in a workspace browser
 - cleanup execution
 - lifecycle script audit
 - unified activity history
+- bounded scan access summaries and generated-artifact snapshot history
 
 Cleanup results are project-aware: each artifact carries the project identity
 returned by discovery, including its root directory and ecosystem. The scanned

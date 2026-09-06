@@ -50,6 +50,21 @@ pub fn load_artifact_snapshots() -> DustResult<Vec<ArtifactSnapshot>> {
     ArtifactSnapshotStore::new(path).load_all()
 }
 
+/// Loads the retained snapshot comparisons for one canonical workspace.
+///
+/// This is a read-only query. It never scans the workspace, calculates
+/// artifact sizes, or writes snapshot state.
+pub fn load_artifact_snapshot_history(
+    workspace_path: &Path,
+) -> DustResult<Vec<ArtifactSnapshotResult>> {
+    let path = artifact_snapshot_path()?;
+    let retained = ArtifactSnapshotStore::new(path).load_workspace_with_metadata(workspace_path)?;
+    Ok(artifact_snapshot::artifact_snapshot_history(
+        retained.snapshots,
+        retained.history_truncated,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
@@ -78,5 +93,38 @@ mod tests {
 
         assert_eq!(snapshot.artifacts[0].path, PathBuf::from("target"));
         assert_eq!(snapshot.artifacts[0].size_bytes, 42);
+    }
+
+    #[test]
+    fn snapshot_history_query_is_read_only_and_core_computed() {
+        let workspace = TempDir::new().unwrap();
+        let store = ArtifactSnapshotStore::new(workspace.path().join("snapshots.json"));
+        let first = ArtifactSnapshot::from_analysis_at(
+            workspace.path().display().to_string(),
+            workspace.path(),
+            &AnalysisResult::default(),
+            chrono::DateTime::UNIX_EPOCH,
+        );
+        let second = ArtifactSnapshot {
+            timestamp: chrono::DateTime::UNIX_EPOCH + chrono::Duration::seconds(1),
+            ..first.clone()
+        };
+
+        store.record_snapshot(first).unwrap();
+        store.record_snapshot(second).unwrap();
+
+        let history =
+            artifact_snapshot::artifact_snapshot_history(store.load_all().unwrap(), false);
+
+        assert_eq!(history.len(), 2);
+        assert_eq!(
+            history[0].status,
+            crate::models::ArtifactSnapshotStatus::BaselineCreated
+        );
+        assert_eq!(
+            history[1].status,
+            crate::models::ArtifactSnapshotStatus::Compared
+        );
+        assert!(history[1].changes.is_empty());
     }
 }
