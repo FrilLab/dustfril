@@ -34,9 +34,12 @@ case-sensitive.
 | `build_cleanup_plan` | `{ options: RunOptions }` | `CleanupPlanResponse` |
 | `audit` | `{ options: RunOptions }` | `LifecycleScript[]` |
 | `security_scan` | `{ options: RunOptions }` | `SecurityScanResponse` (may include additive `historyWarning`) |
+| `integrity_scan` | `{ options: { tools } }` | `IntegrityScanResponse` |
+| `workflow_scan` | `{ options: RunOptions }` | `WorkflowScanResponse` (local, read-only workflow findings; no history entry) |
 | `execute_cleanup` | `{ request: { root, ecosystems, analysisId, selectedArtifacts, mode } }` | `CleanupResultResponse` (may include additive `historyWarning`) |
 | `load_activity_history` | none | `ActivityRecord[]` |
 | `load_cleanup_history` | none | `CleanupHistoryEntry[]` |
+| `load_artifact_snapshot_history` | `{ root }` | retained Core-computed artifact snapshot comparisons and retention metadata; an evicted predecessor is `comparisonUnavailable` |
 
 Contract changes must preserve existing command names, nullability, and enum wire
 values for v0.1.0. Cleanup execution intentionally accepts analyzed artifact
@@ -63,8 +66,11 @@ refreshes set it to `false` so they do not change the generated-artifact baselin
 - Unified recommendations list with reclaimable storage, selection, review, and cleanup summary
 - Safe cleanup with Trash or permanent delete confirmation
 - Activity history viewer backed by shared, versioned core history storage
+- Artifact History viewer for bounded scan access summaries and generated-artifact snapshot growth
 - Explicit scans return the generated-artifact snapshot comparison produced by Core
 - Explicit offline Supply Chain scans expose lifecycle scripts, lockfile status, and dependency-source findings
+- Executable Integrity screen exposes non-executing tool path, SHA-256 baseline, and platform signature evidence
+- Explicit local GitHub Actions workflow scans with structured command, permission, and direct secret-exposure findings
 
 Activity persistence is auxiliary to scan, cleanup, and security results. If a
 history write fails, the operation response remains available and includes an
@@ -77,13 +83,15 @@ additive `historyWarning` for the desktop status surface.
 - `WorkspaceView`
 - `CleanupDialog`
 - `HistoryList`
+- `ArtifactHistoryView`
 - `AsyncStatePanel`
 - `ModulePlaceholderView`
+- `ExecutableIntegrityView`
+- `GithubActionsView`
 
 ## Desktop module navigation
 
-The sidebar keeps the Desktop information architecture in
-`src/model/categories.ts`:
+The sidebar keeps the Desktop information architecture in `src/model/categories.ts`:
 
 ```text
 Overview
@@ -95,19 +103,24 @@ Cleanup
   Cache (planned)
 
 Workspace
-  Dependencies (planned)
-  Artifact History (planned)
+  Dependencies
+  Artifact History
   Activity
 
 Security
   Supply Chain
-  GitHub Actions (planned)
-  Executable Integrity (planned)
+  GitHub Actions
+  Executable Integrity
 ```
 
 Rust, Node.js, and Java destinations filter the existing unified analysis
-result; they do not start a new scan when selected. Planned destinations render
-an explicit unsupported state and do not invoke speculative Tauri commands.
+result; they do not start a new scan when selected. GitHub Actions is an
+explicit local workflow scan: selecting the destination does not run it, and
+the `workflow_scan` command runs only after the user chooses Scan Workflows.
+The scan is read-only and does not write an activity-history entry. Executable
+Integrity runs only when the user explicitly requests it and passes selected
+tool identifiers to Core. Other planned destinations render an explicit
+unsupported state and do not invoke speculative Tauri commands.
 
 Advanced operations use the small state model in `src/model/async.ts`. It
 keeps loading, success, partial success, unsupported, empty, and error states

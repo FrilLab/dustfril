@@ -19,11 +19,12 @@ pub const MAX_ARTIFACT_SNAPSHOTS_PER_WORKSPACE: usize = 32;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtifactSnapshotResult {
-    /// Whether this operation established a baseline or compared two snapshots.
+    /// Whether this result established a baseline, compared snapshots, or
+    /// cannot compare because retention evicted the predecessor.
     pub status: ArtifactSnapshotStatus,
     /// The snapshot produced by the explicit operation.
     pub snapshot: ArtifactSnapshot,
-    /// The previous snapshot for this workspace, if one existed.
+    /// The previous retained snapshot for this workspace, if one is available.
     pub previous_snapshot: Option<ArtifactSnapshot>,
     /// Deterministically ordered changes between the previous and current state.
     pub changes: Vec<ArtifactSizeChange>,
@@ -36,7 +37,7 @@ impl ArtifactSnapshotResult {
     }
 }
 
-/// Whether an explicit snapshot created a baseline or produced a comparison.
+/// Whether a snapshot is a baseline, a comparison, or has an evicted predecessor.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum ArtifactSnapshotStatus {
@@ -44,6 +45,8 @@ pub enum ArtifactSnapshotStatus {
     BaselineCreated,
     /// The current snapshot was compared with the previous snapshot.
     Compared,
+    /// The previous snapshot may exist but is no longer retained.
+    ComparisonUnavailable,
 }
 
 impl fmt::Display for ArtifactSnapshotStatus {
@@ -51,6 +54,7 @@ impl fmt::Display for ArtifactSnapshotStatus {
         match self {
             Self::BaselineCreated => f.write_str("Baseline created"),
             Self::Compared => f.write_str("Compared"),
+            Self::ComparisonUnavailable => f.write_str("Comparison unavailable"),
         }
     }
 }

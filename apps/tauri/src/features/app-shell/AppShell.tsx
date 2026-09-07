@@ -3,20 +3,29 @@ import { Sidebar } from '../../components/Sidebar/Sidebar';
 import { categoryConfig } from '../../model/categories';
 import { pathBreadcrumb } from '../../model/presentation';
 import { AppHeader } from './components/AppHeader';
+import { useExecutableIntegrity } from './hooks/useExecutableIntegrity';
 import { useAppState } from './hooks/useAppState';
 import { HistoryView } from './views/HistoryView';
+import { DependenciesView } from './views/DependenciesView';
+import { GithubActionsView } from './views/GithubActionsView';
 import { ModulePlaceholderView } from './views/ModulePlaceholderView';
 import { OverviewView } from './views/OverviewView';
 import { SupplyChainView } from './views/SupplyChainView';
+import { ExecutableIntegrityView } from './views/ExecutableIntegrityView';
 import { WorkspaceView } from './views/WorkspaceView';
+import { ArtifactHistoryView } from './views/ArtifactHistoryView';
 
 export function AppShell() {
   const app = useAppState();
+  const executableIntegrity = useExecutableIntegrity();
   const activeConfig = categoryConfig(app.activeCategory);
   const showingCleanup = activeConfig?.ecosystem !== undefined;
   const showingWorkspace = app.activeCategory === 'workspace' || showingCleanup;
+  const showingDependencies = app.activeCategory === 'workspace-dependencies';
   const showingActivity =
     app.activeCategory === 'history' || app.activeCategory === 'workspace-activity';
+  const showingArtifactHistory = app.activeCategory === 'workspace-artifact-history';
+  const showingExecutableIntegrity = app.activeCategory === 'security-executable-integrity';
 
   return (
     <main className="app-shell">
@@ -95,10 +104,51 @@ export function AppShell() {
             />
           ) : null}
 
+          {showingArtifactHistory ? (
+            <ArtifactHistoryView
+              root={app.root}
+              history={app.artifactHistory}
+              status={app.artifactHistoryStatus}
+              error={app.artifactHistoryError}
+              scanEntry={app.latestScanEntry}
+              persistenceWarning={app.artifactHistoryPersistenceWarning}
+            />
+          ) : null}
+
+          {showingExecutableIntegrity ? (
+            <ExecutableIntegrityView integrity={executableIntegrity} />
+          ) : null}
+
+          {showingDependencies ? (
+            <DependenciesView
+              root={app.root}
+              result={app.dependencyResult}
+              operationStatus={app.dependencyOperation.status}
+              busy={app.busyAction !== null}
+              error={app.error}
+              onLoad={app.handleLoadDependencyInventory}
+              onCompare={app.handleCompareDependencyBaseline}
+              onAccept={app.handleAcceptDependencyBaseline}
+            />
+          ) : null}
+
+          {app.activeCategory === 'security-github-actions' ? (
+            <GithubActionsView
+              root={app.root}
+              operation={app.workflowOperation}
+              canScan={app.canScanWorkflows}
+              onScan={app.handleWorkflowSecurityScan}
+            />
+          ) : null}
+
           {app.activeCategory !== 'overview' &&
           !showingWorkspace &&
           !showingActivity &&
           app.activeCategory !== 'security-supply-chain' &&
+          !showingArtifactHistory &&
+          !showingExecutableIntegrity &&
+          !showingDependencies &&
+          app.activeCategory !== 'security-github-actions' &&
           activeConfig ? (
             <ModulePlaceholderView
               config={activeConfig}
