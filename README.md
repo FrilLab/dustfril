@@ -20,8 +20,11 @@ The repository is split into a reusable Rust core crate, a CLI app, and a Tauri 
 
 ## Current Capabilities
 
-- Scan removable artifacts for Rust, Node.js, and Java workspaces
-- Identify each artifact with its discovered project root, display name, and ecosystem
+- Scan removable artifacts for Rust, Node.js, Java, CMake, .NET, Python, Swift,
+  Dart/Flutter, Kotlin, PHP, Elixir, and Zig projects
+- Detect Go and Ruby project identity without inventing unsafe cleanup candidates
+- Identify each artifact with its discovered project root and structured language,
+  runtime, build-system, canonical type label, and metadata evidence
 - Analyze artifact size, age, and cleanup recommendation
 - Track generated-artifact sizes across explicit snapshots with exact byte deltas
 - Build a cleanup plan before deleting anything
@@ -76,11 +79,25 @@ source files are not read or listed, and no per-file access log is created.
 
 ## Detected Artifacts
 
-| Ecosystem | Detected Artifacts |
-| --------- | ------------------ |
-| Rust      | `target/`          |
-| Node.js   | `node_modules/`    |
-| Java      | `build/`           |
+| Technology / build context | Detected artifacts |
+| -------------------------- | ------------------ |
+| Rust / Cargo               | `target/` |
+| Java / Maven               | `target/` |
+| Java or Kotlin / Gradle   | `build/` |
+| JavaScript or TypeScript / Node.js | `node_modules/` |
+| C or C++ / CMake           | validated `build/` or `cmake-build-*` trees |
+| C# or F# / .NET            | project-local `bin/`, `obj/` |
+| Python                     | project-local `.venv/` and supported caches |
+| Swift / SwiftPM            | `.build/` |
+| Dart or Flutter            | `.dart_tool/`, Flutter `build/` |
+| PHP / Composer             | `vendor/` |
+| Elixir / Mix               | `_build/`, `deps/` |
+| Zig                        | `.zig-cache/`, `zig-out/` |
+
+Generic names such as `build/`, `target/`, `bin/`, and `obj/` are never
+cleanup candidates without owning project metadata and, where required,
+artifact-local generated-tree evidence. Go and Ruby are detected as project
+technologies, but do not currently produce project-local cleanup candidates.
 
 Supported security lockfile formats are `package-lock.json` versions 1–3,
 pnpm YAML, Bun JSONC `bun.lock` versions 1–2, and Cargo.lock versions 1–4.
@@ -218,9 +235,9 @@ The desktop app currently exposes the same core workflows in a workspace browser
 - bounded scan access summaries and generated-artifact snapshot history
 
 Cleanup results are project-aware: each artifact carries the project identity
-returned by discovery, including its root directory and ecosystem. The scanned
-workspace remains the traversal boundary and is not replaced by an artifact's
-own project root.
+returned by discovery, including its root directory, structured technology,
+canonical type label, and evidence. The scanned workspace remains the traversal
+boundary and is not replaced by an artifact's own project root.
 
 Cleanup recommendations in the desktop analysis flow use a configurable
 inactivity age. The default is 30 days; artifacts at least that old are

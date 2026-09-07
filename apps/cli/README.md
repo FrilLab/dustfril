@@ -44,10 +44,14 @@ cargo build -p dustfril-cli
 
 ## Notes
 
-- Supported ecosystem filters: `--rust`, `--node`, `--java`
-- `snapshot` tracks only existing scanner-owned `target/`, `node_modules/`,
-  and `build/` artifacts; it never treats `Cargo.lock` or ordinary source
-  files as artifact-history targets
+- Supported project detection includes Rust/Cargo, Node.js, Java/Maven or
+  Gradle, CMake, .NET, Python, Swift, Dart/Flutter, Kotlin, PHP, Elixir, Zig,
+  Go, and Ruby. The CLI currently exposes the original `--rust`, `--node`, and
+  `--java` filters; an empty filter scans every registered detector.
+- `snapshot` tracks scanner-owned generated artifacts such as `target/`,
+  `node_modules/`, validated build trees, `.build/`, `.dart_tool/`, and
+  project-local language-tool outputs; it never treats manifests or ordinary
+  source files as artifact-history targets
 - `scan` also records one artifact snapshot after reusing its analysis result
 - The first snapshot creates a baseline; later snapshots report exact byte
   deltas and deterministic new/removed/increased/decreased/unchanged states

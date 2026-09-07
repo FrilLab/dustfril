@@ -61,6 +61,8 @@ export function filterArtifacts(artifacts: ArtifactAnalysis[], search: string) {
       leafName(artifact.path),
       artifact.path,
       artifact.ecosystem,
+      technologyLabel(artifact),
+      ...(artifact.project.technology?.languages ?? []),
       artifact.recommendation,
       kindForArtifact(artifact.ecosystem),
     ].some((value) => value.toLowerCase().includes(normalizedQuery)),
@@ -68,11 +70,28 @@ export function filterArtifacts(artifacts: ArtifactAnalysis[], search: string) {
 }
 
 export function kindForArtifact(ecosystem: ArtifactAnalysis['ecosystem']) {
-  return `${ecosystem} artifact`;
+  return `${canonicalEcosystemLabel(ecosystem)} artifact`;
 }
 
 export function artifactLabel(artifact: ArtifactAnalysis) {
-  return `${leafName(artifact.path)} · ${artifact.ecosystem}`;
+  return `${leafName(artifact.path)} · ${technologyLabel(artifact)}`;
+}
+
+export function technologyLabel(artifact: Pick<ArtifactAnalysis, 'project' | 'ecosystem'>) {
+  return artifact.project.technology?.displayLabel || canonicalEcosystemLabel(artifact.ecosystem);
+}
+
+export function canonicalEcosystemLabel(ecosystem: ArtifactAnalysis['ecosystem']) {
+  switch (ecosystem) {
+    case 'Node':
+      return 'Node.js';
+    case 'DotNet':
+      return '.NET';
+    case 'Php':
+      return 'PHP';
+    default:
+      return ecosystem;
+  }
 }
 
 export function recommendationLabel(recommendation: Recommendation) {
@@ -105,9 +124,19 @@ export function artifactDetailLines(
   return [
     ['Project', artifact.project.displayName],
     ['Project root', artifact.project.root],
+    ['Type', technologyLabel(artifact)],
+    ['Languages', artifact.project.technology?.languages.join(', ') || technologyLabel(artifact)],
+    ...(artifact.project.technology?.runtime
+      ? [['Runtime', artifact.project.technology.runtime]]
+      : []),
+    ...(artifact.project.technology?.buildSystem
+      ? [['Build system', artifact.project.technology.buildSystem]]
+      : []),
+    ...(artifact.project.technology?.evidence.length
+      ? [['Evidence', artifact.project.technology.evidence.map((item) => `${item.path} (${item.detail})`).join('; ')]]
+      : []),
     ['Artifact', leafName(artifact.path)],
     ['Path', artifact.path],
-    ['Ecosystem', artifact.ecosystem],
     ['Kind', kindForArtifact(artifact.ecosystem)],
     ['Size', formatBytes(artifact.sizeBytes)],
     ['Modified', formatDate(artifact.lastModifiedMs)],

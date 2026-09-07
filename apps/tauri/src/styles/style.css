@@ -1613,7 +1613,7 @@ button:disabled {
 
 .result-row {
   display: grid;
-  grid-template-columns: 30px minmax(135px, 1.15fr) minmax(190px, 1.8fr) minmax(68px, 0.7fr) minmax(128px, 1.2fr) minmax(104px, 0.95fr);
+  grid-template-columns: 30px minmax(135px, 1.15fr) minmax(125px, 1fr) minmax(190px, 1.8fr) minmax(68px, 0.7fr) minmax(128px, 1.2fr) minmax(104px, 0.95fr);
   align-items: center;
   min-width: 0;
   min-height: 50px;
@@ -1742,6 +1742,15 @@ button:disabled {
 .result-project,
 .result-project small {
   min-width: 0;
+}
+
+.result-type {
+  min-width: 0;
+  overflow: hidden;
+  color: #c5d8e3;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .result-project {
@@ -3801,7 +3810,7 @@ button:disabled {
   }
 
   .result-row {
-    grid-template-columns: 28px minmax(115px, 1fr) minmax(155px, 1.4fr) 64px minmax(95px, 0.8fr);
+    grid-template-columns: 28px minmax(115px, 1fr) minmax(110px, 0.9fr) minmax(155px, 1.4fr) 64px minmax(95px, 0.8fr);
   }
 
   .cleanup-mode-control {

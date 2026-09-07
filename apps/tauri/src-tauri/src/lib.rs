@@ -292,6 +292,11 @@ async fn scan(options: RunOptions) -> Result<ScanResponse, String> {
                     project: project_identity_to_dto(&artifact.project),
                 })
                 .collect(),
+            projects: result
+                .projects
+                .into_iter()
+                .map(|project| project_identity_to_dto(&project))
+                .collect(),
             history_warning,
             artifact_snapshot,
             artifact_snapshot_warning,

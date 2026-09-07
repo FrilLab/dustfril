@@ -5,11 +5,11 @@ import {
   historyStatusRank,
   historyTargetLabel,
 } from './activity';
-import { leafName } from './presentation';
+import { leafName, technologyLabel } from './presentation';
 
 export type SortDirection = 'asc' | 'desc';
 
-export type WorkspaceSortColumn = 'project' | 'artifact' | 'size' | 'modified' | 'status';
+export type WorkspaceSortColumn = 'project' | 'type' | 'artifact' | 'size' | 'modified' | 'status';
 export type HistorySortColumn = 'time' | 'action' | 'target' | 'result' | 'status';
 
 export type WorkspaceSortState = {
@@ -73,6 +73,12 @@ function compareArtifacts(
       return (
         compareText(leafName(left.path), leafName(right.path)) ||
         compareText(left.ecosystem, right.ecosystem) ||
+        compareText(left.project.displayName, right.project.displayName) ||
+        compareText(left.path, right.path)
+      );
+    case 'type':
+      return (
+        compareText(technologyLabel(left), technologyLabel(right)) ||
         compareText(left.project.displayName, right.project.displayName) ||
         compareText(left.path, right.path)
       );

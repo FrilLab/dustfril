@@ -1,4 +1,19 @@
-export type Ecosystem = 'Rust' | 'Node' | 'Java';
+export type Ecosystem =
+  | 'Rust'
+  | 'Node'
+  | 'Java'
+  | 'CMake'
+  | 'DotNet'
+  | 'Python'
+  | 'Swift'
+  | 'Dart'
+  | 'Flutter'
+  | 'Kotlin'
+  | 'Php'
+  | 'Elixir'
+  | 'Zig'
+  | 'Go'
+  | 'Ruby';
 export type Recommendation = 'Keep' | 'NeedsReview' | 'SafeToClean';
 export type DeleteMode = 'Trash' | 'Permanent';
 export type RiskLevel = 'Low' | 'Medium' | 'High' | 'Critical' | 'None';
@@ -21,10 +36,25 @@ export type ProjectIdentity = {
   root: string;
   displayName: string;
   ecosystem: Ecosystem;
+  technology?: ProjectTechnology;
+};
+
+export type ProjectTechnology = {
+  languages: string[];
+  runtime: string | null;
+  buildSystem: string | null;
+  displayLabel: string;
+  evidence: TechnologyEvidence[];
+};
+
+export type TechnologyEvidence = {
+  path: string;
+  detail: string;
 };
 
 export type ScanResponse = {
   artifacts: Artifact[];
+  projects?: ProjectIdentity[];
   historyWarning?: string;
   artifactSnapshot?: ArtifactSnapshotResult;
   artifactSnapshotWarning?: string;
@@ -475,7 +505,23 @@ export type DependencyBaselineAcceptOptions = {
   expectedInventoryFingerprint: string;
 };
 
-export const ecosystems: Ecosystem[] = ['Rust', 'Node', 'Java'];
+export const ecosystems: Ecosystem[] = [
+  'Rust',
+  'Node',
+  'Java',
+  'CMake',
+  'DotNet',
+  'Python',
+  'Swift',
+  'Dart',
+  'Flutter',
+  'Kotlin',
+  'Php',
+  'Elixir',
+  'Zig',
+  'Go',
+  'Ruby',
+];
 export const deleteModes: DeleteMode[] = ['Trash', 'Permanent'];
 export const cleanupAgeOptions = [7, 14, 30, 60, 90] as const;
 export const defaultCleanupAgeDays = cleanupAgeOptions[2];

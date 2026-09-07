@@ -239,7 +239,23 @@ describe('AppShell Overview navigation', () => {
     await waitFor(() => expect(securityScan).toHaveBeenCalledOnce());
     expect(securityScan).toHaveBeenCalledWith({
       root: '/workspace',
-      ecosystems: ['Rust', 'Node', 'Java'],
+      ecosystems: [
+        'Rust',
+        'Node',
+        'Java',
+        'CMake',
+        'DotNet',
+        'Python',
+        'Swift',
+        'Dart',
+        'Flutter',
+        'Kotlin',
+        'Php',
+        'Elixir',
+        'Zig',
+        'Go',
+        'Ruby',
+      ],
     });
     expect(screen.getByRole('heading', { name: 'Scan completed with zero findings' })).toBeInTheDocument();
   });
@@ -330,7 +346,23 @@ describe('AppShell Overview navigation', () => {
     await waitFor(() => expect(executeCleanup).toHaveBeenCalledOnce());
     expect(executeCleanup).toHaveBeenCalledWith(
       '/workspace',
-      ['Rust', 'Node', 'Java'],
+      [
+        'Rust',
+        'Node',
+        'Java',
+        'CMake',
+        'DotNet',
+        'Python',
+        'Swift',
+        'Dart',
+        'Flutter',
+        'Kotlin',
+        'Php',
+        'Elixir',
+        'Zig',
+        'Go',
+        'Ruby',
+      ],
       'analysis-1',
       [{ path: analyzedArtifact.path, ecosystem: 'Rust' }],
       'Trash',

@@ -127,7 +127,12 @@ fn print_cleanup_plan(plan: &CleanupPlan) {
     println!("Cleanup Preview\n");
 
     for candidate in &plan.candidates {
-        println!("[{}]", candidate.ecosystem);
+        let technology = if candidate.project.technology.display_label.is_empty() {
+            candidate.ecosystem.to_string()
+        } else {
+            candidate.project.technology.display_label.clone()
+        };
+        println!("[{technology}]");
         println!("  Project: {}", candidate.project.display_name);
         println!("  Root:    {}", candidate.project.root.display());
         println!("  Path: {}", candidate.path.display());
