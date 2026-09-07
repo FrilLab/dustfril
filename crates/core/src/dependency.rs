@@ -92,6 +92,11 @@ pub fn report(root: &Path, selected: &[Ecosystem]) -> DustResult<Vec<DependencyR
                 root.to_path_buf(),
                 "Java dependency analysis is not supported; Maven and Gradle formats require a separate design.",
             )),
+            ecosystem => Ok(DependencyReport::unsupported(
+                ecosystem,
+                root.to_path_buf(),
+                "Dependency analysis is not supported for this ecosystem.",
+            )),
         })
         .collect()
 }

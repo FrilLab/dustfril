@@ -575,6 +575,7 @@ mod tests {
 
         let scan = ScanResult {
             artifacts: vec![Artifact::new("/workspace/target".into(), Ecosystem::Rust)],
+            projects: vec![],
             access_summary,
         };
         record_to(

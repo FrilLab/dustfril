@@ -16,6 +16,18 @@ pub enum Ecosystem {
     Rust,
     Node,
     Java,
+    CMake,
+    DotNet,
+    Python,
+    Swift,
+    Dart,
+    Flutter,
+    Kotlin,
+    Php,
+    Elixir,
+    Zig,
+    Go,
+    Ruby,
 }
 
 impl fmt::Display for Ecosystem {
@@ -26,6 +38,30 @@ impl fmt::Display for Ecosystem {
             Self::Node => write!(f, "Node"),
 
             Self::Java => write!(f, "Java"),
+
+            Self::CMake => write!(f, "CMake"),
+
+            Self::DotNet => write!(f, ".NET"),
+
+            Self::Python => write!(f, "Python"),
+
+            Self::Swift => write!(f, "Swift"),
+
+            Self::Dart => write!(f, "Dart"),
+
+            Self::Flutter => write!(f, "Flutter"),
+
+            Self::Kotlin => write!(f, "Kotlin"),
+
+            Self::Php => write!(f, "PHP"),
+
+            Self::Elixir => write!(f, "Elixir"),
+
+            Self::Zig => write!(f, "Zig"),
+
+            Self::Go => write!(f, "Go"),
+
+            Self::Ruby => write!(f, "Ruby"),
         }
     }
 }
@@ -166,6 +202,9 @@ pub struct ScanAccessFailure {
 pub struct ScanResult {
     /// Artifact paths discovered during the scan.
     pub artifacts: Vec<Artifact>,
+    /// Project identities detected even when they have no cleanup artifact.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub projects: Vec<ProjectIdentity>,
     /// Bounded filesystem access summary collected during this scan.
     #[serde(default)]
     pub access_summary: ScanAccessSummary,

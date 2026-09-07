@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use super::Ecosystem;
+use super::{Ecosystem, ProjectTechnology};
 
 /// Stable identity for a discovered project.
 ///
@@ -19,11 +19,23 @@ pub struct ProjectIdentity {
     pub display_name: String,
     /// Ecosystem that identified the project.
     pub ecosystem: Ecosystem,
+    /// Structured language, runtime, build-system, and evidence context.
+    #[serde(default, skip_serializing_if = "ProjectTechnology::is_empty")]
+    pub technology: ProjectTechnology,
 }
 
 impl ProjectIdentity {
     /// Creates an identity using the discovered root directory name.
     pub fn new(root: PathBuf, ecosystem: Ecosystem) -> Self {
+        Self::with_technology(root, ecosystem, ProjectTechnology::for_ecosystem(ecosystem))
+    }
+
+    /// Creates an identity with detector-owned technology context.
+    pub fn with_technology(
+        root: PathBuf,
+        ecosystem: Ecosystem,
+        technology: ProjectTechnology,
+    ) -> Self {
         // Resolve relative roots without following symlinks. Project identity
         // should be stable for `.` while retaining the path spelling used by
         // the scan and cleanup boundaries.
@@ -39,6 +51,7 @@ impl ProjectIdentity {
             root,
             display_name,
             ecosystem,
+            technology,
         }
     }
 
@@ -66,6 +79,7 @@ impl Default for ProjectIdentity {
             root: PathBuf::new(),
             display_name: String::new(),
             ecosystem: Ecosystem::Rust,
+            technology: ProjectTechnology::default(),
         }
     }
 }

@@ -455,6 +455,18 @@ fn ecosystem_labels(ecosystems: &[Ecosystem]) -> Vec<&'static str> {
             Ecosystem::Rust => "Rust",
             Ecosystem::Node => "Node",
             Ecosystem::Java => "Java",
+            Ecosystem::CMake => "CMake",
+            Ecosystem::DotNet => ".NET",
+            Ecosystem::Python => "Python",
+            Ecosystem::Swift => "Swift",
+            Ecosystem::Dart => "Dart",
+            Ecosystem::Flutter => "Flutter",
+            Ecosystem::Kotlin => "Kotlin",
+            Ecosystem::Php => "PHP",
+            Ecosystem::Elixir => "Elixir",
+            Ecosystem::Zig => "Zig",
+            Ecosystem::Go => "Go",
+            Ecosystem::Ruby => "Ruby",
         })
         .collect()
 }
@@ -739,6 +751,7 @@ mod tests {
 
         let scan = ScanResult {
             artifacts: vec![],
+            projects: vec![],
             access_summary,
         };
         let activity = ActivityRecord::scan(root, &scan, 0);

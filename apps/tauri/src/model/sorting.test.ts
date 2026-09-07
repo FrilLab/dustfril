@@ -78,6 +78,28 @@ describe('artifact sorting', () => {
     ]);
   });
 
+  it('sorts by the canonical project technology label', () => {
+    const typed = artifacts.map((item, index) => ({
+      ...item,
+      project: {
+        ...item.project,
+        technology: {
+          languages: [index === 0 ? 'Rust' : index === 1 ? 'TypeScript' : 'C++'],
+          runtime: index === 1 ? 'Node.js' : null,
+          buildSystem: index === 2 ? 'CMake' : null,
+          displayLabel: index === 0 ? 'Rust' : index === 1 ? 'TypeScript · Node.js' : 'C++ · CMake',
+          evidence: [],
+        },
+      },
+    }));
+
+    expect(sortArtifacts(typed, { column: 'type', direction: 'asc' }).map((item) => item.project.technology?.displayLabel)).toEqual([
+      'C++ · CMake',
+      'Rust',
+      'TypeScript · Node.js',
+    ]);
+  });
+
   it('sorts status by cleanup priority and keeps equal values deterministic', () => {
     expect(sortArtifacts(artifacts, { column: 'status', direction: 'desc' }).map((item) => item.recommendation)).toEqual([
       'SafeToClean',

@@ -7,9 +7,9 @@ use dustfril_core::models::{
     ArtifactChangeKind, ArtifactSizeChange, ArtifactSnapshot, ArtifactSnapshotArtifact,
     ArtifactSnapshotResult, ArtifactSnapshotStatus, CleanupFailureReason, CleanupRecommendation,
     DeleteMode, DeveloperStorageSummary, Ecosystem, LifecycleScript, LockfileCheck, LockfileKind,
-    LockfileStatus, PackageManager, ProjectIdentity, RecommendationPolicy, RiskLevel, ScriptType,
-    SecurityFinding, SecurityReport, SecurityWarning, StorageSummary, VolumeStorage,
-    DEFAULT_CLEANUP_AGE_DAYS,
+    LockfileStatus, PackageManager, ProjectIdentity, ProjectTechnology, RecommendationPolicy,
+    RiskLevel, ScriptType, SecurityFinding, SecurityReport, SecurityWarning, StorageSummary,
+    TechnologyEvidence, VolumeStorage, DEFAULT_CLEANUP_AGE_DAYS,
 };
 use serde::{Deserialize, Serialize};
 
@@ -173,6 +173,25 @@ pub(crate) struct ProjectIdentityDto {
     pub(crate) root: String,
     pub(crate) display_name: String,
     pub(crate) ecosystem: EcosystemDto,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) technology: Option<ProjectTechnologyDto>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ProjectTechnologyDto {
+    pub(crate) languages: Vec<String>,
+    pub(crate) runtime: Option<String>,
+    pub(crate) build_system: Option<String>,
+    pub(crate) display_label: String,
+    pub(crate) evidence: Vec<TechnologyEvidenceDto>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TechnologyEvidenceDto {
+    pub(crate) path: String,
+    pub(crate) detail: String,
 }
 
 pub(crate) fn project_identity_to_dto(project: &ProjectIdentity) -> ProjectIdentityDto {
@@ -180,6 +199,29 @@ pub(crate) fn project_identity_to_dto(project: &ProjectIdentity) -> ProjectIdent
         root: project.root.display().to_string(),
         display_name: project.display_name.clone(),
         ecosystem: project.ecosystem.into(),
+        technology: (!project.technology.languages.is_empty())
+            .then(|| project_technology_to_dto(&project.technology)),
+    }
+}
+
+fn project_technology_to_dto(technology: &ProjectTechnology) -> ProjectTechnologyDto {
+    ProjectTechnologyDto {
+        languages: technology.languages.clone(),
+        runtime: technology.runtime.clone(),
+        build_system: technology.build_system.clone(),
+        display_label: technology.display_label.clone(),
+        evidence: technology
+            .evidence
+            .iter()
+            .map(technology_evidence_to_dto)
+            .collect(),
+    }
+}
+
+fn technology_evidence_to_dto(evidence: &TechnologyEvidence) -> TechnologyEvidenceDto {
+    TechnologyEvidenceDto {
+        path: evidence.path.display().to_string(),
+        detail: evidence.detail.clone(),
     }
 }
 
@@ -413,6 +455,18 @@ pub(crate) enum EcosystemDto {
     Rust,
     Node,
     Java,
+    CMake,
+    DotNet,
+    Python,
+    Swift,
+    Dart,
+    Flutter,
+    Kotlin,
+    Php,
+    Elixir,
+    Zig,
+    Go,
+    Ruby,
 }
 
 impl From<EcosystemDto> for Ecosystem {
@@ -421,6 +475,18 @@ impl From<EcosystemDto> for Ecosystem {
             EcosystemDto::Rust => Self::Rust,
             EcosystemDto::Node => Self::Node,
             EcosystemDto::Java => Self::Java,
+            EcosystemDto::CMake => Self::CMake,
+            EcosystemDto::DotNet => Self::DotNet,
+            EcosystemDto::Python => Self::Python,
+            EcosystemDto::Swift => Self::Swift,
+            EcosystemDto::Dart => Self::Dart,
+            EcosystemDto::Flutter => Self::Flutter,
+            EcosystemDto::Kotlin => Self::Kotlin,
+            EcosystemDto::Php => Self::Php,
+            EcosystemDto::Elixir => Self::Elixir,
+            EcosystemDto::Zig => Self::Zig,
+            EcosystemDto::Go => Self::Go,
+            EcosystemDto::Ruby => Self::Ruby,
         }
     }
 }
@@ -431,6 +497,18 @@ impl From<Ecosystem> for EcosystemDto {
             Ecosystem::Rust => Self::Rust,
             Ecosystem::Node => Self::Node,
             Ecosystem::Java => Self::Java,
+            Ecosystem::CMake => Self::CMake,
+            Ecosystem::DotNet => Self::DotNet,
+            Ecosystem::Python => Self::Python,
+            Ecosystem::Swift => Self::Swift,
+            Ecosystem::Dart => Self::Dart,
+            Ecosystem::Flutter => Self::Flutter,
+            Ecosystem::Kotlin => Self::Kotlin,
+            Ecosystem::Php => Self::Php,
+            Ecosystem::Elixir => Self::Elixir,
+            Ecosystem::Zig => Self::Zig,
+            Ecosystem::Go => Self::Go,
+            Ecosystem::Ruby => Self::Ruby,
         }
     }
 }
@@ -740,6 +818,7 @@ mod tests {
                     root: "/workspace".to_string(),
                     display_name: "workspace".to_string(),
                     ecosystem: EcosystemDto::Rust,
+                    technology: None,
                 },
                 size_bytes: 42,
                 last_modified_ms: None,
@@ -787,6 +866,7 @@ mod tests {
                         root: "/workspace".to_string(),
                         display_name: "workspace".to_string(),
                         ecosystem: EcosystemDto::Rust,
+                        technology: None,
                     },
                     size_bytes: 42,
                     age_days: Some(120),
@@ -925,6 +1005,7 @@ mod tests {
                     root: "/workspace".to_string(),
                     display_name: "workspace".to_string(),
                     ecosystem: EcosystemDto::Rust,
+                    technology: None,
                 },
                 size_bytes: 42,
                 age_days: None,
@@ -987,6 +1068,7 @@ mod tests {
                     root: "/workspace".to_string(),
                     display_name: "workspace".to_string(),
                     ecosystem: EcosystemDto::Node,
+                    technology: None,
                 },
             }],
             history_warning: None,
@@ -1140,7 +1222,7 @@ mod tests {
     fn request_rejects_unknown_fields_and_enum_values() {
         assert!(serde_json::from_value::<RunOptions>(json!({
             "root": null,
-            "ecosystems": ["Python"]
+            "ecosystems": ["Haskell"]
         }))
         .is_err());
         assert!(serde_json::from_value::<RunOptions>(json!({

@@ -24,9 +24,9 @@ fn create_node_artifact(root: &std::path::Path) -> std::path::PathBuf {
 
 fn create_java_artifact(root: &std::path::Path) -> std::path::PathBuf {
     std::fs::write(root.join("pom.xml"), "<project></project>").unwrap();
-    let build = root.join("build");
-    std::fs::create_dir_all(&build).unwrap();
-    build
+    let target = root.join("target");
+    std::fs::create_dir_all(&target).unwrap();
+    target
 }
 
 #[test]
@@ -334,6 +334,10 @@ fn gradle_module_artifact_uses_the_gradle_workspace_identity() {
     assert_eq!(result.artifacts[0].project.root, backend);
     assert_eq!(result.artifacts[0].project.display_name, "backend");
     assert_eq!(result.artifacts[0].project.ecosystem, Ecosystem::Java);
+    assert_eq!(
+        result.artifacts[0].project.technology.display_label,
+        "Java · Gradle"
+    );
 }
 
 #[test]
@@ -352,6 +356,27 @@ fn gradle_discovery_does_not_escape_the_scanned_workspace() {
 }
 
 #[test]
+fn gradle_kotlin_plugin_produces_a_kotlin_type() {
+    let temp_dir = TempDir::new().unwrap();
+    let project = temp_dir.path().join("kotlin-app");
+    std::fs::create_dir_all(project.join("build")).unwrap();
+    std::fs::write(
+        project.join("build.gradle.kts"),
+        "plugins { kotlin(\"jvm\") version \"2.0.0\" }\n",
+    )
+    .unwrap();
+
+    let result = scan(temp_dir.path(), &[Ecosystem::Kotlin]).unwrap();
+
+    assert_eq!(result.artifacts.len(), 1);
+    assert_eq!(result.artifacts[0].ecosystem, Ecosystem::Kotlin);
+    assert_eq!(
+        result.artifacts[0].project.technology.display_label,
+        "Kotlin · Gradle"
+    );
+}
+
+#[test]
 fn maven_artifact_uses_the_maven_project_root() {
     let temp_dir = TempDir::new().unwrap();
     let api = temp_dir.path().join("api");
@@ -364,6 +389,10 @@ fn maven_artifact_uses_the_maven_project_root() {
     assert_eq!(result.artifacts[0].path, build);
     assert_eq!(result.artifacts[0].project.root, api);
     assert_eq!(result.artifacts[0].project.display_name, "api");
+    assert_eq!(
+        result.artifacts[0].project.technology.display_label,
+        "Java · Maven"
+    );
 }
 
 #[test]
@@ -544,4 +573,158 @@ fn scanner_follows_symbolic_linked_project_manifests() {
     assert_eq!(result.access_summary.files_inspected, 2);
     assert_eq!(result.access_summary.metadata_files_inspected, 2);
     assert_eq!(result.access_summary.symlinks_skipped, 1);
+}
+
+#[test]
+fn cmake_artifacts_require_generated_build_tree_evidence() {
+    let root = TempDir::new().unwrap();
+    std::fs::write(
+        root.path().join("CMakeLists.txt"),
+        "project(native C CXX)\n",
+    )
+    .unwrap();
+    let build = root.path().join("build");
+    std::fs::create_dir(&build).unwrap();
+
+    let without_evidence = scan(root.path(), &[Ecosystem::CMake]).unwrap();
+    assert!(without_evidence.artifacts.is_empty());
+
+    std::fs::write(
+        build.join("CMakeCache.txt"),
+        "CMAKE_HOME_DIRECTORY:INTERNAL=x\n",
+    )
+    .unwrap();
+    let with_evidence = scan(root.path(), &[Ecosystem::CMake]).unwrap();
+    assert_eq!(with_evidence.artifacts.len(), 1);
+    assert_eq!(
+        with_evidence.artifacts[0].project.technology.display_label,
+        "C/C++ · CMake"
+    );
+    assert_eq!(
+        with_evidence.artifacts[0].project.technology.languages,
+        ["C", "C++"]
+    );
+}
+
+#[test]
+fn cmake_named_build_directory_without_metadata_is_not_trusted() {
+    let root = TempDir::new().unwrap();
+    std::fs::write(
+        root.path().join("CMakeLists.txt"),
+        "project(native LANGUAGES CXX)\n",
+    )
+    .unwrap();
+    std::fs::create_dir(root.path().join("cmake-build-debug")).unwrap();
+
+    let result = scan(root.path(), &[Ecosystem::CMake]).unwrap();
+
+    assert!(result.artifacts.is_empty());
+}
+
+#[test]
+fn dotnet_output_is_scoped_to_each_project_root() {
+    let root = TempDir::new().unwrap();
+    let project = root.path().join("app");
+    let sibling = root.path().join("sibling");
+    std::fs::create_dir_all(project.join("bin")).unwrap();
+    std::fs::create_dir_all(sibling.join("bin")).unwrap();
+    std::fs::write(project.join("app.csproj"), "<Project />").unwrap();
+
+    let result = scan(root.path(), &[Ecosystem::DotNet]).unwrap();
+
+    assert_eq!(result.artifacts.len(), 1);
+    assert_eq!(result.artifacts[0].path, project.join("bin"));
+    assert_eq!(
+        result.artifacts[0].project.technology.display_label,
+        "C# · .NET"
+    );
+}
+
+#[test]
+fn python_project_artifacts_are_local_and_conservative() {
+    let root = TempDir::new().unwrap();
+    let project = root.path().join("tool");
+    std::fs::create_dir_all(project.join(".venv")).unwrap();
+    std::fs::create_dir_all(project.join("build")).unwrap();
+    std::fs::write(project.join("pyproject.toml"), "[project]\nname = 'tool'\n").unwrap();
+
+    let result = scan(root.path(), &[Ecosystem::Python]).unwrap();
+    let paths = result
+        .artifacts
+        .iter()
+        .map(|artifact| artifact.path.file_name().unwrap().to_str().unwrap())
+        .collect::<Vec<_>>();
+
+    assert_eq!(paths, [".venv", "build"]);
+    assert!(result.artifacts[0].project.technology.display_label == "Python");
+}
+
+#[test]
+fn swift_and_flutter_projects_use_project_metadata() {
+    let root = TempDir::new().unwrap();
+    let swift = root.path().join("swift");
+    std::fs::create_dir_all(swift.join(".build")).unwrap();
+    std::fs::write(swift.join("Package.swift"), "// swift-tools-version: 5.9\n").unwrap();
+    let flutter = root.path().join("flutter");
+    std::fs::create_dir_all(flutter.join("build")).unwrap();
+    std::fs::write(
+        flutter.join("pubspec.yaml"),
+        "name: demo\ndependencies:\n  flutter:\n    sdk: flutter\n",
+    )
+    .unwrap();
+
+    let result = scan(root.path(), &[]).unwrap();
+
+    assert!(result.artifacts.iter().any(|artifact| {
+        artifact.ecosystem == Ecosystem::Swift && artifact.path == swift.join(".build")
+    }));
+    assert!(result.artifacts.iter().any(|artifact| {
+        artifact.ecosystem == Ecosystem::Flutter
+            && artifact.project.technology.display_label == "Flutter · Dart"
+            && artifact.path == flutter.join("build")
+    }));
+}
+
+#[test]
+fn node_projects_distinguish_typescript_from_javascript() {
+    let root = TempDir::new().unwrap();
+    let javascript = root.path().join("javascript");
+    let typescript = root.path().join("typescript");
+    std::fs::create_dir_all(javascript.join("node_modules")).unwrap();
+    std::fs::create_dir_all(typescript.join("node_modules")).unwrap();
+    std::fs::write(javascript.join("package.json"), "{}\n").unwrap();
+    std::fs::write(typescript.join("package.json"), "{}\n").unwrap();
+    std::fs::write(typescript.join("tsconfig.json"), "{}\n").unwrap();
+
+    let result = scan(root.path(), &[Ecosystem::Node]).unwrap();
+
+    assert!(result.artifacts.iter().any(|artifact| {
+        artifact.project.root == javascript
+            && artifact.project.technology.display_label == "JavaScript · Node.js"
+    }));
+    assert!(result.artifacts.iter().any(|artifact| {
+        artifact.project.root == typescript
+            && artifact.project.technology.display_label == "TypeScript · Node.js"
+    }));
+}
+
+#[test]
+fn detection_only_projects_are_exposed_without_cleanup_candidates() {
+    let root = TempDir::new().unwrap();
+    let go = root.path().join("go");
+    let ruby = root.path().join("ruby");
+    std::fs::create_dir_all(&go).unwrap();
+    std::fs::create_dir_all(&ruby).unwrap();
+    std::fs::write(go.join("go.mod"), "module example\n").unwrap();
+    std::fs::write(ruby.join("Gemfile"), "source 'https://rubygems.org'\n").unwrap();
+
+    let result = scan(root.path(), &[]).unwrap();
+
+    assert!(result.artifacts.is_empty());
+    assert!(result.projects.iter().any(|project| {
+        project.ecosystem == Ecosystem::Go && project.technology.display_label == "Go"
+    }));
+    assert!(result.projects.iter().any(|project| {
+        project.ecosystem == Ecosystem::Ruby && project.technology.display_label == "Ruby"
+    }));
 }

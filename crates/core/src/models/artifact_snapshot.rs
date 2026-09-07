@@ -251,7 +251,29 @@ pub(crate) fn is_scanner_owned_artifact(ecosystem: Ecosystem, path: &Path) -> bo
         (ecosystem, name),
         (Ecosystem::Rust, "target")
             | (Ecosystem::Node, "node_modules")
-            | (Ecosystem::Java, "build")
+            | (Ecosystem::Java, "target" | "build")
+            | (Ecosystem::Kotlin, "build")
+            | (
+                Ecosystem::CMake,
+                "build" | "cmake-build-debug" | "cmake-build-release"
+            )
+            | (Ecosystem::DotNet, "bin" | "obj")
+            | (
+                Ecosystem::Python,
+                ".venv"
+                    | "__pycache__"
+                    | ".pytest_cache"
+                    | ".mypy_cache"
+                    | ".ruff_cache"
+                    | "build"
+                    | "dist"
+            )
+            | (Ecosystem::Swift, ".build")
+            | (Ecosystem::Dart, ".dart_tool")
+            | (Ecosystem::Flutter, ".dart_tool" | "build")
+            | (Ecosystem::Php, "vendor")
+            | (Ecosystem::Elixir, "_build" | "deps")
+            | (Ecosystem::Zig, ".zig-cache" | "zig-out")
     )
 }
 

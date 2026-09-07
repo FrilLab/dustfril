@@ -81,7 +81,11 @@ pub fn execute(args: PathArgs) -> bool {
     println!("Found {} artifact(s)\n", result.artifacts.len());
 
     for artifact in result.artifacts {
-        println!("  [{}] {}", artifact.ecosystem, artifact.path.display());
+        println!(
+            "  [{}] {}",
+            artifact.project.technology.display_label,
+            artifact.path.display()
+        );
         println!("      Project: {}", artifact.project.display_name);
         println!("      Root:    {}", artifact.project.root.display());
     }

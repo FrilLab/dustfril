@@ -120,7 +120,7 @@ pub fn execute(args: PathArgs) -> bool {
             .map(|d| format!("{d} days"))
             .unwrap_or_else(|| "Unknown".to_string());
         println!("----------------------------------------");
-        println!("[{}]", artifact.artifact.ecosystem);
+        println!("[{}]", artifact.artifact.project.technology.display_label);
         println!(
             "  Project:        {}",
             artifact.artifact.project.display_name

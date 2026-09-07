@@ -46,9 +46,12 @@ validates the cleanup plan from the immutable analysis identified by
 including visible NotFound failures when a selected target disappears.
 
 Scan, analysis, and cleanup candidate payloads also include the discovered
-project identity (`root`, `displayName`, and `ecosystem`). The workspace UI uses
-that identity as the primary label and keeps the artifact name and full path
-visible for safe cleanup decisions.
+project identity (`root`, `displayName`, `ecosystem`, and the optional
+structured `technology` object). The technology object contains canonical
+`displayLabel`, `languages`, `runtime`, `buildSystem`, and bounded metadata
+`evidence`. The workspace UI renders the compact `displayLabel` in its `TYPE`
+column and keeps the artifact name and full path visible for safe cleanup
+decisions.
 
 Analysis requests may include the optional `cleanupAgeDays` field. It must be
 positive and defaults to 30 days; the selected age is applied by Core to both
@@ -59,7 +62,7 @@ refreshes set it to `false` so they do not change the generated-artifact baselin
 ## v0.1.0 Features
 
 - Workspace-first Finder-like shell with native folder selection
-- One explicit Analyze Workspace action that discovers Rust, Node.js, and Java artifacts together
+- One explicit Analyze Workspace action that discovers supported multi-language project artifacts together
 - Unified recommendations list with reclaimable storage, selection, review, and cleanup summary
 - Safe cleanup with Trash or permanent delete confirmation
 - Activity history viewer backed by shared, versioned core history storage
@@ -105,7 +108,9 @@ Security
 ```
 
 Rust, Node.js, and Java destinations filter the existing unified analysis
-result; they do not start a new scan when selected. Planned destinations render
+result; they do not start a new scan when selected. Extended technologies are
+visible in the unified Workspace table and do not duplicate detector logic in
+the frontend. Planned destinations render
 an explicit unsupported state and do not invoke speculative Tauri commands.
 
 Advanced operations use the small state model in `src/model/async.ts`. It

@@ -4,7 +4,7 @@ use crate::{
     error::{DustError, DustResult},
     fs::walk_dirs_with_summary_and_boundary,
     models::{Ecosystem, ScanAccessSummary, ScanResult, normalize_artifacts},
-    scanner::detector::{self, metadata_file_exists_with_summary},
+    scanner::detector,
 };
 
 pub fn scan(root: &Path, ecosystems: &[Ecosystem]) -> DustResult<ScanResult> {
@@ -31,6 +31,7 @@ pub fn scan(root: &Path, ecosystems: &[Ecosystem]) -> DustResult<ScanResult> {
     };
 
     let mut artifacts = Vec::new();
+    let mut projects = Vec::new();
     for dir in directories {
         for detector in &detectors {
             let Some(project) =
@@ -38,6 +39,18 @@ pub fn scan(root: &Path, ecosystems: &[Ecosystem]) -> DustResult<ScanResult> {
             else {
                 continue;
             };
+
+            // Shared detectors such as Gradle and pub can resolve to a more
+            // specific identity (Kotlin or Flutter). Do not let a broad
+            // detector selected for Java/Dart leak the other identity through
+            // an explicit ecosystem filter.
+            if !ecosystems.is_empty() && !ecosystems.contains(&project.ecosystem) {
+                continue;
+            }
+
+            if !projects.contains(&project) {
+                projects.push(project.clone());
+            }
 
             artifacts.extend(detector.artifacts_for_project_with_summary(
                 &dir,
@@ -48,6 +61,12 @@ pub fn scan(root: &Path, ecosystems: &[Ecosystem]) -> DustResult<ScanResult> {
     }
 
     result.artifacts = normalize_artifacts(artifacts);
+    projects.sort_by(|left, right| {
+        left.root
+            .cmp(&right.root)
+            .then_with(|| left.ecosystem.cmp(&right.ecosystem))
+    });
+    result.projects = projects;
     for _ in &result.artifacts {
         result.access_summary.record_artifact_candidate();
     }
@@ -59,14 +78,10 @@ fn is_discovery_boundary(path: &Path, summary: &mut ScanAccessSummary) -> bool {
     let is_artifact_directory = path
         .file_name()
         .and_then(|name| name.to_str())
-        .zip(path.parent())
-        .is_some_and(|(name, parent)| {
-            detector::DETECTORS.iter().any(|detector| {
-                detector.artifact_paths().contains(&name)
-                    && detector.metadata_paths().iter().any(|metadata| {
-                        metadata_file_exists_with_summary(&parent.join(metadata), summary)
-                    })
-            })
+        .is_some_and(|_| {
+            detector::DETECTORS
+                .iter()
+                .any(|detector| detector.is_artifact_directory_with_summary(path, summary))
         });
 
     #[cfg(target_os = "macos")]

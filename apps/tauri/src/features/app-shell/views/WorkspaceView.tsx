@@ -11,6 +11,7 @@ import {
   recommendationClass,
   recommendationLabel,
   selectedCandidateBytes,
+  technologyLabel,
 } from '../../../model/presentation';
 import type {
   ArtifactAnalysis,
@@ -233,7 +234,7 @@ function WorkspaceResults(props: WorkspaceResultsProps) {
     return (
       <EmptyState
         icon={<FolderIcon />}
-        message="Choose a workspace folder and click Analyze Workspace to find Rust, Node, and Java artifacts."
+        message="Choose a workspace folder and click Analyze Workspace to find supported development artifacts."
       />
     );
   }
@@ -256,6 +257,12 @@ function WorkspaceResults(props: WorkspaceResultsProps) {
           active={props.sort.column === 'project'}
           direction={props.sort.direction}
           onSort={() => props.onSort('project')}
+        />
+        <SortableHeader
+          label="Type"
+          active={props.sort.column === 'type'}
+          direction={props.sort.direction}
+          onSort={() => props.onSort('type')}
         />
         <SortableHeader
           label="Artifact"
@@ -321,6 +328,9 @@ function WorkspaceResults(props: WorkspaceResultsProps) {
               <span className="result-project" role="cell">
                 <strong>{artifact.project.displayName}</strong>
                 <small title={artifact.project.root}>{artifact.project.root}</small>
+              </span>
+              <span className="result-type" role="cell">
+                {technologyLabel(artifact)}
               </span>
               <span className="result-name result-artifact" role="cell">
                 <ItemIcon kind="folder" />

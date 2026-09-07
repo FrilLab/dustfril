@@ -58,6 +58,7 @@ describe('WorkspaceView information hierarchy', () => {
     );
     expect(screen.getByLabelText('AGE')).toHaveValue('30');
     expect(screen.getByRole('columnheader', { name: 'Project' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Type' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Artifact' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Size' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Modified' })).toBeInTheDocument();

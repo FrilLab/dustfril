@@ -492,8 +492,9 @@ function categoryForEcosystem(
     case 'Java':
       return 'cleanup-java';
     case 'Rust':
-    default:
       return 'cleanup-rust';
+    default:
+      return 'workspace';
   }
 }
 
