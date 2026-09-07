@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppShell } from './AppShell';
 import {
@@ -9,8 +9,11 @@ import {
   loadArtifactSnapshotHistory,
   loadActivityHistory,
   refreshStorageVolume,
+  scanExecutableIntegrity,
+  workflowSecurityScan,
 } from '../../lib/tauri';
 import type { ArtifactSnapshotHistory } from '../../types/workflow';
+import type { IntegrityScanResponse } from '../../types/workflow';
 
 vi.mock('../../lib/tauri', () => ({
   analyzeWorkspace: vi.fn(),
@@ -23,8 +26,10 @@ vi.mock('../../lib/tauri', () => ({
     retentionLimit: 32,
   }),
   refreshStorageVolume: vi.fn(),
+  workflowSecurityScan: vi.fn(),
   loadActivityHistory: vi.fn().mockResolvedValue([]),
   clearActivityHistory: vi.fn().mockResolvedValue(undefined),
+  scanExecutableIntegrity: vi.fn(),
 }));
 
 const analyzedArtifact = {
@@ -66,17 +71,37 @@ const historyEntry = {
 describe('AppShell Overview navigation', () => {
   afterEach(() => vi.clearAllMocks());
 
+  it('runs the GitHub Actions scan only after an explicit click', async () => {
+    vi.mocked(workflowSecurityScan).mockResolvedValue({
+      workflows: [],
+      findings: [],
+      notices: [],
+    });
+
+    render(<AppShell />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Analyze Workspace' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'GitHub Actions' }));
+
+    expect(workflowSecurityScan).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Scan Workflows' }));
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'No workflow files found' })).toBeInTheDocument());
+    expect(workflowSecurityScan).toHaveBeenCalledWith({ root: '/workspace', ecosystems: [] });
+    expect(loadActivityHistory).toHaveBeenCalledOnce();
+  });
+
   it.each([
     ['Rust', false],
     ['Node.js', false],
     ['Java', false],
     ['Cache', true],
-    ['Dependencies', true],
+    ['Dependencies', false],
     ['Artifact History', false],
     ['Activity', false],
     ['Supply Chain', true],
-    ['GitHub Actions', true],
-    ['Executable Integrity', true],
+    ['GitHub Actions', false],
+    ['Executable Integrity', false],
+    ['GitHub Actions', false],
   ])('navigates to the %s module without starting another operation', async (title, planned) => {
     render(<AppShell />);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Analyze Workspace' })).toBeEnabled());
@@ -99,6 +124,36 @@ describe('AppShell Overview navigation', () => {
     await waitFor(() => expect(loadArtifactSnapshotHistory).toHaveBeenCalledWith('/workspace'));
     expect(analyzeWorkspace).not.toHaveBeenCalled();
     expect(screen.getByRole('heading', { name: 'Artifact History' })).toBeInTheDocument();
+  });
+
+  it('keeps an integrity result available after navigating away while scanning', async () => {
+    let resolveScan: ((response: IntegrityScanResponse) => void) | undefined;
+    vi.mocked(scanExecutableIntegrity).mockImplementation(
+      () =>
+        new Promise<IntegrityScanResponse>((resolve) => {
+          resolveScan = resolve;
+        }),
+    );
+
+    render(<AppShell />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Analyze Workspace' })).toBeEnabled());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Executable Integrity' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run integrity scan' }));
+    await waitFor(() => expect(scanExecutableIntegrity).toHaveBeenCalledOnce());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Overview' }));
+    expect(screen.queryByRole('heading', { name: 'git' })).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveScan?.({
+        checks: [{ requestedTool: 'git', status: 'contentChanged' }],
+      });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Executable Integrity' }));
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'git' })).toBeInTheDocument());
+    expect(screen.getByText('Content changed')).toBeInTheDocument();
   });
 
   it('opens the exact Overview artifact in Workspace without selecting it', async () => {
