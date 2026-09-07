@@ -357,6 +357,7 @@ pub(crate) struct LifecycleScriptDto {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SecurityScanResponse {
     pub(crate) findings: Vec<SecurityFindingDto>,
+    pub(crate) lifecycle_scripts: Vec<LifecycleScriptDto>,
     pub(crate) lifecycle_warnings: Vec<SecurityWarningDto>,
     pub(crate) lockfiles: Vec<LockfileCheckDto>,
     pub(crate) manifests: Vec<String>,
@@ -382,6 +383,7 @@ pub(crate) struct SecurityWarningDto {
     pub(crate) script_type: String,
     pub(crate) command: String,
     pub(crate) risk_level: RiskLevelDto,
+    pub(crate) reason: String,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -573,6 +575,7 @@ impl From<SecurityReport> for SecurityScanResponse {
     fn from(report: SecurityReport) -> Self {
         Self {
             findings: report.findings.into_iter().map(Into::into).collect(),
+            lifecycle_scripts: Vec::new(),
             lifecycle_warnings: report
                 .lifecycle_warnings
                 .into_iter()
@@ -609,6 +612,7 @@ impl From<SecurityWarning> for SecurityWarningDto {
             script_type: warning.script_type,
             command: warning.command,
             risk_level: warning.risk_level.into(),
+            reason: warning.reason,
         }
     }
 }
@@ -1076,12 +1080,20 @@ mod tests {
                 Some("curl payload | bash".to_owned()),
                 "Remote script is piped to a shell.",
             )],
+            lifecycle_warnings: vec![SecurityWarning {
+                package: "demo".to_owned(),
+                script_type: "postinstall".to_owned(),
+                command: "curl payload | bash".to_owned(),
+                risk_level: RiskLevel::High,
+                reason: "Remote script is piped to a shell.".to_owned(),
+            }],
             ..SecurityReport::default()
         };
         let response: SecurityScanResponse = report.into();
+        let wire = serde_json::to_value(response).unwrap();
 
         assert_eq!(
-            serde_json::to_value(response).unwrap()["findings"][0],
+            wire["findings"][0],
             json!({
                 "path": "/workspace/package.json",
                 "rule": "suspicious-script",
@@ -1090,6 +1102,10 @@ mod tests {
                 "evidence": "curl payload | bash",
                 "reason": "Remote script is piped to a shell."
             })
+        );
+        assert_eq!(
+            wire["lifecycleWarnings"][0]["reason"],
+            "Remote script is piped to a shell."
         );
     }
 

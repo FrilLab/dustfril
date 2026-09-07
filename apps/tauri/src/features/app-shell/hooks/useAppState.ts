@@ -8,6 +8,7 @@ import {
   executeCleanup,
   loadActivityHistory,
   refreshStorageVolume,
+  securityScan,
 } from '../../../lib/tauri';
 import { categoryConfigs, type SidebarCategory } from '../../../model/categories';
 import {
@@ -22,6 +23,7 @@ import type {
   CleanupResultResponse,
   DeleteMode,
   StorageSummary,
+  SecurityScanResponse,
   VolumeStorage,
 } from '../../../types/workflow';
 import { cleanupAgeOptions, defaultCleanupAgeDays, deleteModes, ecosystems } from '../../../types/workflow';
@@ -53,7 +55,12 @@ export function useAppState() {
     reduceAsyncOperation<WorkspaceAnalysisResponse>,
     idleAsyncOperation<WorkspaceAnalysisResponse>(),
   );
+  const [securityOperation, dispatchSecurityOperation] = useReducer(
+    reduceAsyncOperation<SecurityScanResponse>,
+    idleAsyncOperation<SecurityScanResponse>(),
+  );
   const workspaceRequestRef = useRef(0);
+  const securityRequestRef = useRef(0);
   const actionRequestRef = useRef(0);
 
   useEffect(() => {
@@ -149,6 +156,11 @@ export function useAppState() {
       type: 'invalidate',
       requestId: workspaceRequestRef.current,
     });
+    securityRequestRef.current += 1;
+    dispatchSecurityOperation({
+      type: 'invalidate',
+      requestId: securityRequestRef.current,
+    });
     actionRequestRef.current += 1;
     setRoot(nextRoot);
     setError(null);
@@ -184,6 +196,47 @@ export function useAppState() {
     }
 
     await analyzeWorkspaceWithPolicy(cleanupAgeDays, true, true);
+  }
+
+  async function handleSecurityScan() {
+    if (busyAction !== null || !root) {
+      return;
+    }
+
+    await runAction('security-scan', async () => {
+      const requestId = ++securityRequestRef.current;
+      dispatchSecurityOperation({ type: 'start', requestId });
+
+      try {
+        const response = await securityScan({
+          root,
+          ecosystems: [...ecosystems],
+        });
+
+        dispatchSecurityOperation({
+          type: 'success',
+          requestId,
+          data: response,
+          warnings: response.historyWarning ? [response.historyWarning] : [],
+        });
+
+        if (requestId !== securityRequestRef.current) {
+          return;
+        }
+
+        const refreshedHistory = await loadActivityHistory();
+        if (requestId === securityRequestRef.current) {
+          setHistoryEntries(refreshedHistory);
+        }
+      } catch (invokeError) {
+        dispatchSecurityOperation({
+          type: 'error',
+          requestId,
+          error: String(invokeError),
+        });
+        throw invokeError;
+      }
+    });
   }
 
   async function analyzeWorkspaceWithPolicy(
@@ -462,6 +515,8 @@ export function useAppState() {
     confirmDialogOpen,
     confirmSamplePaths,
     workspaceOperation,
+    securityOperation,
+    canScanSecurity: busyAction === null && root.length > 0,
     canAnalyze,
     canReviewCleanup,
     summary,
@@ -476,6 +531,7 @@ export function useAppState() {
     handleRootChange,
     handleChooseWorkspace,
     handleAnalyzeWorkspace,
+    handleSecurityScan,
     handleCleanupAgeChange,
     handleClearHistory,
     handleRequestCleanup,

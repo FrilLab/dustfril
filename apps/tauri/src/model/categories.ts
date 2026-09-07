@@ -105,9 +105,9 @@ export const categoryConfigs: CategoryConfig[] = [
   {
     key: 'security-supply-chain',
     title: 'Supply Chain',
-    description: 'Future dependency and lifecycle security analysis',
+    description: 'Offline dependency and lifecycle security analysis',
     section: 'security',
-    availability: 'planned',
+    availability: 'available',
   },
   {
     key: 'security-github-actions',

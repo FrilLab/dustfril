@@ -7,6 +7,7 @@ import {
   executeCleanup,
   loadActivityHistory,
   refreshStorageVolume,
+  securityScan,
 } from '../../lib/tauri';
 
 vi.mock('../../lib/tauri', () => ({
@@ -17,6 +18,7 @@ vi.mock('../../lib/tauri', () => ({
   refreshStorageVolume: vi.fn(),
   loadActivityHistory: vi.fn().mockResolvedValue([]),
   clearActivityHistory: vi.fn().mockResolvedValue(undefined),
+  securityScan: vi.fn(),
 }));
 
 const analyzedArtifact = {
@@ -66,7 +68,7 @@ describe('AppShell Overview navigation', () => {
     ['Dependencies', true],
     ['Artifact History', true],
     ['Activity', false],
-    ['Supply Chain', true],
+    ['Supply Chain', false],
     ['GitHub Actions', true],
     ['Executable Integrity', true],
   ])('navigates to the %s module without starting another operation', async (title, planned) => {
@@ -140,6 +142,33 @@ describe('AppShell Overview navigation', () => {
     expect(screen.getByRole('complementary', { name: 'Artifact inspector' })).toBeInTheDocument();
     expect(screen.getAllByText('/workspace/dustfril/target').length).toBeGreaterThan(0);
     expect(screen.getByRole('checkbox')).not.toBeChecked();
+  });
+
+  it('runs Supply Chain only after an explicit click and refreshes one history result', async () => {
+    vi.mocked(securityScan).mockResolvedValue({
+      findings: [],
+      lifecycleScripts: [],
+      lifecycleWarnings: [],
+      lockfiles: [
+        { path: '/workspace/package-lock.json', kind: 'PackageLockJson', status: 'Clean' },
+      ],
+      manifests: ['/workspace/package.json'],
+    });
+
+    render(<AppShell />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Analyze Workspace' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Supply Chain' }));
+
+    expect(screen.getByRole('heading', { name: 'Ready for an explicit scan' })).toBeInTheDocument();
+    expect(securityScan).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Scan Supply Chain' }));
+    await waitFor(() => expect(securityScan).toHaveBeenCalledOnce());
+    expect(securityScan).toHaveBeenCalledWith({
+      root: '/workspace',
+      ecosystems: ['Rust', 'Node', 'Java'],
+    });
+    expect(screen.getByRole('heading', { name: 'Scan completed with zero findings' })).toBeInTheDocument();
   });
 
   it('clears activity history only after confirmation and updates the sidebar count', async () => {

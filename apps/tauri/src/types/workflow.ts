@@ -167,6 +167,7 @@ export type SecurityWarning = {
   scriptType: string;
   command: string;
   riskLevel: RiskLevel;
+  reason: string;
 };
 
 export type LockfileCheck = {
@@ -177,6 +178,7 @@ export type LockfileCheck = {
 
 export type SecurityScanResponse = {
   findings: SecurityFinding[];
+  lifecycleScripts: LifecycleScript[];
   lifecycleWarnings: SecurityWarning[];
   lockfiles: LockfileCheck[];
   manifests: string[];

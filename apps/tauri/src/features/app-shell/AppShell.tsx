@@ -7,6 +7,7 @@ import { useAppState } from './hooks/useAppState';
 import { HistoryView } from './views/HistoryView';
 import { ModulePlaceholderView } from './views/ModulePlaceholderView';
 import { OverviewView } from './views/OverviewView';
+import { SupplyChainView } from './views/SupplyChainView';
 import { WorkspaceView } from './views/WorkspaceView';
 
 export function AppShell() {
@@ -85,7 +86,20 @@ export function AppShell() {
             />
           ) : null}
 
-          {app.activeCategory !== 'overview' && !showingWorkspace && !showingActivity && activeConfig ? (
+          {app.activeCategory === 'security-supply-chain' ? (
+            <SupplyChainView
+              root={app.root}
+              operation={app.securityOperation}
+              canScan={app.canScanSecurity}
+              onScan={app.handleSecurityScan}
+            />
+          ) : null}
+
+          {app.activeCategory !== 'overview' &&
+          !showingWorkspace &&
+          !showingActivity &&
+          app.activeCategory !== 'security-supply-chain' &&
+          activeConfig ? (
             <ModulePlaceholderView
               config={activeConfig}
               onReturnToOverview={() => app.setActiveCategory('overview')}

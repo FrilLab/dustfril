@@ -64,6 +64,7 @@ refreshes set it to `false` so they do not change the generated-artifact baselin
 - Safe cleanup with Trash or permanent delete confirmation
 - Activity history viewer backed by shared, versioned core history storage
 - Explicit scans return the generated-artifact snapshot comparison produced by Core
+- Explicit offline Supply Chain scans expose lifecycle scripts, lockfile status, and dependency-source findings
 
 Activity persistence is auxiliary to scan, cleanup, and security results. If a
 history write fails, the operation response remains available and includes an
@@ -81,7 +82,7 @@ additive `historyWarning` for the desktop status surface.
 
 ## Desktop module navigation
 
-The sidebar keeps the planned Desktop information architecture in
+The sidebar keeps the Desktop information architecture in
 `src/model/categories.ts`:
 
 ```text
@@ -99,7 +100,7 @@ Workspace
   Activity
 
 Security
-  Supply Chain (planned)
+  Supply Chain
   GitHub Actions (planned)
   Executable Integrity (planned)
 ```

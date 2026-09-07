@@ -587,7 +587,13 @@ async fn security_scan(options: RunOptions) -> Result<SecurityScanResponse, Stri
             }
         };
 
+        let lifecycle_scripts = api::audit(&root, &ecosystems)
+            .map_err(|error| error.to_string())?
+            .into_iter()
+            .map(Into::into)
+            .collect();
         let mut response: SecurityScanResponse = report.clone().into();
+        response.lifecycle_scripts = lifecycle_scripts;
         response.history_warning = match history::record_security_scan(&root, &ecosystems, &report)
         {
             Ok(()) => None,
