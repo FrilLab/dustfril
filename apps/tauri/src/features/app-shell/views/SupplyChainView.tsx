@@ -92,7 +92,7 @@ function SupplyChainResults({
   const findings = report.findings ?? [];
   const lifecycleFindings = findings.filter((finding) => finding.rule === 'suspicious-script');
   const dependencyFindings = findings.filter((finding) => finding.rule !== 'suspicious-script');
-  const highestRisk = highestRiskLevel(findings);
+  const highestRisk = highestRiskLevel(findings, lifecycleScripts);
   const hasSupportedInput =
     report.manifests.length > 0 || report.lockfiles.length > 0 || lifecycleScripts.length > 0;
   const hasUnsupportedScope =
@@ -164,7 +164,6 @@ function SupplyChainResults({
                 key={`${script.package}-${script.scriptType}-${index}`}
                 script={script}
                 finding={findLifecycleFinding(script, lifecycleFindings)}
-                source={sourceForScript(script, report)}
               />
             ))}
           </div>
@@ -233,22 +232,21 @@ function SupplyChainResults({
 function LifecycleScriptCard({
   script,
   finding,
-  source,
 }: {
   script: LifecycleScript;
   finding: SecurityFinding | undefined;
-  source: string;
 }) {
   const risk = finding?.riskLevel ?? script.riskLevel;
+  const cardRisk = finding ? risk : 'None';
 
   return (
-    <article className={`supply-chain-card supply-chain-risk-${risk.toLowerCase()}`}>
+    <article className={`supply-chain-card supply-chain-risk-${cardRisk.toLowerCase()}`}>
       <div className="supply-chain-card-header">
         <div>
           <span className="supply-chain-card-kicker">{script.scriptType}</span>
           <h3>{script.package}</h3>
         </div>
-        <span className="supply-chain-risk-badge">{finding ? risk : 'Safe'}</span>
+        <span className="supply-chain-risk-badge">{finding ? risk : 'No finding'}</span>
       </div>
       <dl className="supply-chain-details">
         <div>
@@ -257,7 +255,11 @@ function LifecycleScriptCard({
         </div>
         <div>
           <dt>Source</dt>
-          <dd title={source}>{source}</dd>
+          <dd title={script.manifestPath}>{script.manifestPath}</dd>
+        </div>
+        <div>
+          <dt>Core risk classification</dt>
+          <dd>{script.riskLevel}</dd>
         </div>
         <div>
           <dt>Command</dt>
@@ -349,16 +351,6 @@ function findLifecycleFinding(script: LifecycleScript, findings: SecurityFinding
   );
 }
 
-function sourceForScript(script: LifecycleScript, report: SecurityScanResponse) {
-  const finding = report.findings.find(
-    (candidate) =>
-      candidate.rule === 'suspicious-script' &&
-      candidate.package === script.package &&
-      candidate.evidence === script.command,
-  );
-  return finding?.path ?? report.manifests.find((path) => fileName(path) === 'package.json') ?? 'package.json';
-}
-
 function scanContext(report: SecurityScanResponse, scripts: LifecycleScript[]) {
   const context = new Set<string>();
   if (report.manifests.some((path) => fileName(path) === 'package.json') || scripts.length) {
@@ -379,11 +371,13 @@ function scanContext(report: SecurityScanResponse, scripts: LifecycleScript[]) {
   return [...context];
 }
 
-function highestRiskLevel(findings: SecurityFinding[]): RiskLevel | null {
+function highestRiskLevel(findings: SecurityFinding[], scripts: LifecycleScript[]): RiskLevel | null {
   const order: RiskLevel[] = ['None', 'Low', 'Medium', 'High', 'Critical'];
-  return findings.reduce<RiskLevel | null>((highest, finding) => {
-    if (!highest || order.indexOf(finding.riskLevel) > order.indexOf(highest)) {
-      return finding.riskLevel;
+  return [...findings.map((finding) => finding.riskLevel), ...scripts.map((script) => script.riskLevel)].reduce<
+    RiskLevel | null
+  >((highest, risk) => {
+    if (!highest || order.indexOf(risk) > order.indexOf(highest)) {
+      return risk;
     }
     return highest;
   }, null);

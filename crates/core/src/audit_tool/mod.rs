@@ -28,22 +28,26 @@ pub(crate) fn suspicious_command_rule(
 }
 
 pub fn security_scan(root: &Path) -> DustResult<Vec<SecurityWarning>> {
-    lifecycle::audit_scan(root).map(|scripts| {
-        scripts
-            .into_iter()
-            .filter_map(|script| {
-                let rule = rule::find(&script.command)?;
+    audit_scan(root).map(|scripts| security_warnings(&scripts))
+}
 
-                Some(SecurityWarning {
-                    package: script.package,
-                    script_type: script.script_type.to_string(),
-                    command: script.command,
-                    risk_level: rule.risk_level,
-                    reason: rule.reason.to_string(),
-                })
+/// Converts an already collected lifecycle audit into suspicious-script warnings.
+/// Keeping this separate lets complete security reports reuse one filesystem traversal.
+pub fn security_warnings(scripts: &[LifecycleScript]) -> Vec<SecurityWarning> {
+    scripts
+        .iter()
+        .filter_map(|script| {
+            let rule = rule::find(&script.command)?;
+
+            Some(SecurityWarning {
+                package: script.package.clone(),
+                script_type: script.script_type.to_string(),
+                command: script.command.clone(),
+                risk_level: rule.risk_level,
+                reason: rule.reason.to_string(),
             })
-            .collect()
-    })
+        })
+        .collect()
 }
 
 #[cfg(test)]

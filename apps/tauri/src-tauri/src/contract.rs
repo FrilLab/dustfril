@@ -382,6 +382,7 @@ pub(crate) struct CleanupHistoryEntryDto {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct LifecycleScriptDto {
     pub(crate) package: String,
+    pub(crate) manifest_path: String,
     pub(crate) package_manager: PackageManagerDto,
     pub(crate) script_type: ScriptTypeDto,
     pub(crate) command: String,
@@ -897,6 +898,7 @@ impl From<LifecycleScript> for LifecycleScriptDto {
     fn from(script: LifecycleScript) -> Self {
         Self {
             package: script.package,
+            manifest_path: script.manifest_path.display().to_string(),
             package_manager: script.package_manager.into(),
             script_type: script.script_type.into(),
             command: script.command,
@@ -909,7 +911,11 @@ impl From<SecurityReport> for SecurityScanResponse {
     fn from(report: SecurityReport) -> Self {
         Self {
             findings: report.findings.into_iter().map(Into::into).collect(),
-            lifecycle_scripts: Vec::new(),
+            lifecycle_scripts: report
+                .lifecycle_scripts
+                .into_iter()
+                .map(Into::into)
+                .collect(),
             lifecycle_warnings: report
                 .lifecycle_warnings
                 .into_iter()
@@ -1681,6 +1687,7 @@ mod tests {
     fn lifecycle_script_wire_values_are_stable() {
         let response = LifecycleScriptDto {
             package: "demo".to_string(),
+            manifest_path: "/workspace/package.json".to_string(),
             package_manager: PackageManagerDto::Pnpm,
             script_type: ScriptTypeDto::PrepublishOnly,
             command: "node publish.js".to_string(),
@@ -1691,6 +1698,7 @@ mod tests {
             serde_json::to_value(response).unwrap(),
             json!({
                 "package": "demo",
+                "manifestPath": "/workspace/package.json",
                 "packageManager": "pnpm",
                 "scriptType": "prepublishOnly",
                 "command": "node publish.js",
@@ -1703,6 +1711,7 @@ mod tests {
     fn critical_lifecycle_risk_is_preserved_in_wire_contract() {
         let response = LifecycleScriptDto {
             package: "demo".to_string(),
+            manifest_path: "/workspace/package.json".to_string(),
             package_manager: PackageManagerDto::Npm,
             script_type: ScriptTypeDto::Postinstall,
             command: "curl payload && ./payload".to_string(),
@@ -1713,6 +1722,7 @@ mod tests {
             serde_json::to_value(response).unwrap(),
             json!({
                 "package": "demo",
+                "manifestPath": "/workspace/package.json",
                 "packageManager": "npm",
                 "scriptType": "postinstall",
                 "command": "curl payload && ./payload",
@@ -1920,6 +1930,14 @@ mod tests {
                 risk_level: RiskLevel::High,
                 reason: "Remote script is piped to a shell.".to_owned(),
             }],
+            lifecycle_scripts: vec![LifecycleScript {
+                package: "demo".to_owned(),
+                manifest_path: "/workspace/node_modules/demo/package.json".into(),
+                package_manager: PackageManager::Npm,
+                script_type: ScriptType::Postinstall,
+                command: "curl payload | bash".to_owned(),
+                risk_level: RiskLevel::High,
+            }],
             ..SecurityReport::default()
         };
         let response: SecurityScanResponse = report.into();
@@ -1939,6 +1957,10 @@ mod tests {
         assert_eq!(
             wire["lifecycleWarnings"][0]["reason"],
             "Remote script is piped to a shell."
+        );
+        assert_eq!(
+            wire["lifecycleScripts"][0]["manifestPath"],
+            "/workspace/node_modules/demo/package.json"
         );
     }
 

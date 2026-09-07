@@ -67,6 +67,10 @@ fn audit_scan_detects_pnpm_dependency_lifecycle_scripts() {
 
     assert_eq!(scripts.len(), 1);
     assert_eq!(scripts[0].package, "left-pad");
+    assert_eq!(
+        scripts[0].manifest_path,
+        dependency_dir.join("package.json")
+    );
     assert_eq!(scripts[0].package_manager, PackageManager::Pnpm);
     assert_eq!(scripts[0].script_type, ScriptType::Postinstall);
     assert_eq!(scripts[0].risk_level, RiskLevel::High);

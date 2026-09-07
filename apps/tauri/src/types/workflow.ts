@@ -153,6 +153,7 @@ export type CleanupResultResponse = {
 
 export type LifecycleScript = {
   package: string;
+  manifestPath: string;
   packageManager: PackageManager;
   scriptType: ScriptType;
   command: string;
