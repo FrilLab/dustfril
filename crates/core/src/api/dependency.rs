@@ -1,8 +1,10 @@
 use std::path::{Path, PathBuf};
 
+use sha2::{Digest, Sha256};
+
 use crate::{
     dependency, dependency_baseline,
-    error::DustResult,
+    error::{DustError, DustResult},
     models::{DependencyDiff, DependencyReport, Ecosystem},
 };
 
@@ -23,6 +25,18 @@ pub fn dependency_exposure_report(
     ecosystems: &[Ecosystem],
 ) -> DustResult<Vec<DependencyReport>> {
     dependency_report(root, ecosystems)
+}
+
+/// Returns a stable identifier for the structured inventory observed by a
+/// caller. The identifier lets an integration bind an explicit baseline
+/// acceptance to the inventory that was shown for review.
+pub fn dependency_inventory_fingerprint(reports: &[DependencyReport]) -> DustResult<String> {
+    let serialized = serde_json::to_vec(reports).map_err(|error| {
+        DustError::DependencyState(format!(
+            "failed to fingerprint dependency inventory: {error}"
+        ))
+    })?;
+    Ok(format!("{:x}", Sha256::digest(serialized)))
 }
 
 /// Returns the OS-specific local path used for dependency baselines.
@@ -136,5 +150,38 @@ mod tests {
         accept_dependency_baseline(temp_dir.path(), &current_reports, &baseline_path).unwrap();
         let accepted = dependency_diff(temp_dir.path(), &current_reports, &baseline_path).unwrap();
         assert!(!accepted.has_changes());
+    }
+
+    #[test]
+    fn api_fingerprint_is_stable_and_changes_with_the_observed_inventory() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(
+            temp_dir.path().join("package.json"),
+            r#"{"name":"demo","dependencies":{"left-pad":"1.0.0"}}"#,
+        )
+        .unwrap();
+        fs::write(
+            temp_dir.path().join("package-lock.json"),
+            r#"{"lockfileVersion":3,"packages":{"":{"name":"demo"},"node_modules/left-pad":{"version":"1.0.0"}}}"#,
+        )
+        .unwrap();
+
+        let first = dependency_report(temp_dir.path(), &[Ecosystem::Node]).unwrap();
+        let first_fingerprint = dependency_inventory_fingerprint(&first).unwrap();
+        assert_eq!(
+            first_fingerprint,
+            dependency_inventory_fingerprint(&first).unwrap()
+        );
+
+        fs::write(
+            temp_dir.path().join("package-lock.json"),
+            r#"{"lockfileVersion":3,"packages":{"":{"name":"demo"},"node_modules/left-pad":{"version":"2.0.0"}}}"#,
+        )
+        .unwrap();
+        let changed = dependency_report(temp_dir.path(), &[Ecosystem::Node]).unwrap();
+        assert_ne!(
+            first_fingerprint,
+            dependency_inventory_fingerprint(&changed).unwrap()
+        );
     }
 }

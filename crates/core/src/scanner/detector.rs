@@ -3,6 +3,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use walkdir::WalkDir;
+
 use crate::models::{
     Artifact, Ecosystem, ProjectIdentity, ProjectTechnology, ScanAccessSummary, TechnologyEvidence,
 };
@@ -43,7 +45,29 @@ pub(crate) fn metadata_text_with_summary(
 }
 
 fn metadata_directory_exists(path: &Path) -> bool {
-    fs::metadata(path).is_ok_and(|metadata| metadata.is_dir())
+    fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_dir())
+}
+
+fn metadata_file_exists_without_following_symlink(
+    path: &Path,
+    summary: Option<&mut ScanAccessSummary>,
+) -> bool {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_file() => {
+            if let Some(summary) = summary {
+                summary.record_metadata_file();
+            }
+            true
+        }
+        Ok(_) => false,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+        Err(error) => {
+            if let Some(summary) = summary {
+                summary.record_failure(path, &error.to_string());
+            }
+            false
+        }
+    }
 }
 
 fn metadata_text(path: &Path) -> Option<String> {
@@ -61,6 +85,25 @@ fn evidence(path: impl Into<PathBuf>, detail: &str) -> TechnologyEvidence {
 
 fn identity(root: PathBuf, ecosystem: Ecosystem, technology: ProjectTechnology) -> ProjectIdentity {
     ProjectIdentity::with_technology(root, ecosystem, technology)
+}
+
+fn artifact_from_directory(
+    path: PathBuf,
+    project: &ProjectIdentity,
+    summary: Option<&mut ScanAccessSummary>,
+) -> Option<Artifact> {
+    let is_directory = match fs::symlink_metadata(&path) {
+        Ok(metadata) => metadata.is_dir(),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+        Err(error) => {
+            if let Some(summary) = summary {
+                summary.record_failure(&path, &error.to_string());
+            }
+            false
+        }
+    };
+
+    is_directory.then(|| Artifact::for_project(path, project.clone()))
 }
 
 /// Registered detectors for all supported ecosystems.
@@ -178,6 +221,15 @@ pub trait Detector: Sync {
         self.artifact_paths().contains(&artifact_name)
     }
 
+    /// Returns artifact names that may be owned by the project at `root`.
+    /// Detectors can extend this for safe, metadata-validated name patterns.
+    fn artifact_names(&self, _root: &Path) -> Vec<String> {
+        self.artifact_paths()
+            .iter()
+            .map(|name| (*name).to_owned())
+            .collect()
+    }
+
     fn artifacts_for_project_with_summary(
         &self,
         root: &Path,
@@ -185,23 +237,13 @@ pub trait Detector: Sync {
         mut summary: Option<&mut ScanAccessSummary>,
     ) -> Vec<Artifact> {
         let mut artifacts = Vec::new();
-        for name in self.artifact_paths() {
-            if !self.artifact_path_is_valid(root, name, summary.as_deref_mut()) {
+        for name in self.artifact_names(root) {
+            if !self.artifact_path_is_valid(root, &name, summary.as_deref_mut()) {
                 continue;
             }
-            let path = root.join(name);
-            let is_directory = match fs::symlink_metadata(&path) {
-                Ok(metadata) => metadata.is_dir(),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
-                Err(error) => {
-                    if let Some(summary) = summary.as_deref_mut() {
-                        summary.record_failure(&path, &error.to_string());
-                    }
-                    false
-                }
-            };
-            if is_directory {
-                artifacts.push(Artifact::for_project(path, project.clone()));
+            let path = root.join(&name);
+            if let Some(artifact) = artifact_from_directory(path, project, summary.as_deref_mut()) {
+                artifacts.push(artifact);
             }
         }
         artifacts
@@ -537,6 +579,29 @@ impl Detector for CMakeDetector {
         &["build", "cmake-build-debug", "cmake-build-release"]
     }
 
+    fn artifact_names(&self, root: &Path) -> Vec<String> {
+        let mut names = self
+            .artifact_paths()
+            .iter()
+            .map(|name| (*name).to_owned())
+            .collect::<Vec<_>>();
+        const PREFIX: &str = "cmake-build-";
+
+        if let Ok(entries) = fs::read_dir(root) {
+            names.extend(entries.flatten().filter_map(|entry| {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                (name.starts_with(PREFIX)
+                    && name.len() > PREFIX.len()
+                    && entry.file_type().is_ok_and(|file_type| file_type.is_dir()))
+                .then_some(name)
+            }));
+        }
+
+        names.sort_unstable();
+        names.dedup();
+        names
+    }
+
     fn ecosystem(&self) -> Ecosystem {
         Ecosystem::CMake
     }
@@ -571,15 +636,20 @@ impl Detector for CMakeDetector {
         artifact_name: &str,
         mut summary: Option<&mut ScanAccessSummary>,
     ) -> bool {
-        if !self.artifact_paths().contains(&artifact_name) {
+        if artifact_name != "build"
+            && !(artifact_name.starts_with("cmake-build-")
+                && artifact_name.len() > "cmake-build-".len())
+        {
             return false;
         }
         let path = root.join(artifact_name);
         ["CMakeCache.txt", "cmake_install.cmake"]
             .iter()
             .any(|name| match summary.as_deref_mut() {
-                Some(summary) => metadata_file_exists_with_summary(&path.join(name), summary),
-                None => path.join(name).is_file(),
+                Some(summary) => {
+                    metadata_file_exists_without_following_symlink(&path.join(name), Some(summary))
+                }
+                None => metadata_file_exists_without_following_symlink(&path.join(name), None),
             })
             || metadata_directory_exists(&path.join("CMakeFiles"))
     }
@@ -714,26 +784,86 @@ impl Detector for PythonDetector {
     fn project_with_summary(
         &self,
         root: &Path,
-        _scan_root: &Path,
+        scan_root: &Path,
         summary: &mut ScanAccessSummary,
     ) -> Option<ProjectIdentity> {
         let metadata = python_metadata_with_summary(root, summary).collect::<Vec<_>>();
-        if metadata.is_empty() {
+        if !metadata.is_empty() {
+            return Some(python_identity(root.to_path_buf(), metadata));
+        }
+
+        if !root
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(is_python_cache_name)
+        {
             return None;
         }
-        Some(identity(
-            root.to_path_buf(),
-            Ecosystem::Python,
-            ProjectTechnology::new(
-                vec!["Python".to_owned()],
-                None,
-                None,
-                metadata
-                    .into_iter()
-                    .map(|path| evidence(path, "Python project metadata"))
-                    .collect(),
-            ),
-        ))
+
+        let project_root = nearest_python_project_root(root, scan_root, summary)?;
+        let metadata = python_metadata_with_summary(&project_root, summary).collect::<Vec<_>>();
+        (!metadata.is_empty()).then(|| python_identity(project_root, metadata))
+    }
+
+    fn artifacts_for_project_with_summary(
+        &self,
+        root: &Path,
+        project: &ProjectIdentity,
+        mut summary: Option<&mut ScanAccessSummary>,
+    ) -> Vec<Artifact> {
+        let is_nested_cache = root != project.root
+            && root.starts_with(&project.root)
+            && root
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(is_python_cache_name);
+        if is_nested_cache {
+            return artifact_from_directory(root.to_path_buf(), project, summary)
+                .into_iter()
+                .collect();
+        }
+
+        let mut candidate_paths = self
+            .artifact_names(root)
+            .into_iter()
+            .map(|name| root.join(name))
+            .collect::<Vec<_>>();
+        candidate_paths.extend(python_nested_cache_paths(root));
+        candidate_paths.sort_unstable();
+        candidate_paths.dedup();
+
+        let mut artifacts = Vec::new();
+        for path in candidate_paths {
+            let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+                continue;
+            };
+            if !self.artifact_path_is_valid(root, name, summary.as_deref_mut()) {
+                continue;
+            }
+            if let Some(artifact) = artifact_from_directory(path, project, summary.as_deref_mut()) {
+                artifacts.push(artifact);
+            }
+        }
+        artifacts
+    }
+
+    fn is_artifact_directory_with_summary(
+        &self,
+        path: &Path,
+        summary: &mut ScanAccessSummary,
+    ) -> bool {
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            return false;
+        };
+        if is_python_cache_name(name) {
+            let scan_root = summary.root.clone();
+            return nearest_python_project_root(path, &scan_root, summary).is_some();
+        }
+
+        path.parent().is_some_and(|parent| {
+            self.matches_with_summary(parent, summary)
+                && self.artifact_path_is_valid(parent, name, None)
+        })
     }
 
     fn artifact_path_is_valid(
@@ -748,6 +878,80 @@ impl Detector for PythonDetector {
             true
         }
     }
+}
+
+fn python_identity(root: PathBuf, metadata: Vec<PathBuf>) -> ProjectIdentity {
+    identity(
+        root,
+        Ecosystem::Python,
+        ProjectTechnology::new(
+            vec!["Python".to_owned()],
+            None,
+            None,
+            metadata
+                .into_iter()
+                .map(|path| evidence(path, "Python project metadata"))
+                .collect(),
+        ),
+    )
+}
+
+fn is_python_cache_name(name: &str) -> bool {
+    matches!(
+        name,
+        "__pycache__" | ".pytest_cache" | ".mypy_cache" | ".ruff_cache"
+    )
+}
+
+fn nearest_python_project_root(
+    path: &Path,
+    scan_root: &Path,
+    summary: &mut ScanAccessSummary,
+) -> Option<PathBuf> {
+    path.ancestors()
+        .skip(1)
+        .take_while(|ancestor| ancestor.starts_with(scan_root))
+        .find(|ancestor| {
+            python_metadata_with_summary(ancestor, summary)
+                .next()
+                .is_some()
+        })
+        .map(Path::to_path_buf)
+}
+
+fn python_nested_cache_paths(root: &Path) -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    let mut entries = WalkDir::new(root).min_depth(1).into_iter();
+
+    while let Some(entry) = entries.next() {
+        let Ok(entry) = entry else {
+            continue;
+        };
+        if !entry.file_type().is_dir() {
+            continue;
+        }
+
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        if is_python_cache_name(name) {
+            paths.push(path.to_path_buf());
+            entries.skip_current_dir();
+            continue;
+        }
+
+        let is_known_artifact = DETECTORS
+            .iter()
+            .any(|detector| detector.artifact_paths().contains(&name))
+            || (name.starts_with("cmake-build-") && name.len() > "cmake-build-".len());
+        let is_nested_project = DETECTORS.iter().any(|detector| detector.matches(path));
+        if is_known_artifact || is_nested_project {
+            entries.skip_current_dir();
+        }
+    }
+
+    paths
 }
 
 fn python_metadata(root: &Path) -> impl Iterator<Item = PathBuf> {

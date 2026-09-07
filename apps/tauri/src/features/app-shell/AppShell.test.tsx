@@ -1,22 +1,37 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppShell } from './AppShell';
 import {
   analyzeWorkspace,
+  chooseWorkspaceFolder,
   clearActivityHistory,
   executeCleanup,
+  loadArtifactSnapshotHistory,
   loadActivityHistory,
   refreshStorageVolume,
+  securityScan,
+  scanExecutableIntegrity,
+  workflowSecurityScan,
 } from '../../lib/tauri';
+import type { ArtifactSnapshotHistory } from '../../types/workflow';
+import type { IntegrityScanResponse } from '../../types/workflow';
 
 vi.mock('../../lib/tauri', () => ({
   analyzeWorkspace: vi.fn(),
   chooseWorkspaceFolder: vi.fn(),
   defaultRoot: vi.fn().mockResolvedValue('/workspace'),
   executeCleanup: vi.fn(),
+  loadArtifactSnapshotHistory: vi.fn().mockResolvedValue({
+    entries: [],
+    retainedSnapshotCount: 0,
+    retentionLimit: 32,
+  }),
   refreshStorageVolume: vi.fn(),
+  workflowSecurityScan: vi.fn(),
   loadActivityHistory: vi.fn().mockResolvedValue([]),
   clearActivityHistory: vi.fn().mockResolvedValue(undefined),
+  securityScan: vi.fn(),
+  scanExecutableIntegrity: vi.fn(),
 }));
 
 const analyzedArtifact = {
@@ -58,17 +73,36 @@ const historyEntry = {
 describe('AppShell Overview navigation', () => {
   afterEach(() => vi.clearAllMocks());
 
+  it('runs the GitHub Actions scan only after an explicit click', async () => {
+    vi.mocked(workflowSecurityScan).mockResolvedValue({
+      workflows: [],
+      findings: [],
+      notices: [],
+    });
+
+    render(<AppShell />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Analyze Workspace' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'GitHub Actions' }));
+
+    expect(workflowSecurityScan).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Scan Workflows' }));
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'No workflow files found' })).toBeInTheDocument());
+    expect(workflowSecurityScan).toHaveBeenCalledWith({ root: '/workspace', ecosystems: [] });
+    expect(loadActivityHistory).toHaveBeenCalledOnce();
+  });
+
   it.each([
     ['Rust', false],
     ['Node.js', false],
     ['Java', false],
     ['Cache', true],
-    ['Dependencies', true],
-    ['Artifact History', true],
+    ['Dependencies', false],
+    ['Artifact History', false],
     ['Activity', false],
-    ['Supply Chain', true],
-    ['GitHub Actions', true],
-    ['Executable Integrity', true],
+    ['Supply Chain', false],
+    ['GitHub Actions', false],
+    ['Executable Integrity', false],
   ])('navigates to the %s module without starting another operation', async (title, planned) => {
     render(<AppShell />);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Analyze Workspace' })).toBeEnabled());
@@ -80,6 +114,47 @@ describe('AppShell Overview navigation', () => {
       expect(screen.getByRole('heading', { name: `${title} is planned` })).toBeInTheDocument();
     }
     expect(analyzeWorkspace).not.toHaveBeenCalled();
+  });
+
+  it('loads artifact history through a read-only query without starting a scan', async () => {
+    render(<AppShell />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Analyze Workspace' })).toBeEnabled());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Artifact History' }));
+
+    await waitFor(() => expect(loadArtifactSnapshotHistory).toHaveBeenCalledWith('/workspace'));
+    expect(analyzeWorkspace).not.toHaveBeenCalled();
+    expect(screen.getByRole('heading', { name: 'Artifact History' })).toBeInTheDocument();
+  });
+
+  it('keeps an integrity result available after navigating away while scanning', async () => {
+    let resolveScan: ((response: IntegrityScanResponse) => void) | undefined;
+    vi.mocked(scanExecutableIntegrity).mockImplementation(
+      () =>
+        new Promise<IntegrityScanResponse>((resolve) => {
+          resolveScan = resolve;
+        }),
+    );
+
+    render(<AppShell />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Analyze Workspace' })).toBeEnabled());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Executable Integrity' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run integrity scan' }));
+    await waitFor(() => expect(scanExecutableIntegrity).toHaveBeenCalledOnce());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Overview' }));
+    expect(screen.queryByRole('heading', { name: 'git' })).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveScan?.({
+        checks: [{ requestedTool: 'git', status: 'contentChanged' }],
+      });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Executable Integrity' }));
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'git' })).toBeInTheDocument());
+    expect(screen.getByText('Content changed')).toBeInTheDocument();
   });
 
   it('opens the exact Overview artifact in Workspace without selecting it', async () => {
@@ -140,6 +215,49 @@ describe('AppShell Overview navigation', () => {
     expect(screen.getByRole('complementary', { name: 'Artifact inspector' })).toBeInTheDocument();
     expect(screen.getAllByText('/workspace/dustfril/target').length).toBeGreaterThan(0);
     expect(screen.getByRole('checkbox')).not.toBeChecked();
+  });
+
+  it('runs Supply Chain only after an explicit click and refreshes one history result', async () => {
+    vi.mocked(securityScan).mockResolvedValue({
+      findings: [],
+      lifecycleScripts: [],
+      lifecycleWarnings: [],
+      lockfiles: [
+        { path: '/workspace/package-lock.json', kind: 'PackageLockJson', status: 'Clean' },
+      ],
+      manifests: ['/workspace/package.json'],
+    });
+
+    render(<AppShell />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Analyze Workspace' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Supply Chain' }));
+
+    expect(screen.getByRole('heading', { name: 'Ready for an explicit scan' })).toBeInTheDocument();
+    expect(securityScan).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Scan Supply Chain' }));
+    await waitFor(() => expect(securityScan).toHaveBeenCalledOnce());
+    expect(securityScan).toHaveBeenCalledWith({
+      root: '/workspace',
+      ecosystems: [
+        'Rust',
+        'Node',
+        'Java',
+        'CMake',
+        'DotNet',
+        'Python',
+        'Swift',
+        'Dart',
+        'Flutter',
+        'Kotlin',
+        'Php',
+        'Elixir',
+        'Zig',
+        'Go',
+        'Ruby',
+      ],
+    });
+    expect(screen.getByRole('heading', { name: 'Scan completed with zero findings' })).toBeInTheDocument();
   });
 
   it('clears activity history only after confirmation and updates the sidebar count', async () => {
@@ -310,5 +428,44 @@ describe('AppShell Overview navigation', () => {
     await waitFor(() => expect(refreshStorageVolume).toHaveBeenCalledWith('/workspace'));
     fireEvent.click(screen.getByRole('button', { name: 'Overview' }));
     expect(screen.getByText('300 GB used of 512 GB')).toBeInTheDocument();
+  });
+
+  it('ignores a stale artifact history response after the workspace changes', async () => {
+    let resolveOriginal: ((history: ArtifactSnapshotHistory) => void) | undefined;
+    vi.mocked(loadArtifactSnapshotHistory).mockImplementation((selectedRoot) => {
+      if (selectedRoot === '/workspace') {
+        return new Promise((resolve) => {
+          resolveOriginal = resolve;
+        });
+      }
+
+      return Promise.resolve({ entries: [], retainedSnapshotCount: 0, retentionLimit: 32 });
+    });
+    vi.mocked(chooseWorkspaceFolder).mockResolvedValue('/other');
+
+    render(<AppShell />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Analyze Workspace' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Artifact History' }));
+    await waitFor(() => expect(loadArtifactSnapshotHistory).toHaveBeenCalledWith('/workspace'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'workspace' }));
+    await waitFor(() => expect(screen.getByText('/other', { selector: 'p.heading-path' })).toBeInTheDocument());
+    await waitFor(() => expect(loadArtifactSnapshotHistory).toHaveBeenCalledWith('/other'));
+
+    resolveOriginal?.({
+      entries: [
+        {
+          status: 'baselineCreated',
+          snapshot: { workspaceId: '/workspace', timestamp: '2026-09-01T00:00:00Z', artifacts: [] },
+          previousSnapshot: null,
+          changes: [],
+        },
+      ],
+      retainedSnapshotCount: 1,
+      retentionLimit: 32,
+    });
+
+    await waitFor(() => expect(screen.getByText(/No scan has been run for this workspace yet/)).toBeInTheDocument());
+    expect(screen.queryByText('Baseline created')).not.toBeInTheDocument();
   });
 });

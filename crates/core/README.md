@@ -36,7 +36,10 @@ Only existing `target/`, `node_modules/`, and `build/` artifacts are included;
 `Cargo.lock` and ordinary source files are excluded. The first snapshot creates
 a baseline without changes. Later snapshots compare only structured analysis
 metadata and return deterministic new/removed/increased/decreased/unchanged
-states with exact signed byte deltas. The store atomically replaces its file,
+states with exact signed byte deltas. If retention has evicted the predecessor
+of the oldest retained snapshot, read-only history reports that comparison as
+unavailable rather than relabeling it as a new baseline. The store atomically
+replaces its file,
 preserves multiple workspaces, retains at most 32 snapshots per workspace, and
 returns malformed or unsupported state errors explicitly. A persistence error
 does not mutate the caller's completed analysis result. Symlink and canonical

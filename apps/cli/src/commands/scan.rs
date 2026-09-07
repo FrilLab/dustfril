@@ -74,7 +74,18 @@ pub fn execute(args: PathArgs) -> bool {
     format::print_scan_access_summary(&result.access_summary);
 
     if result.artifacts.is_empty() {
-        println!("No artifacts found.");
+        if result.projects.is_empty() {
+            println!("No artifacts found.");
+        } else {
+            println!("No artifacts found. Detected project(s):\n");
+            for project in result.projects {
+                println!(
+                    "  [{}] {}",
+                    project.technology.display_label, project.display_name
+                );
+                println!("      Root: {}", project.root.display());
+            }
+        }
         return true;
     }
 

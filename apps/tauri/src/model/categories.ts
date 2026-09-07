@@ -84,16 +84,16 @@ export const categoryConfigs: CategoryConfig[] = [
   {
     key: 'workspace-dependencies',
     title: 'Dependencies',
-    description: 'Future dependency inventory and comparison',
+    description: 'Manifest and lockfile inventory with explicit baseline comparison',
     section: 'workspace',
-    availability: 'planned',
+    availability: 'available',
   },
   {
     key: 'workspace-artifact-history',
     title: 'Artifact History',
-    description: 'Future generated-artifact history and growth',
+    description: 'Scan access summaries and generated-artifact growth',
     section: 'workspace',
-    availability: 'planned',
+    availability: 'available',
   },
   {
     key: 'workspace-activity',
@@ -105,23 +105,23 @@ export const categoryConfigs: CategoryConfig[] = [
   {
     key: 'security-supply-chain',
     title: 'Supply Chain',
-    description: 'Future dependency and lifecycle security analysis',
+    description: 'Offline dependency and lifecycle security analysis',
     section: 'security',
-    availability: 'planned',
+    availability: 'available',
   },
   {
     key: 'security-github-actions',
     title: 'GitHub Actions',
-    description: 'Future workflow security analysis',
+    description: 'Inspect local GitHub Actions workflows for static security findings',
     section: 'security',
-    availability: 'planned',
+    availability: 'available',
   },
   {
     key: 'security-executable-integrity',
     title: 'Executable Integrity',
-    description: 'Future executable integrity evidence',
+    description: 'Inspect developer-tool paths, hashes, and supported signatures',
     section: 'security',
-    availability: 'planned',
+    availability: 'available',
   },
 ];
 

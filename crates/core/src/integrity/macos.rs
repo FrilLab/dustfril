@@ -243,7 +243,12 @@ mod tests {
         let report = verify(Path::new("/usr/bin/true"));
 
         assert_eq!(report.status, SignatureStatus::Valid);
-        assert_eq!(report.signer.as_deref(), Some("Software Signing"));
+        // The system authority is named "macOS Software Signing" on newer
+        // macOS releases and "Software Signing" on older releases.
+        assert!(matches!(
+            report.signer.as_deref(),
+            Some("Software Signing" | "macOS Software Signing")
+        ));
         assert!(report.team_identifier.is_none());
         assert!(report.failure.is_none());
     }

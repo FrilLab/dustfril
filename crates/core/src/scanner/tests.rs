@@ -622,6 +622,46 @@ fn cmake_named_build_directory_without_metadata_is_not_trusted() {
 }
 
 #[test]
+fn cmake_build_configuration_variants_are_detected_with_build_tree_evidence() {
+    let root = TempDir::new().unwrap();
+    std::fs::write(root.path().join("CMakeLists.txt"), "project(native CXX)\n").unwrap();
+    let build = root.path().join("cmake-build-relwithdebinfo");
+    std::fs::create_dir(&build).unwrap();
+    std::fs::write(
+        build.join("CMakeCache.txt"),
+        "CMAKE_HOME_DIRECTORY:INTERNAL=x\n",
+    )
+    .unwrap();
+
+    let result = scan(root.path(), &[Ecosystem::CMake]).unwrap();
+
+    assert_eq!(result.artifacts.len(), 1);
+    assert_eq!(result.artifacts[0].path, build);
+}
+
+#[cfg(unix)]
+#[test]
+fn cmake_symlinked_build_evidence_is_not_trusted() {
+    use std::os::unix::fs::symlink;
+
+    let root = TempDir::new().unwrap();
+    let external = TempDir::new().unwrap();
+    std::fs::write(root.path().join("CMakeLists.txt"), "project(native CXX)\n").unwrap();
+    let build = root.path().join("build");
+    std::fs::create_dir(&build).unwrap();
+    std::fs::write(external.path().join("CMakeCache.txt"), "external\n").unwrap();
+    symlink(
+        external.path().join("CMakeCache.txt"),
+        build.join("CMakeCache.txt"),
+    )
+    .unwrap();
+
+    let result = scan(root.path(), &[Ecosystem::CMake]).unwrap();
+
+    assert!(result.artifacts.is_empty());
+}
+
+#[test]
 fn dotnet_output_is_scoped_to_each_project_root() {
     let root = TempDir::new().unwrap();
     let project = root.path().join("app");
@@ -657,6 +697,21 @@ fn python_project_artifacts_are_local_and_conservative() {
 
     assert_eq!(paths, [".venv", "build"]);
     assert!(result.artifacts[0].project.technology.display_label == "Python");
+}
+
+#[test]
+fn python_nested_caches_inherit_the_nearest_project_identity() {
+    let root = TempDir::new().unwrap();
+    let project = root.path().join("tool");
+    let cache = project.join("src").join("pkg").join("__pycache__");
+    std::fs::create_dir_all(&cache).unwrap();
+    std::fs::write(project.join("pyproject.toml"), "[project]\nname = 'tool'\n").unwrap();
+
+    let result = scan(root.path(), &[Ecosystem::Python]).unwrap();
+
+    assert_eq!(result.artifacts.len(), 1);
+    assert_eq!(result.artifacts[0].path, cache);
+    assert_eq!(result.artifacts[0].project.root, project);
 }
 
 #[test]
