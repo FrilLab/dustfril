@@ -26,7 +26,7 @@ describe('desktop module navigation', () => {
     ]);
   });
 
-  it('marks only existing workflows as available', () => {
+  it('marks implemented desktop modules as available', () => {
     expect(categoryConfig('cleanup-rust')?.availability).toBe('available');
     expect(categoryConfig('cleanup-node')?.availability).toBe('available');
     expect(categoryConfig('cleanup-java')?.availability).toBe('available');
@@ -35,6 +35,6 @@ describe('desktop module navigation', () => {
     expect(categoryConfig('workspace-dependencies')?.availability).toBe('available');
     expect(categoryConfig('security-github-actions')?.availability).toBe('available');
     expect(categoryConfig('cleanup-cache')?.availability).toBe('planned');
-    expect(categoryConfig('security-supply-chain')?.availability).toBe('planned');
+    expect(categoryConfig('security-supply-chain')?.availability).toBe('available');
   });
 });

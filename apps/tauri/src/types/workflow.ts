@@ -153,6 +153,7 @@ export type CleanupResultResponse = {
 
 export type LifecycleScript = {
   package: string;
+  manifestPath: string;
   packageManager: PackageManager;
   scriptType: ScriptType;
   command: string;
@@ -173,6 +174,7 @@ export type SecurityWarning = {
   scriptType: string;
   command: string;
   riskLevel: RiskLevel;
+  reason: string;
 };
 
 export type LockfileCheck = {
@@ -183,6 +185,7 @@ export type LockfileCheck = {
 
 export type SecurityScanResponse = {
   findings: SecurityFinding[];
+  lifecycleScripts: LifecycleScript[];
   lifecycleWarnings: SecurityWarning[];
   lockfiles: LockfileCheck[];
   manifests: string[];

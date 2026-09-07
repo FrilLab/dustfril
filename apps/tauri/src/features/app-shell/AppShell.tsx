@@ -10,6 +10,7 @@ import { DependenciesView } from './views/DependenciesView';
 import { GithubActionsView } from './views/GithubActionsView';
 import { ModulePlaceholderView } from './views/ModulePlaceholderView';
 import { OverviewView } from './views/OverviewView';
+import { SupplyChainView } from './views/SupplyChainView';
 import { ExecutableIntegrityView } from './views/ExecutableIntegrityView';
 import { WorkspaceView } from './views/WorkspaceView';
 import { ArtifactHistoryView } from './views/ArtifactHistoryView';
@@ -94,6 +95,15 @@ export function AppShell() {
             />
           ) : null}
 
+          {app.activeCategory === 'security-supply-chain' ? (
+            <SupplyChainView
+              root={app.root}
+              operation={app.securityOperation}
+              canScan={app.canScanSecurity}
+              onScan={app.handleSecurityScan}
+            />
+          ) : null}
+
           {showingArtifactHistory ? (
             <ArtifactHistoryView
               root={app.root}
@@ -134,6 +144,7 @@ export function AppShell() {
           {app.activeCategory !== 'overview' &&
           !showingWorkspace &&
           !showingActivity &&
+          app.activeCategory !== 'security-supply-chain' &&
           !showingArtifactHistory &&
           !showingExecutableIntegrity &&
           !showingDependencies &&

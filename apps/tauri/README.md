@@ -68,6 +68,7 @@ refreshes set it to `false` so they do not change the generated-artifact baselin
 - Activity history viewer backed by shared, versioned core history storage
 - Artifact History viewer for bounded scan access summaries and generated-artifact snapshot growth
 - Explicit scans return the generated-artifact snapshot comparison produced by Core
+- Explicit offline Supply Chain scans expose lifecycle scripts, lockfile status, and dependency-source findings
 - Executable Integrity screen exposes non-executing tool path, SHA-256 baseline, and platform signature evidence
 - Explicit local GitHub Actions workflow scans with structured command, permission, and direct secret-exposure findings
 
@@ -107,7 +108,7 @@ Workspace
   Activity
 
 Security
-  Supply Chain (planned)
+  Supply Chain
   GitHub Actions
   Executable Integrity
 ```

@@ -12,6 +12,7 @@ import {
   loadDependencyInventory,
   loadActivityHistory,
   refreshStorageVolume,
+  securityScan,
   workflowSecurityScan,
 } from '../../../lib/tauri';
 import { categoryConfigs, type SidebarCategory } from '../../../model/categories';
@@ -31,6 +32,7 @@ import type {
   DeleteMode,
   DependencyInventoryResponse,
   StorageSummary,
+  SecurityScanResponse,
   VolumeStorage,
   WorkflowScanResponse,
 } from '../../../types/workflow';
@@ -70,6 +72,11 @@ export function useAppState() {
     reduceAsyncOperation<WorkspaceAnalysisResponse>,
     idleAsyncOperation<WorkspaceAnalysisResponse>(),
   );
+  const [securityOperation, dispatchSecurityOperation] = useReducer(
+    reduceAsyncOperation<SecurityScanResponse>,
+    idleAsyncOperation<SecurityScanResponse>(),
+  );
+  const securityRequestRef = useRef(0);
   const [dependencyOperation, dispatchDependencyOperation] = useReducer(
     reduceAsyncOperation<DependencyInventoryResponse>,
     idleAsyncOperation<DependencyInventoryResponse>(),
@@ -212,6 +219,11 @@ export function useAppState() {
       type: 'invalidate',
       requestId: workspaceRequestRef.current,
     });
+    securityRequestRef.current += 1;
+    dispatchSecurityOperation({
+      type: 'invalidate',
+      requestId: securityRequestRef.current,
+    });
     workflowRequestRef.current += 1;
     dispatchWorkflowOperation({
       type: 'invalidate',
@@ -263,6 +275,47 @@ export function useAppState() {
     }
 
     await analyzeWorkspaceWithPolicy(cleanupAgeDays, true, true);
+  }
+
+  async function handleSecurityScan() {
+    if (busyAction !== null || !root) {
+      return;
+    }
+
+    await runAction('security-scan', async () => {
+      const requestId = ++securityRequestRef.current;
+      dispatchSecurityOperation({ type: 'start', requestId });
+
+      try {
+        const response = await securityScan({
+          root,
+          ecosystems: [...ecosystems],
+        });
+
+        dispatchSecurityOperation({
+          type: 'success',
+          requestId,
+          data: response,
+          warnings: response.historyWarning ? [response.historyWarning] : [],
+        });
+
+        if (requestId !== securityRequestRef.current) {
+          return;
+        }
+
+        const refreshedHistory = await loadActivityHistory();
+        if (requestId === securityRequestRef.current) {
+          setHistoryEntries(refreshedHistory);
+        }
+      } catch (invokeError) {
+        dispatchSecurityOperation({
+          type: 'error',
+          requestId,
+          error: String(invokeError),
+        });
+        throw invokeError;
+      }
+    });
   }
 
   async function handleWorkflowSecurityScan() {
@@ -650,6 +703,8 @@ export function useAppState() {
     confirmDialogOpen,
     confirmSamplePaths,
     workspaceOperation,
+    securityOperation,
+    canScanSecurity: busyAction === null && root.length > 0,
     dependencyOperation,
     workflowOperation,
     canAnalyze,
@@ -667,6 +722,7 @@ export function useAppState() {
     handleRootChange,
     handleChooseWorkspace,
     handleAnalyzeWorkspace,
+    handleSecurityScan,
     handleWorkflowSecurityScan,
     handleCleanupAgeChange,
     handleLoadDependencyInventory,

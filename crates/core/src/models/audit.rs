@@ -6,6 +6,7 @@ use super::LockfileCheck;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LifecycleScript {
     pub package: String,
+    pub manifest_path: PathBuf,
     pub package_manager: PackageManager,
     pub script_type: ScriptType,
     pub command: String,
@@ -105,6 +106,8 @@ impl SecurityFinding {
 pub struct SecurityReport {
     /// All findings, including lifecycle warnings and lockfile issues.
     pub findings: Vec<SecurityFinding>,
+    /// All lifecycle scripts discovered during the security scan.
+    pub lifecycle_scripts: Vec<LifecycleScript>,
     /// Lifecycle warnings retained for callers using the original audit model.
     pub lifecycle_warnings: Vec<SecurityWarning>,
     /// Lockfiles inspected while building the report.

