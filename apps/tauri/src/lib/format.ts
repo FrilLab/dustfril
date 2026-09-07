@@ -14,6 +14,14 @@ export function formatBytes(bytes: number) {
   return `${value.toFixed(value >= 10 || exponent === 0 ? 0 : 1)} ${units[exponent]}`;
 }
 
+export function formatSignedBytes(bytes: number) {
+  if (bytes === 0) {
+    return '0 bytes';
+  }
+
+  return `${bytes > 0 ? '+' : '-'}${numberFormatter.format(Math.abs(bytes))} bytes`;
+}
+
 export function formatAge(days: number | null) {
   if (days === null) {
     return 'Unknown';

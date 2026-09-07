@@ -3,13 +3,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppShell } from './AppShell';
 import {
   analyzeWorkspace,
+  chooseWorkspaceFolder,
   clearActivityHistory,
   executeCleanup,
+  loadArtifactSnapshotHistory,
   loadActivityHistory,
   refreshStorageVolume,
   scanExecutableIntegrity,
   workflowSecurityScan,
 } from '../../lib/tauri';
+import type { ArtifactSnapshotHistory } from '../../types/workflow';
 import type { IntegrityScanResponse } from '../../types/workflow';
 
 vi.mock('../../lib/tauri', () => ({
@@ -17,6 +20,11 @@ vi.mock('../../lib/tauri', () => ({
   chooseWorkspaceFolder: vi.fn(),
   defaultRoot: vi.fn().mockResolvedValue('/workspace'),
   executeCleanup: vi.fn(),
+  loadArtifactSnapshotHistory: vi.fn().mockResolvedValue({
+    entries: [],
+    retainedSnapshotCount: 0,
+    retentionLimit: 32,
+  }),
   refreshStorageVolume: vi.fn(),
   workflowSecurityScan: vi.fn(),
   loadActivityHistory: vi.fn().mockResolvedValue([]),
@@ -88,7 +96,7 @@ describe('AppShell Overview navigation', () => {
     ['Java', false],
     ['Cache', true],
     ['Dependencies', false],
-    ['Artifact History', true],
+    ['Artifact History', false],
     ['Activity', false],
     ['Supply Chain', true],
     ['GitHub Actions', false],
@@ -105,6 +113,17 @@ describe('AppShell Overview navigation', () => {
       expect(screen.getByRole('heading', { name: `${title} is planned` })).toBeInTheDocument();
     }
     expect(analyzeWorkspace).not.toHaveBeenCalled();
+  });
+
+  it('loads artifact history through a read-only query without starting a scan', async () => {
+    render(<AppShell />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Analyze Workspace' })).toBeEnabled());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Artifact History' }));
+
+    await waitFor(() => expect(loadArtifactSnapshotHistory).toHaveBeenCalledWith('/workspace'));
+    expect(analyzeWorkspace).not.toHaveBeenCalled();
+    expect(screen.getByRole('heading', { name: 'Artifact History' })).toBeInTheDocument();
   });
 
   it('keeps an integrity result available after navigating away while scanning', async () => {
@@ -349,5 +368,44 @@ describe('AppShell Overview navigation', () => {
     await waitFor(() => expect(refreshStorageVolume).toHaveBeenCalledWith('/workspace'));
     fireEvent.click(screen.getByRole('button', { name: 'Overview' }));
     expect(screen.getByText('300 GB used of 512 GB')).toBeInTheDocument();
+  });
+
+  it('ignores a stale artifact history response after the workspace changes', async () => {
+    let resolveOriginal: ((history: ArtifactSnapshotHistory) => void) | undefined;
+    vi.mocked(loadArtifactSnapshotHistory).mockImplementation((selectedRoot) => {
+      if (selectedRoot === '/workspace') {
+        return new Promise((resolve) => {
+          resolveOriginal = resolve;
+        });
+      }
+
+      return Promise.resolve({ entries: [], retainedSnapshotCount: 0, retentionLimit: 32 });
+    });
+    vi.mocked(chooseWorkspaceFolder).mockResolvedValue('/other');
+
+    render(<AppShell />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Analyze Workspace' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Artifact History' }));
+    await waitFor(() => expect(loadArtifactSnapshotHistory).toHaveBeenCalledWith('/workspace'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'workspace' }));
+    await waitFor(() => expect(screen.getByText('/other', { selector: 'p.heading-path' })).toBeInTheDocument());
+    await waitFor(() => expect(loadArtifactSnapshotHistory).toHaveBeenCalledWith('/other'));
+
+    resolveOriginal?.({
+      entries: [
+        {
+          status: 'baselineCreated',
+          snapshot: { workspaceId: '/workspace', timestamp: '2026-09-01T00:00:00Z', artifacts: [] },
+          previousSnapshot: null,
+          changes: [],
+        },
+      ],
+      retainedSnapshotCount: 1,
+      retentionLimit: 32,
+    });
+
+    await waitFor(() => expect(screen.getByText(/No scan has been run for this workspace yet/)).toBeInTheDocument());
+    expect(screen.queryByText('Baseline created')).not.toBeInTheDocument();
   });
 });

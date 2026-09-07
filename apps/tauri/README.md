@@ -39,6 +39,7 @@ case-sensitive.
 | `execute_cleanup` | `{ request: { root, ecosystems, analysisId, selectedArtifacts, mode } }` | `CleanupResultResponse` (may include additive `historyWarning`) |
 | `load_activity_history` | none | `ActivityRecord[]` |
 | `load_cleanup_history` | none | `CleanupHistoryEntry[]` |
+| `load_artifact_snapshot_history` | `{ root }` | retained Core-computed artifact snapshot comparisons and retention metadata; an evicted predecessor is `comparisonUnavailable` |
 
 Contract changes must preserve existing command names, nullability, and enum wire
 values for v0.1.0. Cleanup execution intentionally accepts analyzed artifact
@@ -65,6 +66,7 @@ refreshes set it to `false` so they do not change the generated-artifact baselin
 - Unified recommendations list with reclaimable storage, selection, review, and cleanup summary
 - Safe cleanup with Trash or permanent delete confirmation
 - Activity history viewer backed by shared, versioned core history storage
+- Artifact History viewer for bounded scan access summaries and generated-artifact snapshot growth
 - Explicit scans return the generated-artifact snapshot comparison produced by Core
 - Executable Integrity screen exposes non-executing tool path, SHA-256 baseline, and platform signature evidence
 - Explicit local GitHub Actions workflow scans with structured command, permission, and direct secret-exposure findings
@@ -80,6 +82,7 @@ additive `historyWarning` for the desktop status surface.
 - `WorkspaceView`
 - `CleanupDialog`
 - `HistoryList`
+- `ArtifactHistoryView`
 - `AsyncStatePanel`
 - `ModulePlaceholderView`
 - `ExecutableIntegrityView`
@@ -100,7 +103,7 @@ Cleanup
 
 Workspace
   Dependencies
-  Artifact History (planned)
+  Artifact History
   Activity
 
 Security

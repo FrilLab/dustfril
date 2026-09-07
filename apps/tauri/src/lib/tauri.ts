@@ -3,6 +3,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import type {
   AnalysisResponse,
   ArtifactSelection,
+  ArtifactSnapshotHistory,
   ActivityRecord,
   CleanupPlanResponse,
   CleanupResultResponse,
@@ -35,6 +36,7 @@ const commands = {
   loadActivityHistory: 'load_activity_history',
   clearActivityHistory: 'clear_activity_history',
   loadCleanupHistory: 'load_cleanup_history',
+  loadArtifactSnapshotHistory: 'load_artifact_snapshot_history',
   loadDependencyInventory: 'load_dependency_inventory',
   compareDependencyBaseline: 'compare_dependency_baseline',
   acceptDependencyBaseline: 'accept_dependency_baseline',
@@ -109,6 +111,10 @@ export function loadActivityHistory() {
 
 export function clearActivityHistory() {
   return invoke<void>(commands.clearActivityHistory);
+}
+
+export function loadArtifactSnapshotHistory(root: string) {
+  return invoke<ArtifactSnapshotHistory>(commands.loadArtifactSnapshotHistory, { root });
 }
 
 export function loadDependencyInventory(options: RunOptions) {
