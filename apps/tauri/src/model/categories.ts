@@ -84,9 +84,9 @@ export const categoryConfigs: CategoryConfig[] = [
   {
     key: 'workspace-dependencies',
     title: 'Dependencies',
-    description: 'Future dependency inventory and comparison',
+    description: 'Manifest and lockfile inventory with explicit baseline comparison',
     section: 'workspace',
-    availability: 'planned',
+    availability: 'available',
   },
   {
     key: 'workspace-artifact-history',

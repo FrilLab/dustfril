@@ -2,10 +2,13 @@ import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { formatBytes } from '../../../lib/format';
 import {
   analyzeWorkspace,
+  acceptDependencyBaseline,
   chooseWorkspaceFolder,
+  compareDependencyBaseline,
   clearActivityHistory,
   defaultRoot,
   executeCleanup,
+  loadDependencyInventory,
   loadActivityHistory,
   refreshStorageVolume,
   workflowSecurityScan,
@@ -22,6 +25,7 @@ import type {
   CleanupPlanResponse,
   CleanupResultResponse,
   DeleteMode,
+  DependencyInventoryResponse,
   StorageSummary,
   VolumeStorage,
   WorkflowScanResponse,
@@ -46,6 +50,7 @@ export function useAppState() {
   const [analysisResult, setAnalysisResult] = useState<AnalysisResponse | null>(null);
   const [cleanupPlan, setCleanupPlan] = useState<CleanupPlanResponse | null>(null);
   const [storageSummary, setStorageSummary] = useState<StorageSummary | null>(null);
+  const [dependencyResult, setDependencyResult] = useState<DependencyInventoryResponse | null>(null);
   const [historyEntries, setHistoryEntries] = useState<ActivityRecord[]>([]);
   const [selectedCleanupPaths, setSelectedCleanupPaths] = useState<string[]>([]);
   const [cleanupReviewPaths, setCleanupReviewPaths] = useState<string[]>([]);
@@ -55,11 +60,16 @@ export function useAppState() {
     reduceAsyncOperation<WorkspaceAnalysisResponse>,
     idleAsyncOperation<WorkspaceAnalysisResponse>(),
   );
+  const [dependencyOperation, dispatchDependencyOperation] = useReducer(
+    reduceAsyncOperation<DependencyInventoryResponse>,
+    idleAsyncOperation<DependencyInventoryResponse>(),
+  );
   const [workflowOperation, dispatchWorkflowOperation] = useReducer(
     reduceAsyncOperation<WorkflowScanResponse>,
     idleAsyncOperation<WorkflowScanResponse>(),
   );
   const workspaceRequestRef = useRef(0);
+  const dependencyRequestRef = useRef(0);
   const workflowRequestRef = useRef(0);
   const actionRequestRef = useRef(0);
 
@@ -163,6 +173,12 @@ export function useAppState() {
       requestId: workflowRequestRef.current,
     });
     actionRequestRef.current += 1;
+    dependencyRequestRef.current += 1;
+    dispatchDependencyOperation({
+      type: 'invalidate',
+      requestId: dependencyRequestRef.current,
+    });
+    setDependencyResult(null);
     setRoot(nextRoot);
     setError(null);
     setAnalysisResult(null);
@@ -317,6 +333,69 @@ export function useAppState() {
     }
 
     await analyzeWorkspaceWithPolicy(nextAgeDays, false, false);
+  }
+
+  async function runDependencyAction(
+    action: string,
+    operation: () => Promise<DependencyInventoryResponse>,
+  ) {
+    if (busyAction !== null || !root) {
+      return;
+    }
+
+    const requestId = ++dependencyRequestRef.current;
+    setBusyAction(action);
+    setError(null);
+    dispatchDependencyOperation({ type: 'start', requestId });
+
+    try {
+      const response = await operation();
+      if (requestId !== dependencyRequestRef.current) {
+        return;
+      }
+
+      setDependencyResult(response);
+      dispatchDependencyOperation({ type: 'success', requestId, data: response });
+    } catch (invokeError) {
+      if (requestId === dependencyRequestRef.current) {
+        dispatchDependencyOperation({
+          type: 'error',
+          requestId,
+          error: String(invokeError),
+        });
+        setError(String(invokeError));
+      }
+    } finally {
+      if (requestId === dependencyRequestRef.current) {
+        setBusyAction(null);
+      }
+    }
+  }
+
+  async function handleLoadDependencyInventory() {
+    await runDependencyAction('dependency-load', () =>
+      loadDependencyInventory({ root, ecosystems: ['Node', 'Rust'] }),
+    );
+  }
+
+  async function handleCompareDependencyBaseline() {
+    await runDependencyAction('dependency-compare', () =>
+      compareDependencyBaseline({ root, ecosystems: ['Node', 'Rust'] }),
+    );
+  }
+
+  async function handleAcceptDependencyBaseline() {
+    if (!dependencyResult) {
+      return;
+    }
+
+    await runDependencyAction('dependency-accept', () =>
+      acceptDependencyBaseline({
+        root,
+        ecosystems: ['Node', 'Rust'],
+        expectedInventoryFingerprint: dependencyResult.inventoryFingerprint,
+      }),
+    );
   }
 
   async function handleClearHistory() {
@@ -497,6 +576,7 @@ export function useAppState() {
     analysisResult,
     cleanupPlan,
     storageSummary,
+    dependencyResult,
     selectedCleanupItems: cleanupReviewItems,
     selectedCleanupPaths,
     selectedCandidateBytes: cleanupReviewTotalBytes,
@@ -507,6 +587,7 @@ export function useAppState() {
     confirmDialogOpen,
     confirmSamplePaths,
     workspaceOperation,
+    dependencyOperation,
     workflowOperation,
     canAnalyze,
     canScanWorkflows,
@@ -525,6 +606,9 @@ export function useAppState() {
     handleAnalyzeWorkspace,
     handleWorkflowSecurityScan,
     handleCleanupAgeChange,
+    handleLoadDependencyInventory,
+    handleCompareDependencyBaseline,
+    handleAcceptDependencyBaseline,
     handleClearHistory,
     handleRequestCleanup,
     handleConfirmCleanup,
