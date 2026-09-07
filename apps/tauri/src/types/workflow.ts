@@ -260,6 +260,124 @@ export type IntegrityScanResponse = {
   checks: IntegrityCheck[];
 };
 
+export type DependencyReportStatus = 'complete' | 'missingLockfile' | 'unsupported';
+export type DependencyMetricStatus = 'available' | 'unknown' | 'unsupported';
+export type DependencyLockfileStatus = 'parsed' | 'missing' | 'unsupported';
+export type DependencyScope = 'direct' | 'transitive' | 'unknown';
+export type DependencyBaselineStatus = 'baselineCreated' | 'compared' | 'unavailable';
+export type DependencyChangeKind = 'added' | 'removed' | 'versionChanged' | 'sourceChanged';
+
+export type DependencyMetric = {
+  value: number | null;
+  status: DependencyMetricStatus;
+  reason: string | null;
+};
+
+export type DependencyLockfile = {
+  path: string;
+  kind: 'PackageLockJson' | 'PnpmLockYaml' | 'BunLock' | 'CargoLock' | null;
+  format: string | null;
+  status: DependencyLockfileStatus;
+  reason: string | null;
+};
+
+export type DuplicateDependency = {
+  name: string;
+  versions: string[];
+};
+
+export type DependencyEntry = {
+  ecosystem: Ecosystem;
+  name: string;
+  version: string;
+  source: string | null;
+  scope: DependencyScope;
+};
+
+export type DependencyReport = {
+  ecosystem: Ecosystem;
+  status: DependencyReportStatus;
+  manifest: string;
+  manifestFormat: string | null;
+  lockfile: DependencyLockfile | null;
+  directDependencyCounts: Record<string, number>;
+  directDependencyTotal: number;
+  resolvedDependencyCount: DependencyMetric;
+  transitiveDependencyCount: DependencyMetric;
+  duplicateVersions: DuplicateDependency[];
+  resolvedDependencies: DependencyEntry[];
+  warnings: string[];
+};
+
+export type DependencyChange = {
+  kind: DependencyChangeKind;
+  previous: DependencyEntry | null;
+  current: DependencyEntry | null;
+};
+
+export type DependencyDiff = {
+  workspaceId: string;
+  baselineStatus: DependencyBaselineStatus;
+  added: DependencyChange[];
+  removed: DependencyChange[];
+  versionChanges: DependencyChange[];
+  sourceChanges: DependencyChange[];
+  warnings: string[];
+};
+
+export type DependencyInventoryResponse = {
+  inventoryFingerprint: string;
+  workspacePath: string;
+  reports: DependencyReport[];
+  diff: DependencyDiff | null;
+};
+
+export type WorkflowAnalysisStatus = 'analyzed';
+export type WorkflowFindingCategory =
+  | 'suspiciousCommand'
+  | 'tokenPermissions'
+  | 'secretExposure';
+export type WorkflowExposureSink = 'stdout' | 'networkRequest';
+
+export type WorkflowJobSummary = {
+  id: string;
+  name?: string;
+  stepCount: number;
+};
+
+export type WorkflowSummary = {
+  path: string;
+  name?: string;
+  analysisStatus: WorkflowAnalysisStatus;
+  jobs: WorkflowJobSummary[];
+};
+
+export type WorkflowFinding = {
+  workflowPath: string;
+  jobId?: string;
+  stepIndex?: number;
+  stepName?: string;
+  ruleId: string;
+  category: WorkflowFindingCategory;
+  riskLevel: RiskLevel;
+  evidence?: string;
+  reason: string;
+  secretReference?: string;
+  exposureSink?: WorkflowExposureSink;
+};
+
+export type WorkflowScanNotice = {
+  workflowPath: string;
+  jobId?: string;
+  reason: string;
+};
+
+export type WorkflowScanResponse = {
+  workflows: WorkflowSummary[];
+  findings: WorkflowFinding[];
+  notices: WorkflowScanNotice[];
+};
+
 export type ActivityKind = 'Scan' | 'Cleanup' | 'Security';
 
 export type ActivityFailure = {
@@ -340,6 +458,12 @@ export type RunOptions = {
   recordHistory?: boolean;
   cleanupAgeDays?: number;
   recordArtifactSnapshot?: boolean;
+};
+
+export type DependencyBaselineAcceptOptions = {
+  root: string;
+  ecosystems: Ecosystem[];
+  expectedInventoryFingerprint: string;
 };
 
 export const ecosystems: Ecosystem[] = ['Rust', 'Node', 'Java'];

@@ -9,11 +9,14 @@ import type {
   DeleteMode,
   IntegrityScanOptions,
   IntegrityScanResponse,
+  DependencyBaselineAcceptOptions,
+  DependencyInventoryResponse,
   LifecycleScript,
   RunOptions,
   ScanResponse,
   SecurityScanResponse,
   VolumeStorage,
+  WorkflowScanResponse,
   WorkspaceAnalysisResponse,
 } from '../types/workflow';
 
@@ -26,11 +29,15 @@ const commands = {
   audit: 'audit',
   securityScan: 'security_scan',
   integrityScan: 'integrity_scan',
+  workflowScan: 'workflow_scan',
   executeCleanup: 'execute_cleanup',
   refreshStorageVolume: 'refresh_storage_volume',
   loadActivityHistory: 'load_activity_history',
   clearActivityHistory: 'clear_activity_history',
   loadCleanupHistory: 'load_cleanup_history',
+  loadDependencyInventory: 'load_dependency_inventory',
+  compareDependencyBaseline: 'compare_dependency_baseline',
+  acceptDependencyBaseline: 'accept_dependency_baseline',
 } as const;
 
 export function defaultRoot() {
@@ -76,6 +83,10 @@ export function scanExecutableIntegrity(options: IntegrityScanOptions) {
   return invoke<IntegrityScanResponse>(commands.integrityScan, { options });
 }
 
+export function workflowSecurityScan(options: RunOptions) {
+  return invoke<WorkflowScanResponse>(commands.workflowScan, { options });
+}
+
 export function executeCleanup(
   root: string,
   ecosystems: RunOptions['ecosystems'],
@@ -98,4 +109,16 @@ export function loadActivityHistory() {
 
 export function clearActivityHistory() {
   return invoke<void>(commands.clearActivityHistory);
+}
+
+export function loadDependencyInventory(options: RunOptions) {
+  return invoke<DependencyInventoryResponse>(commands.loadDependencyInventory, { options });
+}
+
+export function compareDependencyBaseline(options: RunOptions) {
+  return invoke<DependencyInventoryResponse>(commands.compareDependencyBaseline, { options });
+}
+
+export function acceptDependencyBaseline(options: DependencyBaselineAcceptOptions) {
+  return invoke<DependencyInventoryResponse>(commands.acceptDependencyBaseline, { options });
 }

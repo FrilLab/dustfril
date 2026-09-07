@@ -6,12 +6,16 @@ use std::{
 use dustfril_core::models::{
     ArtifactChangeKind, ArtifactSizeChange, ArtifactSnapshot, ArtifactSnapshotArtifact,
     ArtifactSnapshotResult, ArtifactSnapshotStatus, CleanupFailureReason, CleanupRecommendation,
-    DeleteMode, DeveloperStorageSummary, Ecosystem, ExecutableObservation, IntegrityCheck,
+    DeleteMode, DependencyBaselineStatus, DependencyChange, DependencyChangeKind, DependencyDiff,
+    DependencyEntry, DependencyLockfile, DependencyLockfileStatus, DependencyMetric,
+    DependencyMetricStatus, DependencyReport, DependencyReportStatus, DependencyScope,
+    DeveloperStorageSummary, DuplicateDependency, Ecosystem, ExecutableObservation, IntegrityCheck,
     IntegrityFailure, IntegrityFailureKind, IntegrityReport, IntegrityStatus, LifecycleScript,
     LockfileCheck, LockfileKind, LockfileStatus, PackageManager, ProjectIdentity,
     RecommendationPolicy, RiskLevel, ScriptType, SecurityFinding, SecurityReport, SecurityWarning,
     SignatureFailure, SignatureFailureKind, SignaturePlatform, SignatureReport, SignatureStatus,
-    StorageSummary, ToolSpec, VolumeStorage, DEFAULT_CLEANUP_AGE_DAYS,
+    StorageSummary, ToolSpec, VolumeStorage, Workflow, WorkflowExposureSink, WorkflowFinding,
+    WorkflowFindingCategory, WorkflowScanNotice, WorkflowScanReport, DEFAULT_CLEANUP_AGE_DAYS,
 };
 use serde::{Deserialize, Serialize};
 
@@ -35,6 +39,14 @@ impl RunOptions {
         RecommendationPolicy::new(cleanup_age_days)
             .ok_or_else(|| "Cleanup age must be greater than zero days.".to_owned())
     }
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct DependencyBaselineAcceptOptions {
+    pub(crate) root: Option<String>,
+    pub(crate) ecosystems: Vec<EcosystemDto>,
+    pub(crate) expected_inventory_fingerprint: String,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq)]
@@ -383,10 +395,33 @@ impl IntegrityScanOptions {
     }
 }
 
+/// Structured, presentation-safe result for the local GitHub Actions scan.
+///
+/// Workflow YAML is intentionally reduced to file/job metadata here. The
+/// desktop receives findings and partial-analysis notices, but never the
+/// parsed environment or action input values that Core uses internally.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkflowScanResponse {
+    pub(crate) workflows: Vec<WorkflowSummaryDto>,
+    pub(crate) findings: Vec<WorkflowFindingDto>,
+    pub(crate) notices: Vec<WorkflowScanNoticeDto>,
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct IntegrityScanResponse {
     pub(crate) checks: Vec<IntegrityCheckDto>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkflowSummaryDto {
+    pub(crate) path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) name: Option<String>,
+    pub(crate) analysis_status: WorkflowAnalysisStatusDto,
+    pub(crate) jobs: Vec<WorkflowJobSummaryDto>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -406,6 +441,21 @@ pub(crate) struct IntegrityCheckDto {
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct WorkflowJobSummaryDto {
+    pub(crate) id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) name: Option<String>,
+    pub(crate) step_count: usize,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum WorkflowAnalysisStatusDto {
+    Analyzed,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct ExecutableObservationDto {
     pub(crate) requested_tool: String,
     pub(crate) resolved_path: String,
@@ -417,6 +467,43 @@ pub(crate) struct ExecutableObservationDto {
     pub(crate) observed_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) version_metadata: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkflowFindingDto {
+    pub(crate) workflow_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) job_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) step_index: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) step_name: Option<String>,
+    pub(crate) rule_id: String,
+    pub(crate) category: WorkflowFindingCategoryDto,
+    pub(crate) risk_level: RiskLevelDto,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) evidence: Option<String>,
+    pub(crate) reason: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) secret_reference: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) exposure_sink: Option<WorkflowExposureSinkDto>,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum WorkflowFindingCategoryDto {
+    SuspiciousCommand,
+    TokenPermissions,
+    SecretExposure,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum WorkflowExposureSinkDto {
+    Stdout,
+    NetworkRequest,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -452,6 +539,15 @@ pub(crate) struct SignatureFailureDto {
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct WorkflowScanNoticeDto {
+    pub(crate) workflow_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) job_id: Option<String>,
+    pub(crate) reason: String,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct SecurityFindingDto {
     pub(crate) path: String,
     pub(crate) rule: String,
@@ -468,6 +564,137 @@ pub(crate) struct SecurityWarningDto {
     pub(crate) script_type: String,
     pub(crate) command: String,
     pub(crate) risk_level: RiskLevelDto,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DependencyInventoryResponse {
+    pub(crate) inventory_fingerprint: String,
+    pub(crate) workspace_path: String,
+    pub(crate) reports: Vec<DependencyReportDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) diff: Option<DependencyDiffDto>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DependencyReportDto {
+    pub(crate) ecosystem: EcosystemDto,
+    pub(crate) status: DependencyReportStatusDto,
+    pub(crate) manifest: String,
+    pub(crate) manifest_format: Option<String>,
+    pub(crate) lockfile: Option<DependencyLockfileDto>,
+    pub(crate) direct_dependency_counts: std::collections::BTreeMap<String, usize>,
+    pub(crate) direct_dependency_total: usize,
+    pub(crate) resolved_dependency_count: DependencyMetricDto,
+    pub(crate) transitive_dependency_count: DependencyMetricDto,
+    pub(crate) duplicate_versions: Vec<DuplicateDependencyDto>,
+    pub(crate) resolved_dependencies: Vec<DependencyEntryDto>,
+    pub(crate) warnings: Vec<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DependencyMetricDto {
+    pub(crate) value: Option<usize>,
+    pub(crate) status: DependencyMetricStatusDto,
+    pub(crate) reason: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DependencyLockfileDto {
+    pub(crate) path: String,
+    pub(crate) kind: Option<LockfileKindDto>,
+    pub(crate) format: Option<String>,
+    pub(crate) status: DependencyLockfileStatusDto,
+    pub(crate) reason: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DuplicateDependencyDto {
+    pub(crate) name: String,
+    pub(crate) versions: Vec<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DependencyEntryDto {
+    pub(crate) ecosystem: EcosystemDto,
+    pub(crate) name: String,
+    pub(crate) version: String,
+    pub(crate) source: Option<String>,
+    pub(crate) scope: DependencyScopeDto,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DependencyDiffDto {
+    pub(crate) workspace_id: String,
+    pub(crate) baseline_status: DependencyBaselineStatusDto,
+    pub(crate) added: Vec<DependencyChangeDto>,
+    pub(crate) removed: Vec<DependencyChangeDto>,
+    pub(crate) version_changes: Vec<DependencyChangeDto>,
+    pub(crate) source_changes: Vec<DependencyChangeDto>,
+    pub(crate) warnings: Vec<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DependencyChangeDto {
+    pub(crate) kind: DependencyChangeKindDto,
+    pub(crate) previous: Option<DependencyEntryDto>,
+    pub(crate) current: Option<DependencyEntryDto>,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum DependencyReportStatusDto {
+    Complete,
+    MissingLockfile,
+    Unsupported,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum DependencyMetricStatusDto {
+    Available,
+    Unknown,
+    Unsupported,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum DependencyLockfileStatusDto {
+    Parsed,
+    Missing,
+    Unsupported,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum DependencyScopeDto {
+    Direct,
+    Transitive,
+    Unknown,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum DependencyBaselineStatusDto {
+    BaselineCreated,
+    Compared,
+    Unavailable,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum DependencyChangeKindDto {
+    Added,
+    Removed,
+    VersionChanged,
+    SourceChanged,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -683,6 +910,28 @@ impl From<IntegrityReport> for IntegrityScanResponse {
     }
 }
 
+impl From<WorkflowScanReport> for WorkflowScanResponse {
+    fn from(report: WorkflowScanReport) -> Self {
+        Self {
+            workflows: report
+                .workflows
+                .into_iter()
+                .map(WorkflowSummaryDto::from)
+                .collect(),
+            findings: report
+                .findings
+                .into_iter()
+                .map(WorkflowFindingDto::from)
+                .collect(),
+            notices: report
+                .notices
+                .into_iter()
+                .map(WorkflowScanNoticeDto::from)
+                .collect(),
+        }
+    }
+}
+
 impl From<IntegrityCheck> for IntegrityCheckDto {
     fn from(check: IntegrityCheck) -> Self {
         Self {
@@ -692,6 +941,25 @@ impl From<IntegrityCheck> for IntegrityCheckDto {
             previous_observation: check.previous_observation.map(Into::into),
             failure: check.failure.map(Into::into),
             signature: check.signature.map(Into::into),
+        }
+    }
+}
+
+impl From<Workflow> for WorkflowSummaryDto {
+    fn from(workflow: Workflow) -> Self {
+        Self {
+            path: workflow.path.display().to_string(),
+            name: workflow.name,
+            analysis_status: WorkflowAnalysisStatusDto::Analyzed,
+            jobs: workflow
+                .jobs
+                .into_iter()
+                .map(|(id, job)| WorkflowJobSummaryDto {
+                    id,
+                    name: job.name,
+                    step_count: job.steps.len(),
+                })
+                .collect(),
         }
     }
 }
@@ -713,11 +981,50 @@ impl From<ExecutableObservation> for ExecutableObservationDto {
     }
 }
 
+impl From<WorkflowFinding> for WorkflowFindingDto {
+    fn from(finding: WorkflowFinding) -> Self {
+        // Core already strips secret values from secret findings. Keep the
+        // boundary defensive as well: only expose the supported sink label
+        // and reference name, never a raw expression or command context.
+        let evidence = match finding.category {
+            WorkflowFindingCategory::SecretExposure => finding
+                .exposure_sink
+                .map(|sink| format!("supported {sink} sink")),
+            WorkflowFindingCategory::SuspiciousCommand
+            | WorkflowFindingCategory::TokenPermissions => finding.evidence,
+        };
+
+        Self {
+            workflow_path: finding.workflow_path.display().to_string(),
+            job_id: finding.job_id,
+            step_index: finding.step_index,
+            step_name: finding.step_name,
+            rule_id: finding.rule_id,
+            category: finding.category.into(),
+            risk_level: finding.risk_level.into(),
+            evidence,
+            reason: finding.reason,
+            secret_reference: finding.secret_reference,
+            exposure_sink: finding.exposure_sink.map(Into::into),
+        }
+    }
+}
+
 impl From<IntegrityFailure> for IntegrityFailureDto {
     fn from(failure: IntegrityFailure) -> Self {
         Self {
             kind: failure.kind,
             message: failure.message,
+        }
+    }
+}
+
+impl From<WorkflowFindingCategory> for WorkflowFindingCategoryDto {
+    fn from(category: WorkflowFindingCategory) -> Self {
+        match category {
+            WorkflowFindingCategory::SuspiciousCommand => Self::SuspiciousCommand,
+            WorkflowFindingCategory::TokenPermissions => Self::TokenPermissions,
+            WorkflowFindingCategory::SecretExposure => Self::SecretExposure,
         }
     }
 }
@@ -736,11 +1043,30 @@ impl From<SignatureReport> for SignatureReportDto {
     }
 }
 
+impl From<WorkflowExposureSink> for WorkflowExposureSinkDto {
+    fn from(sink: WorkflowExposureSink) -> Self {
+        match sink {
+            WorkflowExposureSink::Stdout => Self::Stdout,
+            WorkflowExposureSink::NetworkRequest => Self::NetworkRequest,
+        }
+    }
+}
+
 impl From<SignatureFailure> for SignatureFailureDto {
     fn from(failure: SignatureFailure) -> Self {
         Self {
             kind: failure.kind,
             message: failure.message,
+        }
+    }
+}
+
+impl From<WorkflowScanNotice> for WorkflowScanNoticeDto {
+    fn from(notice: WorkflowScanNotice) -> Self {
+        Self {
+            workflow_path: notice.workflow_path.display().to_string(),
+            job_id: notice.job_id,
+            reason: notice.reason,
         }
     }
 }
@@ -801,10 +1127,180 @@ impl From<LockfileStatus> for LockfileStatusDto {
     }
 }
 
+pub(crate) fn dependency_inventory_to_dto(
+    workspace_path: &Path,
+    reports: Vec<DependencyReport>,
+    diff: Option<DependencyDiff>,
+    inventory_fingerprint: String,
+) -> DependencyInventoryResponse {
+    DependencyInventoryResponse {
+        inventory_fingerprint,
+        workspace_path: workspace_path.display().to_string(),
+        reports: reports.into_iter().map(Into::into).collect(),
+        diff: diff.map(Into::into),
+    }
+}
+
+impl From<DependencyReport> for DependencyReportDto {
+    fn from(report: DependencyReport) -> Self {
+        Self {
+            ecosystem: report.ecosystem.into(),
+            status: report.status.into(),
+            manifest: report.manifest.display().to_string(),
+            manifest_format: report.manifest_format,
+            lockfile: report.lockfile.map(Into::into),
+            direct_dependency_counts: report.direct_dependency_counts,
+            direct_dependency_total: report.direct_dependency_total,
+            resolved_dependency_count: report.resolved_dependency_count.into(),
+            transitive_dependency_count: report.transitive_dependency_count.into(),
+            duplicate_versions: report
+                .duplicate_versions
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            resolved_dependencies: report
+                .resolved_dependencies
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            warnings: report.warnings,
+        }
+    }
+}
+
+impl From<DependencyMetric> for DependencyMetricDto {
+    fn from(metric: DependencyMetric) -> Self {
+        Self {
+            value: metric.value,
+            status: metric.status.into(),
+            reason: metric.reason,
+        }
+    }
+}
+
+impl From<DependencyLockfile> for DependencyLockfileDto {
+    fn from(lockfile: DependencyLockfile) -> Self {
+        Self {
+            path: lockfile.path.display().to_string(),
+            kind: lockfile.kind.map(Into::into),
+            format: lockfile.format,
+            status: lockfile.status.into(),
+            reason: lockfile.reason,
+        }
+    }
+}
+
+impl From<DuplicateDependency> for DuplicateDependencyDto {
+    fn from(duplicate: DuplicateDependency) -> Self {
+        Self {
+            name: duplicate.name,
+            versions: duplicate.versions,
+        }
+    }
+}
+
+impl From<DependencyEntry> for DependencyEntryDto {
+    fn from(entry: DependencyEntry) -> Self {
+        Self {
+            ecosystem: entry.ecosystem.into(),
+            name: entry.name,
+            version: entry.version,
+            source: entry.source,
+            scope: entry.scope.into(),
+        }
+    }
+}
+
+impl From<DependencyDiff> for DependencyDiffDto {
+    fn from(diff: DependencyDiff) -> Self {
+        Self {
+            workspace_id: diff.workspace_id,
+            baseline_status: diff.baseline_status.into(),
+            added: diff.added.into_iter().map(Into::into).collect(),
+            removed: diff.removed.into_iter().map(Into::into).collect(),
+            version_changes: diff.version_changes.into_iter().map(Into::into).collect(),
+            source_changes: diff.source_changes.into_iter().map(Into::into).collect(),
+            warnings: diff.warnings,
+        }
+    }
+}
+
+impl From<DependencyChange> for DependencyChangeDto {
+    fn from(change: DependencyChange) -> Self {
+        Self {
+            kind: change.kind.into(),
+            previous: change.previous.map(Into::into),
+            current: change.current.map(Into::into),
+        }
+    }
+}
+
+impl From<DependencyReportStatus> for DependencyReportStatusDto {
+    fn from(status: DependencyReportStatus) -> Self {
+        match status {
+            DependencyReportStatus::Complete => Self::Complete,
+            DependencyReportStatus::MissingLockfile => Self::MissingLockfile,
+            DependencyReportStatus::Unsupported => Self::Unsupported,
+        }
+    }
+}
+
+impl From<DependencyMetricStatus> for DependencyMetricStatusDto {
+    fn from(status: DependencyMetricStatus) -> Self {
+        match status {
+            DependencyMetricStatus::Available => Self::Available,
+            DependencyMetricStatus::Unknown => Self::Unknown,
+            DependencyMetricStatus::Unsupported => Self::Unsupported,
+        }
+    }
+}
+
+impl From<DependencyLockfileStatus> for DependencyLockfileStatusDto {
+    fn from(status: DependencyLockfileStatus) -> Self {
+        match status {
+            DependencyLockfileStatus::Parsed => Self::Parsed,
+            DependencyLockfileStatus::Missing => Self::Missing,
+            DependencyLockfileStatus::Unsupported => Self::Unsupported,
+        }
+    }
+}
+
+impl From<DependencyScope> for DependencyScopeDto {
+    fn from(scope: DependencyScope) -> Self {
+        match scope {
+            DependencyScope::Direct => Self::Direct,
+            DependencyScope::Transitive => Self::Transitive,
+            DependencyScope::Unknown => Self::Unknown,
+        }
+    }
+}
+
+impl From<DependencyBaselineStatus> for DependencyBaselineStatusDto {
+    fn from(status: DependencyBaselineStatus) -> Self {
+        match status {
+            DependencyBaselineStatus::BaselineCreated => Self::BaselineCreated,
+            DependencyBaselineStatus::Compared => Self::Compared,
+            DependencyBaselineStatus::Unavailable => Self::Unavailable,
+        }
+    }
+}
+
+impl From<DependencyChangeKind> for DependencyChangeKindDto {
+    fn from(kind: DependencyChangeKind) -> Self {
+        match kind {
+            DependencyChangeKind::Added => Self::Added,
+            DependencyChangeKind::Removed => Self::Removed,
+            DependencyChangeKind::VersionChanged => Self::VersionChanged,
+            DependencyChangeKind::SourceChanged => Self::SourceChanged,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use dustfril_core::models::AnalysisResult;
     use serde_json::json;
+    use tempfile::TempDir;
 
     use super::*;
 
@@ -945,6 +1441,49 @@ mod tests {
                     }
                 }]
             })
+        );
+    }
+
+    #[test]
+    fn dependency_inventory_wire_format_preserves_availability_and_baseline_state() {
+        let response = dependency_inventory_to_dto(
+            Path::new("/workspace"),
+            vec![DependencyReport::unsupported(
+                Ecosystem::Node,
+                Path::new("/workspace/package.json").to_path_buf(),
+                "unsupported package manager",
+            )],
+            Some(DependencyDiff::empty(
+                "v1:/workspace",
+                DependencyBaselineStatus::Unavailable,
+            )),
+            "fingerprint-1".to_owned(),
+        );
+
+        let value = serde_json::to_value(response).unwrap();
+        assert_eq!(value["inventoryFingerprint"], "fingerprint-1");
+        assert_eq!(value["workspacePath"], "/workspace");
+        assert_eq!(value["reports"][0]["ecosystem"], "Node");
+        assert_eq!(value["reports"][0]["status"], "unsupported");
+        assert_eq!(
+            value["reports"][0]["resolvedDependencyCount"]["status"],
+            "unsupported"
+        );
+        assert_eq!(value["diff"]["workspaceId"], "v1:/workspace");
+        assert_eq!(value["diff"]["baselineStatus"], "unavailable");
+        assert!(value["diff"]["added"].as_array().unwrap().is_empty());
+
+        let accept_options: DependencyBaselineAcceptOptions = serde_json::from_value(json!({
+            "root": "/workspace",
+            "ecosystems": ["Node"],
+            "expectedInventoryFingerprint": "fingerprint-1"
+        }))
+        .unwrap();
+        assert_eq!(accept_options.root.as_deref(), Some("/workspace"));
+        assert_eq!(accept_options.ecosystems, vec![EcosystemDto::Node]);
+        assert_eq!(
+            accept_options.expected_inventory_fingerprint,
+            "fingerprint-1"
         );
     }
 
@@ -1333,6 +1872,46 @@ mod tests {
                 "reason": "Remote script is piped to a shell."
             })
         );
+    }
+
+    #[test]
+    fn workflow_scan_wire_format_is_structured_and_secret_safe() {
+        let temp_dir = TempDir::new().unwrap();
+        let workflow_dir = temp_dir.path().join(".github/workflows");
+        std::fs::create_dir_all(&workflow_dir).unwrap();
+        std::fs::write(
+            workflow_dir.join("security.yml"),
+            r#"name: Security
+permissions: write-all
+jobs:
+  build:
+    name: Build
+    steps:
+      - name: Upload token
+        run: echo "${{ secrets.DEPLOY_TOKEN }}"
+"#,
+        )
+        .unwrap();
+
+        let report = dustfril_core::api::workflow_scan(temp_dir.path()).unwrap();
+        let response: WorkflowScanResponse = report.into();
+        let value = serde_json::to_value(response).unwrap();
+
+        assert_eq!(value["workflows"][0]["analysisStatus"], "analyzed");
+        assert_eq!(value["workflows"][0]["jobs"][0]["id"], "build");
+        assert_eq!(value["workflows"][0]["jobs"][0]["stepCount"], 1);
+        let secret_finding = value["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|finding| finding["category"] == "secretExposure")
+            .unwrap();
+        assert_eq!(secret_finding["secretReference"], "DEPLOY_TOKEN");
+        assert_eq!(secret_finding["exposureSink"], "stdout");
+        assert_eq!(secret_finding["evidence"], "supported stdout sink");
+        let serialized = value.to_string();
+        assert!(!serialized.contains("${{"));
+        assert!(!serialized.contains("actual-secret-value"));
     }
 
     #[test]

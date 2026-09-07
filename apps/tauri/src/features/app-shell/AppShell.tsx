@@ -6,6 +6,8 @@ import { AppHeader } from './components/AppHeader';
 import { useExecutableIntegrity } from './hooks/useExecutableIntegrity';
 import { useAppState } from './hooks/useAppState';
 import { HistoryView } from './views/HistoryView';
+import { DependenciesView } from './views/DependenciesView';
+import { GithubActionsView } from './views/GithubActionsView';
 import { ModulePlaceholderView } from './views/ModulePlaceholderView';
 import { OverviewView } from './views/OverviewView';
 import { ExecutableIntegrityView } from './views/ExecutableIntegrityView';
@@ -17,6 +19,7 @@ export function AppShell() {
   const activeConfig = categoryConfig(app.activeCategory);
   const showingCleanup = activeConfig?.ecosystem !== undefined;
   const showingWorkspace = app.activeCategory === 'workspace' || showingCleanup;
+  const showingDependencies = app.activeCategory === 'workspace-dependencies';
   const showingActivity =
     app.activeCategory === 'history' || app.activeCategory === 'workspace-activity';
   const showingExecutableIntegrity = app.activeCategory === 'security-executable-integrity';
@@ -93,10 +96,34 @@ export function AppShell() {
             <ExecutableIntegrityView integrity={executableIntegrity} />
           ) : null}
 
+          {showingDependencies ? (
+            <DependenciesView
+              root={app.root}
+              result={app.dependencyResult}
+              operationStatus={app.dependencyOperation.status}
+              busy={app.busyAction !== null}
+              error={app.error}
+              onLoad={app.handleLoadDependencyInventory}
+              onCompare={app.handleCompareDependencyBaseline}
+              onAccept={app.handleAcceptDependencyBaseline}
+            />
+          ) : null}
+
+          {app.activeCategory === 'security-github-actions' ? (
+            <GithubActionsView
+              root={app.root}
+              operation={app.workflowOperation}
+              canScan={app.canScanWorkflows}
+              onScan={app.handleWorkflowSecurityScan}
+            />
+          ) : null}
+
           {app.activeCategory !== 'overview' &&
           !showingWorkspace &&
           !showingActivity &&
           !showingExecutableIntegrity &&
+          !showingDependencies &&
+          app.activeCategory !== 'security-github-actions' &&
           activeConfig ? (
             <ModulePlaceholderView
               config={activeConfig}
