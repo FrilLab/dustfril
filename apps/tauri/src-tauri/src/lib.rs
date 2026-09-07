@@ -21,8 +21,9 @@ use contract::{
     ArtifactAnalysisDto, ArtifactDto, CleanupCandidateDto, CleanupFailureDto,
     CleanupHistoryEntryDto, CleanupPlanResponse, CleanupResultResponse,
     DependencyBaselineAcceptOptions, DependencyInventoryResponse, ExecuteCleanupRequest,
-    LifecycleScriptDto, RunOptions, ScanResponse, SecurityScanResponse, StorageSummaryDto,
-    VolumeStorageDto, WorkflowScanResponse, WorkspaceAnalysisResponse,
+    IntegrityScanOptions, IntegrityScanResponse, LifecycleScriptDto, RunOptions, ScanResponse,
+    SecurityScanResponse, StorageSummaryDto, VolumeStorageDto, WorkflowScanResponse,
+    WorkspaceAnalysisResponse,
 };
 use dustfril_core::{
     api,
@@ -695,6 +696,21 @@ async fn security_scan(options: RunOptions) -> Result<SecurityScanResponse, Stri
     .map_err(|error| error.to_string())?
 }
 
+#[tauri::command]
+async fn integrity_scan(options: IntegrityScanOptions) -> Result<IntegrityScanResponse, String> {
+    let baseline_path = api::integrity::state_path()
+        .map_err(|error| format!("Failed to determine executable-integrity state path: {error}"))?;
+    let tools = options.tools();
+
+    tokio::task::spawn_blocking(move || {
+        api::integrity::scan(&tools, &baseline_path)
+            .map(Into::into)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 /// Runs the local, read-only GitHub Actions workflow security scan.
 ///
 /// The command deliberately does not record activity history: workflow
@@ -734,6 +750,7 @@ pub fn run() {
             accept_dependency_baseline,
             audit,
             security_scan,
+            integrity_scan,
             workflow_scan,
         ])
         .run(tauri::generate_context!())
