@@ -14,6 +14,7 @@ import type {
   ScanResponse,
   SecurityScanResponse,
   VolumeStorage,
+  WorkflowScanResponse,
   WorkspaceAnalysisResponse,
 } from '../types/workflow';
 
@@ -25,6 +26,7 @@ const commands = {
   analyzeWorkspace: 'analyze_workspace',
   audit: 'audit',
   securityScan: 'security_scan',
+  workflowScan: 'workflow_scan',
   executeCleanup: 'execute_cleanup',
   refreshStorageVolume: 'refresh_storage_volume',
   loadActivityHistory: 'load_activity_history',
@@ -72,6 +74,10 @@ export function auditScripts(options: RunOptions) {
 
 export function securityScan(options: RunOptions) {
   return invoke<SecurityScanResponse>(commands.securityScan, { options });
+}
+
+export function workflowSecurityScan(options: RunOptions) {
+  return invoke<WorkflowScanResponse>(commands.workflowScan, { options });
 }
 
 export function executeCleanup(

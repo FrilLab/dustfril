@@ -7,6 +7,7 @@ import {
   executeCleanup,
   loadActivityHistory,
   refreshStorageVolume,
+  workflowSecurityScan,
 } from '../../lib/tauri';
 
 vi.mock('../../lib/tauri', () => ({
@@ -15,6 +16,7 @@ vi.mock('../../lib/tauri', () => ({
   defaultRoot: vi.fn().mockResolvedValue('/workspace'),
   executeCleanup: vi.fn(),
   refreshStorageVolume: vi.fn(),
+  workflowSecurityScan: vi.fn(),
   loadActivityHistory: vi.fn().mockResolvedValue([]),
   clearActivityHistory: vi.fn().mockResolvedValue(undefined),
 }));
@@ -58,6 +60,25 @@ const historyEntry = {
 describe('AppShell Overview navigation', () => {
   afterEach(() => vi.clearAllMocks());
 
+  it('runs the GitHub Actions scan only after an explicit click', async () => {
+    vi.mocked(workflowSecurityScan).mockResolvedValue({
+      workflows: [],
+      findings: [],
+      notices: [],
+    });
+
+    render(<AppShell />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Analyze Workspace' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'GitHub Actions' }));
+
+    expect(workflowSecurityScan).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Scan Workflows' }));
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'No workflow files found' })).toBeInTheDocument());
+    expect(workflowSecurityScan).toHaveBeenCalledWith({ root: '/workspace', ecosystems: [] });
+    expect(loadActivityHistory).toHaveBeenCalledOnce();
+  });
+
   it.each([
     ['Rust', false],
     ['Node.js', false],
@@ -67,7 +88,7 @@ describe('AppShell Overview navigation', () => {
     ['Artifact History', true],
     ['Activity', false],
     ['Supply Chain', true],
-    ['GitHub Actions', true],
+    ['GitHub Actions', false],
     ['Executable Integrity', true],
   ])('navigates to the %s module without starting another operation', async (title, planned) => {
     render(<AppShell />);

@@ -6,6 +6,7 @@ import { AppHeader } from './components/AppHeader';
 import { useAppState } from './hooks/useAppState';
 import { HistoryView } from './views/HistoryView';
 import { DependenciesView } from './views/DependenciesView';
+import { GithubActionsView } from './views/GithubActionsView';
 import { ModulePlaceholderView } from './views/ModulePlaceholderView';
 import { OverviewView } from './views/OverviewView';
 import { WorkspaceView } from './views/WorkspaceView';
@@ -100,10 +101,20 @@ export function AppShell() {
             />
           ) : null}
 
+          {app.activeCategory === 'security-github-actions' ? (
+            <GithubActionsView
+              root={app.root}
+              operation={app.workflowOperation}
+              canScan={app.canScanWorkflows}
+              onScan={app.handleWorkflowSecurityScan}
+            />
+          ) : null}
+
           {app.activeCategory !== 'overview' &&
           !showingWorkspace &&
           !showingActivity &&
           !showingDependencies &&
+          app.activeCategory !== 'security-github-actions' &&
           activeConfig ? (
             <ModulePlaceholderView
               config={activeConfig}

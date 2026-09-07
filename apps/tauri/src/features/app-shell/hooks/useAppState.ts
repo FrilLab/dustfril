@@ -11,6 +11,7 @@ import {
   loadDependencyInventory,
   loadActivityHistory,
   refreshStorageVolume,
+  workflowSecurityScan,
 } from '../../../lib/tauri';
 import { categoryConfigs, type SidebarCategory } from '../../../model/categories';
 import {
@@ -27,6 +28,7 @@ import type {
   DependencyInventoryResponse,
   StorageSummary,
   VolumeStorage,
+  WorkflowScanResponse,
 } from '../../../types/workflow';
 import { cleanupAgeOptions, defaultCleanupAgeDays, deleteModes, ecosystems } from '../../../types/workflow';
 import {
@@ -62,8 +64,13 @@ export function useAppState() {
     reduceAsyncOperation<DependencyInventoryResponse>,
     idleAsyncOperation<DependencyInventoryResponse>(),
   );
+  const [workflowOperation, dispatchWorkflowOperation] = useReducer(
+    reduceAsyncOperation<WorkflowScanResponse>,
+    idleAsyncOperation<WorkflowScanResponse>(),
+  );
   const workspaceRequestRef = useRef(0);
   const dependencyRequestRef = useRef(0);
+  const workflowRequestRef = useRef(0);
   const actionRequestRef = useRef(0);
 
   useEffect(() => {
@@ -122,6 +129,7 @@ export function useAppState() {
   );
 
   const canAnalyze = busyAction === null && root.length > 0;
+  const canScanWorkflows = busyAction === null && root.length > 0;
   const canReviewCleanup =
     busyAction === null && cleanupPlan !== null && selectedCleanupPaths.length > 0;
   const confirmSamplePaths = cleanupReviewPaths.slice(0, 5);
@@ -158,6 +166,11 @@ export function useAppState() {
     dispatchWorkspaceOperation({
       type: 'invalidate',
       requestId: workspaceRequestRef.current,
+    });
+    workflowRequestRef.current += 1;
+    dispatchWorkflowOperation({
+      type: 'invalidate',
+      requestId: workflowRequestRef.current,
     });
     actionRequestRef.current += 1;
     dependencyRequestRef.current += 1;
@@ -200,6 +213,38 @@ export function useAppState() {
     }
 
     await analyzeWorkspaceWithPolicy(cleanupAgeDays, true, true);
+  }
+
+  async function handleWorkflowSecurityScan() {
+    if (busyAction !== null || !root) {
+      return;
+    }
+
+    await runAction('workflow-security-scan', async () => {
+      const requestId = ++workflowRequestRef.current;
+      dispatchWorkflowOperation({ type: 'start', requestId });
+
+      try {
+        const response = await workflowSecurityScan({
+          root,
+          ecosystems: [],
+        });
+
+        dispatchWorkflowOperation({
+          type: 'success',
+          requestId,
+          data: response,
+          warnings: response.notices.map((notice) => notice.reason),
+        });
+      } catch (invokeError) {
+        dispatchWorkflowOperation({
+          type: 'error',
+          requestId,
+          error: String(invokeError),
+        });
+        throw invokeError;
+      }
+    });
   }
 
   async function analyzeWorkspaceWithPolicy(
@@ -543,7 +588,9 @@ export function useAppState() {
     confirmSamplePaths,
     workspaceOperation,
     dependencyOperation,
+    workflowOperation,
     canAnalyze,
+    canScanWorkflows,
     canReviewCleanup,
     summary,
     deleteModes,
@@ -557,6 +604,7 @@ export function useAppState() {
     handleRootChange,
     handleChooseWorkspace,
     handleAnalyzeWorkspace,
+    handleWorkflowSecurityScan,
     handleCleanupAgeChange,
     handleLoadDependencyInventory,
     handleCompareDependencyBaseline,
