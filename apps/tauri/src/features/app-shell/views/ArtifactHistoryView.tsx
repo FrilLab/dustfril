@@ -106,7 +106,7 @@ function ScanSummary({
           message={
             hasSnapshotHistory
               ? 'No retained scan activity is available for this workspace. The artifact snapshots below remain available from Core.'
-              : 'No scan has been run for this workspace yet. Artifact History is read-only until an explicit scan is completed.'
+              : 'No scan has been run for this workspace identity yet. If this directory was moved, Core treats it as a new identity rather than matching history from its previous location.'
           }
         />
       ) : entry.result.details.accessSummary ? (
@@ -194,7 +194,7 @@ function SnapshotHistory({
           message={
             scanEntry
               ? 'No artifact snapshot is available for the latest scan. A snapshot persistence warning may explain why.'
-              : 'No scan has been run yet, so there is no generated-artifact baseline to compare.'
+              : 'No generated-artifact baseline exists for this workspace identity yet.'
           }
         />
       ) : (
@@ -226,7 +226,9 @@ function SnapshotCard({ entry }: { entry: ArtifactSnapshotResult }) {
 
       {isBaseline ? (
         <p className="artifact-history-card-description">
-          First retained baseline. There is no earlier snapshot for a size comparison.
+          First retained baseline for this workspace identity. There is no earlier snapshot for a
+          size comparison. If this directory was moved, Core treats it as a new identity and does
+          not match the previous location.
         </p>
       ) : isComparisonUnavailable ? (
         <p className="artifact-history-card-description">
