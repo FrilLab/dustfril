@@ -465,7 +465,7 @@ describe('AppShell Overview navigation', () => {
       retentionLimit: 32,
     });
 
-    await waitFor(() => expect(screen.getByText(/No scan has been run for this workspace yet/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/No scan has been run for this workspace identity yet/)).toBeInTheDocument());
     expect(screen.queryByText('Baseline created')).not.toBeInTheDocument();
   });
 });

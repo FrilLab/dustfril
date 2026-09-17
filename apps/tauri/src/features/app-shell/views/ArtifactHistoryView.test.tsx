@@ -73,8 +73,9 @@ describe('ArtifactHistoryView', () => {
   it('distinguishes a workspace with no scan history', () => {
     render(<ArtifactHistoryView {...props} history={{ entries: [], retainedSnapshotCount: 0, retentionLimit: 32 }} scanEntry={null} />);
 
-    expect(screen.getByText(/No scan has been run for this workspace yet/)).toBeInTheDocument();
-    expect(screen.getByText(/no generated-artifact baseline to compare/)).toBeInTheDocument();
+    expect(screen.getByText(/No scan has been run for this workspace identity yet/)).toBeInTheDocument();
+    expect(screen.getByText(/moved.*new identity/i)).toBeInTheDocument();
+    expect(screen.getByText(/No generated-artifact baseline exists for this workspace identity yet/)).toBeInTheDocument();
   });
 
   it('renders the bounded summary, baseline, all Core change states, and exact signed deltas', () => {
@@ -84,6 +85,7 @@ describe('ArtifactHistoryView', () => {
     expect(screen.getByText('12')).toBeInTheDocument();
     expect(screen.getByText('Representative failure samples')).toBeInTheDocument();
     expect(screen.getByText('Baseline created')).toBeInTheDocument();
+    expect(screen.getByText(/First retained baseline for this workspace identity/)).toBeInTheDocument();
     expect(screen.getByText('New')).toBeInTheDocument();
     expect(screen.getByText('Removed')).toBeInTheDocument();
     expect(screen.getByText('Size increased')).toBeInTheDocument();
