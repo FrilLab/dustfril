@@ -77,9 +77,9 @@ export const categoryConfigs: CategoryConfig[] = [
   {
     key: 'cleanup-cache',
     title: 'Cache',
-    description: 'Future cache cleanup surface',
+    description: 'Review and clean supported global developer caches',
     section: 'cleanup',
-    availability: 'planned',
+    availability: 'available',
   },
   {
     key: 'workspace-dependencies',

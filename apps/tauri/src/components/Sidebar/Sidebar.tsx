@@ -53,7 +53,10 @@ export function Sidebar(props: SidebarProps) {
 
 function isCategoryActive(entry: SidebarCategory, activeCategory: SidebarCategory) {
   if (entry === 'workspace') {
-    return activeCategory === 'workspace' || activeCategory.startsWith('cleanup-');
+    return (
+      activeCategory === 'workspace' ||
+      (activeCategory.startsWith('cleanup-') && activeCategory !== 'cleanup-cache')
+    );
   }
   if (entry === 'history') {
     return activeCategory === 'history' || activeCategory === 'workspace-activity';

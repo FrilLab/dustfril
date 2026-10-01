@@ -6,6 +6,7 @@ import {
   chooseWorkspaceFolder,
   clearActivityHistory,
   executeCleanup,
+  discoverDeveloperCaches,
   loadArtifactSnapshotHistory,
   loadActivityHistory,
   refreshStorageVolume,
@@ -21,6 +22,7 @@ vi.mock('../../lib/tauri', () => ({
   chooseWorkspaceFolder: vi.fn(),
   defaultRoot: vi.fn().mockResolvedValue('/workspace'),
   executeCleanup: vi.fn(),
+  discoverDeveloperCaches: vi.fn().mockResolvedValue({ caches: [], warnings: [] }),
   loadArtifactSnapshotHistory: vi.fn().mockResolvedValue({
     entries: [],
     retainedSnapshotCount: 0,
@@ -96,7 +98,7 @@ describe('AppShell Overview navigation', () => {
     ['Rust', false],
     ['Node.js', false],
     ['Java', false],
-    ['Cache', true],
+    ['Cache', false],
     ['Dependencies', false],
     ['Artifact History', false],
     ['Activity', false],
@@ -112,6 +114,10 @@ describe('AppShell Overview navigation', () => {
     expect(screen.getByRole('button', { name: title })).toHaveAttribute('aria-current', 'page');
     if (planned) {
       expect(screen.getByRole('heading', { name: `${title} is planned` })).toBeInTheDocument();
+    }
+    if (title === 'Cache') {
+      await waitFor(() => expect(discoverDeveloperCaches).toHaveBeenCalledOnce());
+      expect(screen.getByRole('heading', { name: 'Developer caches' })).toBeInTheDocument();
     }
     expect(analyzeWorkspace).not.toHaveBeenCalled();
   });

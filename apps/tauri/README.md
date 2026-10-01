@@ -103,7 +103,7 @@ Cleanup
   Rust
   Node.js
   Java
-  Cache (planned)
+  Cache
 
 Workspace
   Dependencies
@@ -122,8 +122,12 @@ explicit local workflow scan: selecting the destination does not run it, and
 the `workflow_scan` command runs only after the user chooses Scan Workflows.
 The scan is read-only and does not write an activity-history entry. Executable
 Integrity runs only when the user explicitly requests it and passes selected
-tool identifiers to Core. Other planned destinations render an explicit
-unsupported state and do not invoke speculative Tauri commands.
+tool identifiers to Core. Cache discovery is Core-owned and currently supports
+Cargo registry and Git roots resolved from an absolute `CARGO_HOME` or Cargo's
+platform default. It measures each root in one no-follow traversal, reports
+bounded read failures, and requires explicit selection plus confirmation before
+moving a root to Trash or permanently deleting it. Other package-manager cache
+paths are omitted when their effective configuration cannot be resolved safely.
 Extended technologies are visible in the unified Workspace table and do not
 duplicate detector logic in the frontend.
 

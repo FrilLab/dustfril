@@ -9,14 +9,15 @@ use dustfril_core::models::{
     DeleteMode, DependencyBaselineStatus, DependencyChange, DependencyChangeKind, DependencyDiff,
     DependencyEntry, DependencyLockfile, DependencyLockfileStatus, DependencyMetric,
     DependencyMetricStatus, DependencyReport, DependencyReportStatus, DependencyScope,
-    DeveloperStorageSummary, DuplicateDependency, Ecosystem, ExecutableObservation, IntegrityCheck,
-    IntegrityFailure, IntegrityFailureKind, IntegrityReport, IntegrityStatus, LifecycleScript,
-    LockfileCheck, LockfileKind, LockfileStatus, PackageManager, ProjectIdentity,
-    ProjectTechnology, RecommendationPolicy, RiskLevel, ScriptType, SecurityFinding,
-    SecurityReport, SecurityWarning, SignatureFailure, SignatureFailureKind, SignaturePlatform,
-    SignatureReport, SignatureStatus, StorageSummary, TechnologyEvidence, ToolSpec, VolumeStorage,
-    Workflow, WorkflowExposureSink, WorkflowFinding, WorkflowFindingCategory, WorkflowScanNotice,
-    WorkflowScanReport, DEFAULT_CLEANUP_AGE_DAYS, MAX_ARTIFACT_SNAPSHOTS_PER_WORKSPACE,
+    DeveloperCacheSelection, DeveloperStorageSummary, DuplicateDependency, Ecosystem,
+    ExecutableObservation, IntegrityCheck, IntegrityFailure, IntegrityFailureKind, IntegrityReport,
+    IntegrityStatus, LifecycleScript, LockfileCheck, LockfileKind, LockfileStatus, PackageManager,
+    ProjectIdentity, ProjectTechnology, RecommendationPolicy, RiskLevel, ScriptType,
+    SecurityFinding, SecurityReport, SecurityWarning, SignatureFailure, SignatureFailureKind,
+    SignaturePlatform, SignatureReport, SignatureStatus, StorageSummary, TechnologyEvidence,
+    ToolSpec, VolumeStorage, Workflow, WorkflowExposureSink, WorkflowFinding,
+    WorkflowFindingCategory, WorkflowScanNotice, WorkflowScanReport, DEFAULT_CLEANUP_AGE_DAYS,
+    MAX_ARTIFACT_SNAPSHOTS_PER_WORKSPACE,
 };
 use serde::{Deserialize, Serialize};
 
@@ -57,6 +58,13 @@ pub(crate) struct ExecuteCleanupRequest {
     pub(crate) ecosystems: Vec<EcosystemDto>,
     pub(crate) analysis_id: String,
     pub(crate) selected_artifacts: Vec<ArtifactSelectionInput>,
+    pub(crate) mode: DeleteModeDto,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ExecuteDeveloperCacheCleanupRequest {
+    pub(crate) selections: Vec<DeveloperCacheSelection>,
     pub(crate) mode: DeleteModeDto,
 }
 
@@ -1409,7 +1417,10 @@ impl From<DependencyChangeKind> for DependencyChangeKindDto {
 
 #[cfg(test)]
 mod tests {
-    use dustfril_core::models::AnalysisResult;
+    use dustfril_core::models::{
+        AnalysisResult, DeveloperCache, DeveloperCacheDiscovery, DeveloperCacheKind,
+        DeveloperCacheScope, DeveloperCacheSupportState,
+    };
     use serde_json::json;
     use tempfile::TempDir;
 
@@ -1620,6 +1631,58 @@ mod tests {
         );
         assert_eq!(request.analysis_id, "analysis-1");
         assert_eq!(request.selected_artifacts[0].path, "/workspace/target");
+    }
+
+    #[test]
+    fn developer_cache_wire_format_exposes_provider_scope_and_evidence() {
+        let discovery = DeveloperCacheDiscovery {
+            caches: vec![DeveloperCache {
+                kind: DeveloperCacheKind::CargoRegistry,
+                tool: "Cargo".to_owned(),
+                name: "Registry cache".to_owned(),
+                path: Path::new("/fake/.cargo/registry").to_path_buf(),
+                scope: DeveloperCacheScope::Global,
+                size_bytes: 4096,
+                evidence: "Resolved from CARGO_HOME".to_owned(),
+                support_state: DeveloperCacheSupportState::Supported,
+                cleanup_impact: "May require downloads and reduce offline availability".to_owned(),
+                measurement_failures: 1,
+                failure_samples: vec!["cache/index".to_owned()],
+            }],
+            warnings: vec!["A cache root was skipped".to_owned()],
+        };
+
+        let value = serde_json::to_value(discovery).unwrap();
+
+        assert_eq!(value["caches"][0]["kind"], "cargoRegistry");
+        assert_eq!(value["caches"][0]["scope"], "global");
+        assert_eq!(value["caches"][0]["supportState"], "supported");
+        assert_eq!(value["caches"][0]["sizeBytes"], 4096);
+        assert_eq!(value["caches"][0]["measurementFailures"], 1);
+        assert_eq!(value["caches"][0]["path"], "/fake/.cargo/registry");
+        assert_eq!(value["warnings"][0], "A cache root was skipped");
+    }
+
+    #[test]
+    fn developer_cache_cleanup_request_accepts_only_the_declared_identity_fields() {
+        let request: ExecuteDeveloperCacheCleanupRequest =
+            serde_json::from_value(serde_json::json!({
+                "selections": [{ "kind": "cargoGit", "path": "/fake/.cargo/git" }],
+                "mode": "Trash"
+            }))
+            .unwrap();
+
+        assert_eq!(request.mode, DeleteModeDto::Trash);
+        assert_eq!(request.selections[0].kind, DeveloperCacheKind::CargoGit);
+        assert_eq!(request.selections[0].path, Path::new("/fake/.cargo/git"));
+
+        assert!(
+            serde_json::from_value::<ExecuteDeveloperCacheCleanupRequest>(serde_json::json!({
+                "selections": [{ "kind": "cargoGit", "path": "/fake/.cargo/git", "sizeBytes": 1 }],
+                "mode": "Trash"
+            }))
+            .is_err()
+        );
     }
 
     #[test]

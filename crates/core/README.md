@@ -24,6 +24,7 @@ This crate contains the filesystem scanners, analyzers, cleanup planner and exec
 - `api::dependency_changes`: compare a parsed inventory with an explicit local baseline
 - `api::accept_dependency_baseline`: explicitly replace selected workspace baseline data
 - `api::integrity`: resolve selected development tools without executing them, hash their bytes, and compare local baselines
+- `api::developer_cache`: discover supported global developer caches and revalidate explicitly selected roots before cleanup
 - `api::integrity::verify_signature`: inspect an already resolved executable with the supported platform verifier
 - `api::check_lockfile_integrity`: check supported lockfile presence and Git status
 - `api::history`: record and load cleanup history using atomic replacement;
@@ -83,6 +84,18 @@ Signature evidence is kept separate from baseline comparison: macOS uses the
 system `codesign` verifier, while Linux and Windows return `Unsupported` until
 dedicated platform verifiers are implemented. Unsigned or invalid signatures
 are evidence about the verifier result, not malware claims.
+
+Developer-cache discovery currently supports Cargo's `registry` and `git`
+roots below an absolute `CARGO_HOME`, or below the platform user home's
+default `.cargo` directory when `CARGO_HOME` is unset. Relative `CARGO_HOME`
+values are reported as unsupported; Cargo configuration that changes registry
+source URLs does not change these cache-root rules. Only existing, non-symlink
+directories are listed. These caches are global to the Cargo home, can be
+needed for offline builds, and may need to be downloaded or rebuilt after
+cleanup. Other package-manager caches are omitted until their effective paths
+can be resolved from deterministic local configuration. Cache size uses the
+shared one-pass filesystem measurement helper, which does not follow symbolic
+links and retains only a bounded set of read-failure samples.
 
 The supply-chain report reads `package.json` and `Cargo.toml` plus supported
 lockfiles without executing scripts or contacting an external advisory service.

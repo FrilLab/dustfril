@@ -21,14 +21,18 @@ use contract::{
     storage_summary_to_dto, volume_storage_to_dto, AnalysisResponse, ArtifactAnalysisDto,
     ArtifactDto, CleanupCandidateDto, CleanupFailureDto, CleanupHistoryEntryDto,
     CleanupPlanResponse, CleanupResultResponse, DependencyBaselineAcceptOptions,
-    DependencyInventoryResponse, ExecuteCleanupRequest, IntegrityScanOptions,
-    IntegrityScanResponse, LifecycleScriptDto, RunOptions, ScanResponse, SecurityScanResponse,
-    StorageSummaryDto, VolumeStorageDto, WorkflowScanResponse, WorkspaceAnalysisResponse,
+    DependencyInventoryResponse, ExecuteCleanupRequest, ExecuteDeveloperCacheCleanupRequest,
+    IntegrityScanOptions, IntegrityScanResponse, LifecycleScriptDto, RunOptions, ScanResponse,
+    SecurityScanResponse, StorageSummaryDto, VolumeStorageDto, WorkflowScanResponse,
+    WorkspaceAnalysisResponse,
 };
 use dustfril_core::{
     api,
     error::DustError,
-    models::{AnalysisResult, ArtifactAnalysis, ArtifactSelection, DependencyReport, Ecosystem},
+    models::{
+        AnalysisResult, ArtifactAnalysis, ArtifactSelection, DeleteMode, DependencyReport,
+        DeveloperCacheDiscovery, Ecosystem,
+    },
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -556,6 +560,59 @@ async fn execute_cleanup(request: ExecuteCleanupRequest) -> Result<CleanupResult
 }
 
 #[tauri::command]
+async fn discover_developer_caches() -> Result<DeveloperCacheDiscovery, String> {
+    tokio::task::spawn_blocking(api::developer_cache::discover)
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn execute_developer_cache_cleanup(
+    request: ExecuteDeveloperCacheCleanupRequest,
+) -> Result<CleanupResultResponse, String> {
+    let mode: DeleteMode = request.mode.into();
+    let selections = request.selections;
+
+    tokio::task::spawn_blocking(move || {
+        let result = match api::developer_cache::cleanup(&selections, mode) {
+            Ok(result) => result,
+            Err(error) => {
+                if let Err(history_error) =
+                    api::history::record_cleanup_failure(mode, &error.to_string())
+                {
+                    report_failed_activity_record("developer cache cleanup", history_error);
+                }
+                return Err(error.to_string());
+            }
+        };
+        let history_warning = api::history::record_cleanup(mode, &result)
+            .err()
+            .map(|error| format_history_warning("developer cache cleanup", error));
+
+        Ok(CleanupResultResponse {
+            deleted_paths: result
+                .deleted_paths
+                .iter()
+                .map(|path| artifact_path(path))
+                .collect(),
+            failed_paths: result
+                .failed_paths
+                .iter()
+                .map(|failure| CleanupFailureDto {
+                    path: artifact_path(&failure.path),
+                    reason: cleanup_failure_reason(&failure.reason),
+                })
+                .collect(),
+            freed_size_bytes: result.freed_size_bytes,
+            history_warning,
+        })
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 async fn load_activity_history() -> Result<Vec<history::ActivityRecordDto>, String> {
     tokio::task::spawn_blocking(|| history::load_entries().map_err(|error| error.to_string()))
         .await
@@ -762,6 +819,8 @@ pub fn run() {
             analyze_workspace,
             build_cleanup_plan,
             execute_cleanup,
+            discover_developer_caches,
+            execute_developer_cache_cleanup,
             refresh_storage_volume,
             load_activity_history,
             clear_activity_history,

@@ -535,6 +535,14 @@ export function useAppState() {
     }
   }
 
+  async function handleRefreshHistory() {
+    try {
+      setHistoryEntries(await loadActivityHistory());
+    } catch (invokeError) {
+      setError(String(invokeError));
+    }
+  }
+
   function toggleCleanupPath(path: string) {
     setSelectedCleanupPaths((current) =>
       current.includes(path) ? current.filter((value) => value !== path) : [...current, path],
@@ -729,6 +737,7 @@ export function useAppState() {
     handleCompareDependencyBaseline,
     handleAcceptDependencyBaseline,
     handleClearHistory,
+    handleRefreshHistory,
     handleRequestCleanup,
     handleConfirmCleanup,
   };

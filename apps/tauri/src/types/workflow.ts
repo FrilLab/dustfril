@@ -181,6 +181,31 @@ export type CleanupResultResponse = {
   historyWarning?: string;
 };
 
+export type DeveloperCacheKind = 'cargoRegistry' | 'cargoGit';
+export type DeveloperCacheScope = 'global';
+export type DeveloperCacheSupportState = 'supported';
+
+export type DeveloperCache = {
+  kind: DeveloperCacheKind;
+  tool: string;
+  name: string;
+  path: string;
+  scope: DeveloperCacheScope;
+  sizeBytes: number;
+  evidence: string;
+  supportState: DeveloperCacheSupportState;
+  cleanupImpact: string;
+  measurementFailures: number;
+  failureSamples: string[];
+};
+
+export type DeveloperCacheDiscovery = {
+  caches: DeveloperCache[];
+  warnings: string[];
+};
+
+export type DeveloperCacheSelection = Pick<DeveloperCache, 'kind' | 'path'>;
+
 export type LifecycleScript = {
   package: string;
   manifestPath: string;
