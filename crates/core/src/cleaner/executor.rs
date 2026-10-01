@@ -150,7 +150,7 @@ fn is_safe_cleanup_candidate(candidate: &CleanupCandidate) -> bool {
     true
 }
 
-pub(super) fn is_protected_path(path: &Path) -> bool {
+pub(crate) fn is_protected_path(path: &Path) -> bool {
     path.parent()
         .map(|parent| parent.parent().is_none())
         .unwrap_or(true)
@@ -160,4 +160,159 @@ pub(super) fn is_protected_path(path: &Path) -> bool {
         || BaseDirs::new()
             .map(|base_dirs| path == base_dirs.home_dir())
             .unwrap_or(false)
+}
+
+/// Executes validated directory roots for a Core-owned cleanup provider.
+/// Provider ownership is checked both before path normalization and again
+/// immediately before deletion; the shared protected-path and symlink rules
+/// remain in force for every cleanup surface.
+pub(crate) fn execute_directory_paths<F>(
+    paths: &[(std::path::PathBuf, u64)],
+    mode: DeleteMode,
+    is_provider_path: F,
+) -> CleanupResult
+where
+    F: Fn(&Path) -> bool,
+{
+    execute_directory_paths_with(paths, mode, is_provider_path, delete_path)
+}
+
+fn execute_directory_paths_with<F, D>(
+    paths: &[(std::path::PathBuf, u64)],
+    mode: DeleteMode,
+    is_provider_path: F,
+    delete: D,
+) -> CleanupResult
+where
+    F: Fn(&Path) -> bool,
+    D: Fn(&Path, DeleteMode) -> io::Result<()>,
+{
+    let mut result = CleanupResult::default();
+    let mut candidates = Vec::with_capacity(paths.len());
+
+    for (path, size_bytes) in paths {
+        if let Err(reason) = validate_provider_path(path, &is_provider_path) {
+            result.failed_paths.push(CleanupFailure {
+                path: path.clone(),
+                reason,
+            });
+        } else {
+            candidates.push((path.clone(), *size_bytes));
+        }
+    }
+
+    candidates.sort_by_key(|(path, _)| path.components().count());
+    let mut roots = Vec::<std::path::PathBuf>::with_capacity(candidates.len());
+    candidates.retain(|(path, _)| {
+        let covered = roots
+            .iter()
+            .any(|root| crate::models::path_contains(root, path));
+        if !covered {
+            roots.push(path.clone());
+        }
+        !covered
+    });
+
+    for (path, size_bytes) in candidates {
+        if let Err(reason) = validate_provider_path(&path, &is_provider_path) {
+            result.failed_paths.push(CleanupFailure { path, reason });
+            continue;
+        }
+
+        match delete(&path, mode) {
+            Ok(()) => {
+                result.deleted_paths.push(path);
+                result.freed_size_bytes = result.freed_size_bytes.saturating_add(size_bytes);
+            }
+            Err(error) => result.failed_paths.push(CleanupFailure {
+                path,
+                reason: failure_reason(&error),
+            }),
+        }
+    }
+
+    result
+}
+
+fn validate_provider_path<F>(path: &Path, is_provider_path: &F) -> Result<(), CleanupFailureReason>
+where
+    F: Fn(&Path) -> bool,
+{
+    let metadata = fs::symlink_metadata(path).map_err(|error| failure_reason(&error))?;
+    if metadata.file_type().is_symlink() {
+        return Err(CleanupFailureReason::SymbolicLink);
+    }
+    if !metadata.is_dir() {
+        return Err(CleanupFailureReason::UnsafePath);
+    }
+
+    let canonical_path = fs::canonicalize(path).map_err(|_| CleanupFailureReason::UnsafePath)?;
+    if is_protected_path(&canonical_path) || !is_provider_path(path) {
+        return Err(CleanupFailureReason::UnsafePath);
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod provider_cleanup_tests {
+    use std::{cell::Cell, io};
+
+    use tempfile::TempDir;
+
+    use super::*;
+
+    #[test]
+    fn trash_failure_is_reported_without_a_permanent_delete_retry() {
+        let temp = TempDir::new().unwrap();
+        let cache = temp.path().join("registry");
+        fs::create_dir(&cache).unwrap();
+        fs::write(cache.join("entry"), b"keep me").unwrap();
+        let attempts = Cell::new(0);
+
+        let result = execute_directory_paths_with(
+            &[(cache.clone(), 7)],
+            DeleteMode::Trash,
+            |_| true,
+            |_, mode| {
+                attempts.set(attempts.get() + 1);
+                assert_eq!(mode, DeleteMode::Trash);
+                Err(io::Error::other("Trash is unavailable"))
+            },
+        );
+
+        assert_eq!(attempts.get(), 1);
+        assert!(cache.exists());
+        assert!(result.deleted_paths.is_empty());
+        assert_eq!(result.failed_paths.len(), 1);
+    }
+
+    #[test]
+    fn trash_mode_moves_a_disposable_cache_to_the_trash_backend() {
+        let temp = TempDir::new().unwrap();
+        let cache = temp.path().join("registry");
+        let trash_bin = temp.path().join("fake-trash");
+        let trashed_cache = trash_bin.join("registry");
+        fs::create_dir_all(&cache).unwrap();
+        fs::create_dir_all(&trash_bin).unwrap();
+        fs::write(cache.join("entry"), b"fixture contents").unwrap();
+
+        let result = execute_directory_paths_with(
+            &[(cache.clone(), 16)],
+            DeleteMode::Trash,
+            |_| true,
+            |path, mode| {
+                assert_eq!(mode, DeleteMode::Trash);
+                fs::rename(path, &trashed_cache)
+            },
+        );
+
+        assert!(!cache.exists());
+        assert_eq!(
+            fs::read(trashed_cache.join("entry")).unwrap(),
+            b"fixture contents"
+        );
+        assert_eq!(result.deleted_paths, vec![cache]);
+        assert!(result.failed_paths.is_empty());
+    }
 }

@@ -1,13 +1,13 @@
+use std::path::Path;
 use std::time::SystemTime;
-use std::{fs, path::Path};
 
 use crate::error::DustResult;
+use crate::fs::measure_directory;
 use crate::models::{
     AnalysisResult, Artifact, ArtifactAnalysis, RecommendationPolicy, ScanResult,
     normalize_artifacts,
 };
 use rayon::prelude::*;
-use walkdir::WalkDir;
 
 pub struct Analyzer;
 
@@ -82,37 +82,12 @@ fn calculate_age_days(modified: Option<SystemTime>) -> Option<u64> {
 }
 
 fn calculate_artifact_metadata(path: &Path) -> (u64, Option<SystemTime>, u64) {
-    let mut total_size: u64 = 0;
-    let mut latest_modified = None;
-    let mut measurement_failures: u64 = 0;
-
-    for entry in WalkDir::new(path) {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(_) => {
-                measurement_failures = measurement_failures.saturating_add(1);
-                continue;
-            }
-        };
-        let metadata = match fs::symlink_metadata(entry.path()) {
-            Ok(metadata) => metadata,
-            Err(_) => {
-                measurement_failures = measurement_failures.saturating_add(1);
-                continue;
-            }
-        };
-
-        if metadata.is_file() {
-            total_size = total_size.saturating_add(metadata.len());
-        }
-
-        match metadata.modified() {
-            Ok(modified) => latest_modified = latest_modified.max(Some(modified)),
-            Err(_) => measurement_failures = measurement_failures.saturating_add(1),
-        }
-    }
-
-    (total_size, latest_modified, measurement_failures)
+    let measurement = measure_directory(path);
+    (
+        measurement.size_bytes,
+        measurement.latest_modified,
+        measurement.failures,
+    )
 }
 
 #[cfg(test)]

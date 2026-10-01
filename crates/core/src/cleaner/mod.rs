@@ -1,5 +1,5 @@
 //! Cleaner module.
-mod executor;
+pub(crate) mod executor;
 mod plan;
 
 #[cfg(test)]

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { categoryConfig, categoryConfigs, categorySections } from './categories';
 
 describe('desktop module navigation', () => {
-  it('declares the planned information architecture in one place', () => {
+  it('declares the desktop information architecture in one place', () => {
     expect(categorySections.map((section) => section.title)).toEqual([
       'Favorites',
       'Cleanup',
@@ -34,7 +34,7 @@ describe('desktop module navigation', () => {
     expect(categoryConfig('workspace-artifact-history')?.availability).toBe('available');
     expect(categoryConfig('workspace-dependencies')?.availability).toBe('available');
     expect(categoryConfig('security-github-actions')?.availability).toBe('available');
-    expect(categoryConfig('cleanup-cache')?.availability).toBe('planned');
+    expect(categoryConfig('cleanup-cache')?.availability).toBe('available');
     expect(categoryConfig('security-supply-chain')?.availability).toBe('available');
   });
 });

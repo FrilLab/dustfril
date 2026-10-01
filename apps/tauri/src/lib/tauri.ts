@@ -12,6 +12,8 @@ import type {
   IntegrityScanResponse,
   DependencyBaselineAcceptOptions,
   DependencyInventoryResponse,
+  DeveloperCacheDiscovery,
+  DeveloperCacheSelection,
   LifecycleScript,
   RunOptions,
   ScanResponse,
@@ -40,6 +42,8 @@ const commands = {
   loadDependencyInventory: 'load_dependency_inventory',
   compareDependencyBaseline: 'compare_dependency_baseline',
   acceptDependencyBaseline: 'accept_dependency_baseline',
+  discoverDeveloperCaches: 'discover_developer_caches',
+  executeDeveloperCacheCleanup: 'execute_developer_cache_cleanup',
 } as const;
 
 export function defaultRoot() {
@@ -127,4 +131,17 @@ export function compareDependencyBaseline(options: RunOptions) {
 
 export function acceptDependencyBaseline(options: DependencyBaselineAcceptOptions) {
   return invoke<DependencyInventoryResponse>(commands.acceptDependencyBaseline, { options });
+}
+
+export function discoverDeveloperCaches() {
+  return invoke<DeveloperCacheDiscovery>(commands.discoverDeveloperCaches);
+}
+
+export function executeDeveloperCacheCleanup(
+  selections: DeveloperCacheSelection[],
+  mode: DeleteMode,
+) {
+  return invoke<CleanupResultResponse>(commands.executeDeveloperCacheCleanup, {
+    request: { selections, mode },
+  });
 }

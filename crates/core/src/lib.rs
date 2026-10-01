@@ -8,6 +8,7 @@ mod audit_tool;
 mod cleaner;
 mod dependency;
 mod dependency_baseline;
+mod developer_cache;
 mod fs;
 mod history;
 mod integrity;

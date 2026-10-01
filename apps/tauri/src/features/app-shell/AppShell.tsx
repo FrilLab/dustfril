@@ -14,6 +14,7 @@ import { SupplyChainView } from './views/SupplyChainView';
 import { ExecutableIntegrityView } from './views/ExecutableIntegrityView';
 import { WorkspaceView } from './views/WorkspaceView';
 import { ArtifactHistoryView } from './views/ArtifactHistoryView';
+import { DeveloperCacheView } from './views/DeveloperCacheView';
 
 export function AppShell() {
   const app = useAppState();
@@ -21,6 +22,7 @@ export function AppShell() {
   const activeConfig = categoryConfig(app.activeCategory);
   const showingCleanup = activeConfig?.ecosystem !== undefined;
   const showingWorkspace = app.activeCategory === 'workspace' || showingCleanup;
+  const showingDeveloperCaches = app.activeCategory === 'cleanup-cache';
   const showingDependencies = app.activeCategory === 'workspace-dependencies';
   const showingActivity =
     app.activeCategory === 'history' || app.activeCategory === 'workspace-activity';
@@ -86,6 +88,13 @@ export function AppShell() {
             />
           ) : null}
 
+          {showingDeveloperCaches ? (
+            <DeveloperCacheView
+              busy={app.busyAction !== null}
+              onHistoryRefresh={app.handleRefreshHistory}
+            />
+          ) : null}
+
           {showingActivity ? (
             <HistoryView
               entries={app.historyEntries}
@@ -143,6 +152,7 @@ export function AppShell() {
 
           {app.activeCategory !== 'overview' &&
           !showingWorkspace &&
+          !showingDeveloperCaches &&
           !showingActivity &&
           app.activeCategory !== 'security-supply-chain' &&
           !showingArtifactHistory &&

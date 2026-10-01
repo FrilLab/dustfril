@@ -39,4 +39,28 @@ describe('Sidebar information hierarchy', () => {
     expect(screen.getByRole('navigation', { name: 'Primary navigation' })).toBeInTheDocument();
     expect(screen.queryByText('Trash is the default cleanup mode.')).not.toBeInTheDocument();
   });
+
+  it('keeps the Workspace destination inactive while its separate Cache surface is open', () => {
+    const cleanupEntries: SidebarEntry[] = [
+      ...entries,
+      {
+        key: 'cleanup-cache',
+        title: 'Cache',
+        description: 'Developer caches',
+        section: 'cleanup',
+        count: null,
+      },
+    ];
+
+    render(
+      <Sidebar
+        entries={cleanupEntries}
+        activeCategory="cleanup-cache"
+        onCategoryChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Cache' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('button', { name: 'Workspace' })).not.toHaveAttribute('aria-current');
+  });
 });
